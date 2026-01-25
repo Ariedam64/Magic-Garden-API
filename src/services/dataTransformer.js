@@ -34,7 +34,7 @@ function transformItem(itemKey, itemData, spriteCategory) {
 }
 
 /**
- * Transform mutations (special case: normal + tallPlant sprites)
+ * Transform mutations
  * @param {string} mutationKey - Mutation key (e.g., "Chilled")
  * @param {Object} mutationData - Mutation data object
  * @returns {Object} Transformed mutation data
@@ -46,15 +46,13 @@ function transformMutation(mutationKey, mutationData) {
 
   const transformed = { ...mutationData };
 
-  // Match sprite names for both normal and tall plants
-  const normalSpriteName = matchSpriteName(mutationKey, "mutations");
-  const tallSpriteName = matchSpriteName(mutationKey, "mutations");
+  // Match sprite name
+  const spriteName = matchSpriteName(mutationKey, "mutations");
 
-  // Replace tileRef with both sprite types
+  // Replace tileRef with sprite
   if (transformed.tileRef !== undefined) {
     delete transformed.tileRef;
-    transformed.sprite = normalSpriteName ? buildSpriteUrl("mutations", normalSpriteName) : null;
-    transformed.spriteTallPlant = tallSpriteName ? buildSpriteUrl("mutations", tallSpriteName) : null;
+    transformed.sprite = spriteName ? buildSpriteUrl("mutations", spriteName) : null;
   }
 
   return transformed;

@@ -12,18 +12,36 @@ export const dataRouter = express.Router();
 // Game Data (from bundle)
 // =====================
 
+// Get all data
 dataRouter.get(
-  "/plants",
+  "/",
   asyncHandler(async (_req, res) => {
-    const data = await getTransformedPlants();
-    res.json(data);
+    const [plants, pets, items, decor, eggs, mutations, abilities] = await Promise.all([
+      getTransformedPlants(),
+      gameDataService.getPets().then(data => transformDataWithSprites(data, "pets")),
+      gameDataService.getItems().then(data => transformDataWithSprites(data, "items")),
+      gameDataService.getDecor().then(data => transformDataWithSprites(data, "decor")),
+      gameDataService.getEggs().then(data => transformDataWithSprites(data, "eggs")),
+      gameDataService.getMutations().then(data => transformDataWithSprites(data, "mutations")),
+      gameDataService.getAbilities(),
+    ]);
+
+    res.json({
+      plants,
+      pets,
+      items,
+      decor,
+      eggs,
+      mutations,
+      abilities,
+    });
   })
 );
 
 dataRouter.get(
-  "/plants/raw",
+  "/plants",
   asyncHandler(async (_req, res) => {
-    const data = await gameDataService.getPlants();
+    const data = await getTransformedPlants();
     res.json(data);
   })
 );
@@ -38,27 +56,11 @@ dataRouter.get(
 );
 
 dataRouter.get(
-  "/pets/raw",
-  asyncHandler(async (_req, res) => {
-    const data = await gameDataService.getPets();
-    res.json(data);
-  })
-);
-
-dataRouter.get(
   "/items",
   asyncHandler(async (_req, res) => {
     const data = await gameDataService.getItems();
     const transformed = transformDataWithSprites(data, "items");
     res.json(transformed);
-  })
-);
-
-dataRouter.get(
-  "/items/raw",
-  asyncHandler(async (_req, res) => {
-    const data = await gameDataService.getItems();
-    res.json(data);
   })
 );
 
@@ -72,27 +74,11 @@ dataRouter.get(
 );
 
 dataRouter.get(
-  "/decor/raw",
-  asyncHandler(async (_req, res) => {
-    const data = await gameDataService.getDecor();
-    res.json(data);
-  })
-);
-
-dataRouter.get(
   "/eggs",
   asyncHandler(async (_req, res) => {
     const data = await gameDataService.getEggs();
     const transformed = transformDataWithSprites(data, "eggs");
     res.json(transformed);
-  })
-);
-
-dataRouter.get(
-  "/eggs/raw",
-  asyncHandler(async (_req, res) => {
-    const data = await gameDataService.getEggs();
-    res.json(data);
   })
 );
 
@@ -113,10 +99,3 @@ dataRouter.get(
   })
 );
 
-dataRouter.get(
-  "/mutations/raw",
-  asyncHandler(async (_req, res) => {
-    const data = await gameDataService.getMutations();
-    res.json(data);
-  })
-);
