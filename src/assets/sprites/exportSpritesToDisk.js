@@ -36,21 +36,37 @@ async function ensureDir(dir) {
  *
  * - restoreTrim=true => remet le sprite dans sa taille sourceSize (comme ingame)
  * - si rotated=true => crop avec w/h swap + rotation
+ *
+ * Options:
+ * - outDir: répertoire de sortie
+ * - restoreTrim: restaure le padding d'origine (default: true)
+ * - onlyCats: filtre par catégorie ["seeds","plants"]
+ * - onlyKeys: filtre par clé de frame (Set ou Array) pour export sélectif
  */
 export async function exportSpritesToDisk({
   outDir = "./export",
   restoreTrim = true,
   onlyCats = null, // ex: ["seeds","plants"]
+  onlyKeys = null, // ex: Set(["sprite/plant/Carrot", "sprite/seed/Tomato"])
 } = {}) {
   const payload = await getSpritesPayload({ full: true, flat: true });
   const items = payload?.items || [];
 
   const frames = items.filter((x) => x.type === "frame" && x.url && x.frame);
 
-  const filtered =
+  // Filtre par catégorie
+  let filtered =
     Array.isArray(onlyCats) && onlyCats.length
       ? frames.filter((x) => onlyCats.includes(x.cat))
       : frames;
+
+  // Filtre par clés de frames (pour export sélectif)
+  if (onlyKeys) {
+    const keySet = onlyKeys instanceof Set ? onlyKeys : new Set(onlyKeys);
+    if (keySet.size > 0) {
+      filtered = filtered.filter((x) => keySet.has(x.key) || keySet.has(x.id));
+    }
+  }
 
   // group par atlas URL pour éviter de re-download 500 fois
   const byAtlas = new Map();

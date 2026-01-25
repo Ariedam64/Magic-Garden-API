@@ -6,7 +6,7 @@
 
 This API automatically extracts game data from **two sources**:
 
-### **Minified bundle** → Static data (raw data)
+### **Minified bundle** → Static game data
 Automatic extraction from the game's minified JavaScript file (`main-*.js`):
 - Plants, seeds, crops
 - Pets and eggs
@@ -53,40 +53,67 @@ The server starts on `http://localhost:3000`
 
 | Endpoint | Description |
 |----------|-------------|
+| `GET /data` | All game data (plants, pets, items, decor, eggs, mutations, abilities) |
 | `GET /data/plants` | Complete plants (seed/plant/crop + sprites) |
-| `GET /data/pets` | Companion pets |
-| `GET /data/items` | Items and equipment |
-| `GET /data/decor` | Decorations |
-| `GET /data/mutations` | Plant mutations |
-| `GET /data/eggs` | Animal eggs |
+| `GET /data/pets` | Companion pets with sprites |
+| `GET /data/items` | Items and equipment with sprites |
+| `GET /data/decor` | Decorations with sprites |
+| `GET /data/mutations` | Plant mutations with sprites |
+| `GET /data/eggs` | Animal eggs with sprites |
 | `GET /data/abilities` | Special abilities |
 
 ### Assets
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /data/sprites` | Sprite metadata (with search) |
-| `GET /data/cosmetics` | Cosmetic data |
-| `GET /data/audios` | Audio data |
-| `GET /sprites/:category/:name.png` | Download individual sprite |
+| `GET /assets/sprite-data` | Sprite metadata (with search) |
+| `GET /assets/cosmetics` | Cosmetic data |
+| `GET /assets/audios` | Audio data |
+| `GET /assets/sprites` | List available sprite categories |
+| `GET /assets/sprites/:category/:name` | Download individual sprite PNG |
 
 **Available sprite categories**: `seeds`, `plants`, `tallPlants`, `mutations`, `pets`, `decor`, `items`, `objects`, `ui`, `animations`, `weather`, `tiles`, `winter`
 
-### Live (WebSocket)
+### Live data (Real-time via SSE)
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /live` | WebSocket for real-time data (shop, weather) |
+| `GET /live` | All live data snapshot (weather + shops) |
+| `GET /live/weather` | Current weather snapshot |
+| `GET /live/shops` | Current shops snapshot |
+| `GET /live/weather/stream` | Weather updates via Server-Sent Events |
+| `GET /live/shops/stream` | Shop updates via Server-Sent Events |
 
-### Information
+### Health & Information
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Server and connection status |
-| `GET /version` | Current game bundle version |
-| `GET /docs` | Swagger documentation |
+| `GET /health/ready` | Readiness probe (checks if bundle is cached) |
+| `GET /health/live` | Liveness probe |
+| `GET /docs` | Swagger UI documentation |
+| `GET /docs/openapi.json` | OpenAPI specification (JSON) |
 
 ## Usage Examples
+
+### Get all game data
+
+```bash
+curl http://localhost:3000/data | jq
+```
+
+**Response structure:**
+```json
+{
+  "plants": { ... },
+  "pets": { ... },
+  "items": { ... },
+  "decor": { ... },
+  "eggs": { ... },
+  "mutations": { ... },
+  "abilities": { ... }
+}
+```
 
 ### Get plant data
 
@@ -100,17 +127,17 @@ curl http://localhost:3000/data/plants | jq '.Carrot'
   "seed": {
     "name": "Carrot Seed",
     "coinPrice": 10,
-    "sprite": "http://localhost:3000/sprites/seeds/Carrot.png"
+    "sprite": "http://localhost:3000/assets/sprites/seeds/Carrot.png"
   },
   "plant": {
     "name": "Carrot Plant",
     "harvestType": "Single",
-    "sprite": "http://localhost:3000/sprites/plants/BabyCarrot.png"
+    "sprite": "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
   },
   "crop": {
     "name": "Carrot",
     "baseSellPrice": 20,
-    "sprite": "http://localhost:3000/sprites/plants/Carrot.png"
+    "sprite": "http://localhost:3000/assets/sprites/plants/Carrot.png"
   }
 }
 ```
@@ -118,19 +145,31 @@ curl http://localhost:3000/data/plants | jq '.Carrot'
 ### Search for a sprite
 
 ```bash
-curl "http://localhost:3000/data/sprites?search=Carrot&cat=seeds"
+curl "http://localhost:3000/assets/sprite-data?search=Carrot&cat=seeds"
+```
+
+### List sprite categories
+
+```bash
+curl http://localhost:3000/assets/sprites
 ```
 
 ### Download a sprite
 
 ```bash
-curl http://localhost:3000/sprites/seeds/Carrot.png -o carrot.png
+curl http://localhost:3000/assets/sprites/seeds/Carrot.png -o carrot.png
 ```
 
-### Connect to WebSocket
+### Get live shop data
 
 ```bash
-wscat -c ws://localhost:3000/live
+curl http://localhost:3000/live/shops | jq
+```
+
+### Stream weather updates (SSE)
+
+```bash
+curl -N http://localhost:3000/live/weather/stream
 ```
 
 ## Technical Architecture
@@ -167,10 +206,12 @@ wscat -c ws://localhost:3000/live
 │                 │                          │
 │                 ▼                          │
 │  ┌─────────────────────────────────────┐   │
-│  │         REST API + WS               │   │
+│  │         REST API + SSE              │   │
 │  │  • /data/*     (bundle data)        │   │
-│  │  • /sprites/*  (assets)             │   │
-│  │  • /live       (websocket)          │   │
+│  │  • /assets/*   (sprites, cosmetics) │   │
+│  │  • /live       (real-time via SSE)  │   │
+│  │  • /health     (monitoring)         │   │
+│  │  • /docs       (OpenAPI/Swagger)    │   │
 │  └─────────────────────────────────────┘   │
 └─────────────────────────────────────────────┘
 ```
@@ -181,8 +222,10 @@ wscat -c ws://localhost:3000/live
 - **Extractors**: Parse data from the minified bundle (regex + VM sandbox)
 - **WebSocket Connection**: Connection to game server with auto-reconnect
 - **Parsers**: Interpret live WebSocket messages
+- **SSE Streams**: Real-time data streaming via Server-Sent Events
 - **Sprite Sync**: Automatic sprite synchronization
 - **Cache**: Smart caching with automatic invalidation
+- **API Routes**: RESTful endpoints for static data + SSE for live data
 
 ## Configuration
 

@@ -3,11 +3,66 @@ info:
   title: Magic Garden API
   version: 2.0.0
   description: |
-    Unofficial API for Magic Garden game data.
+    **Unofficial API** for Magic Garden game data that dynamically extracts and provides game content.
+
+    ## Overview
 
     This API provides two types of data:
     - **Static data**: Extracted from the game's minified bundle (plants, pets, items, etc.)
     - **Live data**: Real-time data from the game's WebSocket (shops, weather)
+
+    ## Quick Start
+
+    ### Get All Game Data
+    ```bash
+    curl http://localhost:3000/data
+    ```
+
+    ### Get Specific Plant
+    ```bash
+    curl http://localhost:3000/data/plants | jq '.Carrot'
+    ```
+
+    ### Stream Live Shop Updates
+    ```javascript
+    const eventSource = new EventSource('http://localhost:3000/live/shops/stream');
+    eventSource.onmessage = (event) => {
+      const shops = JSON.parse(event.data);
+      console.log('Shop inventory:', shops);
+    };
+    ```
+
+    ## Key Features
+
+    - **🔄 Auto-updating**: Data automatically refreshes from the game bundle
+    - **⚡ Real-time**: WebSocket connection for live shop and weather data
+    - **🖼️ Sprites included**: All data includes sprite URLs ready to use
+    - **📊 Server-Sent Events**: Real-time streaming via SSE
+    - **💾 Smart caching**: Optimized performance with automatic cache invalidation
+    - **🔍 Searchable**: Filter and search sprites by category and name
+
+    ## Data Structure
+
+    All static game data follows this pattern:
+    - **Keyed by ID**: Objects are keyed by their game ID (e.g., `"Carrot"`, `"Bunny"`)
+    - **Sprite URLs**: All entities include absolute sprite URLs
+    - **Complete info**: Full lifecycle data (for plants: seed → plant → crop)
+
+    ## Rate Limiting
+
+    - Default: 100 requests per minute per IP
+    - Configurable via environment variables
+    - SSE streams don't count against rate limits
+
+    ## CORS
+
+    CORS is enabled by default for all origins. Configure via environment variables if needed.
+
+    ## Need Help?
+
+    - **Issues**: Report bugs or request features on GitHub
+    - **Documentation**: Full OpenAPI spec available at `/docs/openapi.json`
+    - **Examples**: See endpoint descriptions for detailed usage examples
   contact:
     name: Ariedam
   license:
@@ -19,19 +74,61 @@ servers:
 
 tags:
   - name: Data
-    description: Static game data extracted from the bundle
+    description: |
+      Static game data extracted from the game's minified bundle.
+
+      These endpoints provide comprehensive information about game entities including plants, pets, items, decorations, eggs, mutations, and abilities. All data is automatically extracted and stays up-to-date with the game.
+
+      **Refresh rate:** Data is cached for 5 minutes by default.
+
   - name: Assets
-    description: Game assets (sprites, cosmetics, audio)
+    description: |
+      Game assets including sprites, cosmetics, and audio.
+
+      Access sprite metadata, download individual sprite files, browse cosmetics, and get audio information. All sprites are exported as PNG files and URLs are ready to use.
+
+      **Features:**
+      - Search and filter sprites
+      - Download individual sprite files
+      - Get sprite atlas information
+      - Access cosmetics and audio data
+
   - name: Live
-    description: Real-time game data from WebSocket
+    description: |
+      Real-time game data from WebSocket connection.
+
+      Get current weather and shop inventories. Supports both snapshot endpoints (one-time requests) and SSE streams (real-time updates).
+
+      **Data sources:**
+      - Weather: Current in-game weather condition
+      - Shops: Current inventory and restock timers for all shops (seed, tool, egg, decor)
+
+      **Update methods:**
+      - Snapshot: One-time GET request for current state
+      - Stream: Server-Sent Events for real-time updates
+
   - name: Health
-    description: Health check endpoints
+    description: |
+      Health check and monitoring endpoints.
+
+      Monitor API health, readiness, and cache status. Includes Kubernetes-style probes for liveness and readiness checks.
+
+      **Endpoints:**
+      - `/health`: Comprehensive health status
+      - `/health/ready`: Readiness probe (checks if data is loaded)
+      - `/health/live`: Liveness probe (checks if server is running)
 
 paths:
   /:
     get:
       summary: API root
-      description: Returns API information and available endpoints
+      description: |
+        Returns API information and available endpoint categories.
+
+        **Use cases:**
+        - Discover available endpoints
+        - Check API version
+        - Get quick navigation links
       responses:
         '200':
           description: API information
@@ -42,19 +139,65 @@ paths:
                 properties:
                   name:
                     type: string
+                    example: "Magic Garden API"
                   version:
                     type: string
+                    example: "2.0.0"
                   description:
                     type: string
+                    example: "Unofficial API for Magic Garden game data"
                   endpoints:
                     type: object
+                    description: Available endpoint categories
+                    properties:
+                      data:
+                        type: string
+                        example: "/data"
+                      assets:
+                        type: string
+                        example: "/assets"
+                      live:
+                        type: string
+                        example: "/live"
+                      health:
+                        type: string
+                        example: "/health"
+                      docs:
+                        type: string
+                        example: "/docs"
+              examples:
+                root:
+                  summary: API root response
+                  value:
+                    name: "Magic Garden API"
+                    version: "2.0.0"
+                    description: "Unofficial API for Magic Garden game data"
+                    endpoints:
+                      data: "/data"
+                      assets: "/assets"
+                      live: "/live"
+                      health: "/health"
+                      docs: "/docs"
 
   /health:
     get:
       tags:
         - Health
       summary: Health check
-      description: Returns health status and cache information
+      description: |
+        Returns comprehensive health status of the API server.
+
+        **Includes:**
+        - Server status and uptime
+        - Bundle cache status
+        - WebSocket connection status
+        - Cached data categories
+
+        **Use cases:**
+        - Monitoring and alerting
+        - Debugging connection issues
+        - Checking cache status
+        - Verifying API readiness
       responses:
         '200':
           description: Health status
@@ -62,38 +205,772 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthStatus'
+              examples:
+                healthy:
+                  summary: Healthy API
+                  value:
+                    status: "ok"
+                    timestamp: "2024-01-20T10:30:00.000Z"
+                    uptime: 3600
+                    cache:
+                      hasBundleCached: true
+                      bundleUrl: "https://magiccircle.gg/assets/main-DvXv24E7.js"
+                      bundleFetchedAt: "2024-01-20T10:00:00.000Z"
+                      categoriesCached: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
 
   /health/ready:
     get:
       tags:
         - Health
       summary: Readiness probe
-      description: Checks if the service is ready to handle requests
+      description: |
+        Kubernetes-style readiness probe to check if the API is ready to serve traffic.
+
+        **Returns 200 when:**
+        - Server is running
+        - Game bundle is cached
+        - Data extraction is complete
+
+        **Returns 503 when:**
+        - Bundle is not yet cached
+        - Data is still loading
+        - System is starting up
+
+        **Use cases:**
+        - Kubernetes readiness probes
+        - Load balancer health checks
+        - Determine if API can serve requests
+        - Wait for startup completion
       responses:
         '200':
           description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ready"
+              examples:
+                ready:
+                  summary: Service ready
+                  value:
+                    status: "ready"
         '503':
           description: Service is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "not ready"
+                  reason:
+                    type: string
+              examples:
+                notReady:
+                  summary: Service not ready
+                  value:
+                    status: "not ready"
+                    reason: "Bundle not cached yet"
 
   /health/live:
     get:
       tags:
         - Health
       summary: Liveness probe
-      description: Checks if the service is alive
+      description: |
+        Kubernetes-style liveness probe to check if the API is alive.
+
+        **Returns 200 when:**
+        - Server process is running
+        - API can respond to requests
+
+        **Use cases:**
+        - Kubernetes liveness probes
+        - Monitor if server needs restart
+        - Basic uptime monitoring
+        - Detect deadlocks or crashes
+
+        **Note:** This endpoint checks basic aliveness only. Use `/health/ready` to check if the API is ready to serve data.
       responses:
         '200':
           description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "alive"
+              examples:
+                alive:
+                  summary: Service alive
+                  value:
+                    status: "alive"
 
   /data:
     get:
       tags:
         - Data
-      summary: List available categories
-      description: Returns all available data categories
+      summary: Get all game data
+      description: |
+        Returns all game data extracted from the game bundle.
+
+        This endpoint provides a comprehensive snapshot of all available game content including:
+        - Plants (seeds, plants, and crops with growth information)
+        - Pets (companions with abilities and stats)
+        - Items (tools, consumables)
+        - Decorations (garden decorations)
+        - Eggs (pet eggs with hatch requirements)
+        - Mutations (special plant variations)
+        - Abilities (special pet abilities)
+
+        **Note:** All sprite URLs are absolute and ready to use.
       responses:
         '200':
-          description: List of categories
+          description: All game data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plants:
+                    type: object
+                    description: All plants data (keyed by plant ID)
+                  pets:
+                    type: object
+                    description: All pets data (keyed by pet ID)
+                  items:
+                    type: object
+                    description: All items data (keyed by item ID)
+                  decor:
+                    type: object
+                    description: All decorations data (keyed by decor ID)
+                  eggs:
+                    type: object
+                    description: All eggs data (keyed by egg ID)
+                  mutations:
+                    type: object
+                    description: All mutations data (keyed by mutation ID)
+                  abilities:
+                    type: object
+                    description: All abilities data (keyed by ability ID)
+              examples:
+                complete:
+                  summary: Complete data response
+                  value:
+                    plants:
+                      Carrot:
+                        seed:
+                          name: "Carrot Seed"
+                          coinPrice: 10
+                          sprite: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                        plant:
+                          name: "Carrot Plant"
+                          harvestType: "Single"
+                          sprite: "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
+                        crop:
+                          name: "Carrot"
+                          baseSellPrice: 20
+                          sprite: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                    pets:
+                      Bunny:
+                        name: "Bunny"
+                        coinPrice: 500
+                        ability: "HarvestBoost"
+                        sprite: "http://localhost:3000/assets/sprites/pets/Bunny.png"
+                    items:
+                      WateringCan:
+                        name: "Watering Can"
+                        type: "tool"
+                        coinPrice: 100
+                        sprite: "http://localhost:3000/assets/sprites/items/WateringCan.png"
+                    mutations: {}
+                    eggs: {}
+                    decor: {}
+                    abilities: {}
+
+  /data/plants:
+    get:
+      tags:
+        - Data
+      summary: Get plants data
+      description: |
+        Returns all plants with complete lifecycle information (seed → plant → crop).
+
+        Each plant entry includes:
+        - **Seed**: Name, price, sprite URL
+        - **Plant**: Growth stage information, harvest type, sprite URL
+        - **Crop**: Harvested item, sell price, sprite URL
+
+        **Use cases:**
+        - Display shop inventory
+        - Calculate profit margins
+        - Build farming guides
+        - Generate plant catalogs
+      responses:
+        '200':
+          description: Plants data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/PlantData'
+              examples:
+                plantData:
+                  summary: Example plant data
+                  value:
+                    Carrot:
+                      seed:
+                        name: "Carrot Seed"
+                        coinPrice: 10
+                        sprite: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                      plant:
+                        name: "Carrot Plant"
+                        harvestType: "Single"
+                        sprite: "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
+                      crop:
+                        name: "Carrot"
+                        baseSellPrice: 20
+                        sprite: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                    Wheat:
+                      seed:
+                        name: "Wheat Seed"
+                        coinPrice: 5
+                        sprite: "http://localhost:3000/assets/sprites/seeds/Wheat.png"
+                      plant:
+                        name: "Wheat Plant"
+                        harvestType: "Multi"
+                        sprite: "http://localhost:3000/assets/sprites/plants/BabyWheat.png"
+                      crop:
+                        name: "Wheat"
+                        baseSellPrice: 8
+                        sprite: "http://localhost:3000/assets/sprites/plants/Wheat.png"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /data/pets:
+    get:
+      tags:
+        - Data
+      summary: Get pets data
+      description: |
+        Returns all companion pets with their stats and abilities.
+
+        Each pet entry includes:
+        - Name and price
+        - Special ability reference
+        - Sprite URL
+
+        **Use cases:**
+        - Build pet encyclopedias
+        - Compare pet abilities
+        - Display pet shop inventory
+      responses:
+        '200':
+          description: Pets data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/PetData'
+              examples:
+                petData:
+                  summary: Example pets
+                  value:
+                    Bunny:
+                      name: "Bunny"
+                      coinPrice: 500
+                      ability: "HarvestBoost"
+                      sprite: "http://localhost:3000/assets/sprites/pets/Bunny.png"
+                    Cat:
+                      name: "Cat"
+                      coinPrice: 750
+                      ability: "LuckBoost"
+                      sprite: "http://localhost:3000/assets/sprites/pets/Cat.png"
+                    Dog:
+                      name: "Dog"
+                      coinPrice: 600
+                      ability: "FindTreasure"
+                      sprite: "http://localhost:3000/assets/sprites/pets/Dog.png"
+
+  /data/items:
+    get:
+      tags:
+        - Data
+      summary: Get items data
+      description: |
+        Returns all items including tools and consumables.
+
+        Each item entry includes:
+        - Name and type (tool/consumable)
+        - Price information
+        - Sprite URL
+
+        **Use cases:**
+        - Display tool shop
+        - Show item prices
+        - Build crafting guides
+      responses:
+        '200':
+          description: Items data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/ItemData'
+              examples:
+                itemData:
+                  summary: Example items
+                  value:
+                    WateringCan:
+                      name: "Watering Can"
+                      type: "tool"
+                      coinPrice: 100
+                      sprite: "http://localhost:3000/assets/sprites/items/WateringCan.png"
+                    Fertilizer:
+                      name: "Fertilizer"
+                      type: "consumable"
+                      coinPrice: 50
+                      sprite: "http://localhost:3000/assets/sprites/items/Fertilizer.png"
+                    Pickaxe:
+                      name: "Pickaxe"
+                      type: "tool"
+                      coinPrice: 200
+                      sprite: "http://localhost:3000/assets/sprites/items/Pickaxe.png"
+
+  /data/decor:
+    get:
+      tags:
+        - Data
+      summary: Get decorations data
+      description: |
+        Returns all garden decorations and cosmetic items.
+
+        Each decoration includes:
+        - Name and price
+        - Category/type
+        - Sprite URL
+
+        **Use cases:**
+        - Display decoration shop
+        - Build decoration catalogs
+        - Show customization options
+      responses:
+        '200':
+          description: Decorations data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              examples:
+                decorData:
+                  summary: Example decorations
+                  value:
+                    Fence:
+                      name: "Wooden Fence"
+                      coinPrice: 50
+                      category: "boundary"
+                      sprite: "http://localhost:3000/assets/sprites/decor/Fence.png"
+                    Lamp:
+                      name: "Garden Lamp"
+                      coinPrice: 100
+                      category: "lighting"
+                      sprite: "http://localhost:3000/assets/sprites/decor/Lamp.png"
+
+  /data/eggs:
+    get:
+      tags:
+        - Data
+      summary: Get eggs data
+      description: |
+        Returns all pet eggs with hatching information.
+
+        Each egg includes:
+        - Name and price
+        - Hatched pet reference
+        - Hatch requirements (if any)
+        - Sprite URL
+
+        **Use cases:**
+        - Display egg shop inventory
+        - Show hatching guides
+        - Track egg availability
+      responses:
+        '200':
+          description: Eggs data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              examples:
+                eggData:
+                  summary: Example eggs
+                  value:
+                    BunnyEgg:
+                      name: "Bunny Egg"
+                      coinPrice: 250
+                      hatchesInto: "Bunny"
+                      sprite: "http://localhost:3000/assets/sprites/eggs/BunnyEgg.png"
+                    CatEgg:
+                      name: "Cat Egg"
+                      coinPrice: 375
+                      hatchesInto: "Cat"
+                      sprite: "http://localhost:3000/assets/sprites/eggs/CatEgg.png"
+
+  /data/abilities:
+    get:
+      tags:
+        - Data
+      summary: Get abilities data
+      description: |
+        Returns all pet special abilities.
+
+        Each ability includes:
+        - Name and description
+        - Effect type and parameters
+        - Which pets have this ability
+
+        **Use cases:**
+        - Build pet ability guides
+        - Compare pet effectiveness
+        - Display ability catalogs
+        - Help players choose pets
+      responses:
+        '200':
+          description: Abilities data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              examples:
+                abilityData:
+                  summary: Example abilities
+                  value:
+                    HarvestBoost:
+                      name: "Harvest Boost"
+                      description: "Increases crop yield by 10%"
+                      effectType: "yield"
+                      effectValue: 0.1
+                    LuckBoost:
+                      name: "Luck Boost"
+                      description: "Increases chance of rare drops"
+                      effectType: "luck"
+                      effectValue: 0.15
+                    FindTreasure:
+                      name: "Find Treasure"
+                      description: "Occasionally finds random items"
+                      effectType: "treasure"
+                      effectValue: 0.05
+
+  /data/mutations:
+    get:
+      tags:
+        - Data
+      summary: Get mutations data
+      description: |
+        Returns all plant mutations (special variants).
+
+        Each mutation includes:
+        - Name and description
+        - Parent plant reference
+        - Visual differences
+        - Sprite URL
+
+        **Use cases:**
+        - Build mutation guides
+        - Track rare plant variants
+        - Display mutation catalogs
+      responses:
+        '200':
+          description: Mutations data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              examples:
+                mutationData:
+                  summary: Example mutations
+                  value:
+                    GoldenCarrot:
+                      name: "Golden Carrot"
+                      basePlant: "Carrot"
+                      rarity: "rare"
+                      sprite: "http://localhost:3000/assets/sprites/mutations/GoldenCarrot.png"
+                    GiantWheat:
+                      name: "Giant Wheat"
+                      basePlant: "Wheat"
+                      rarity: "epic"
+                      sprite: "http://localhost:3000/assets/sprites/mutations/GiantWheat.png"
+
+  /assets/sprite-data:
+    get:
+      tags:
+        - Assets
+      summary: Get sprites data
+      description: |
+        Returns sprite atlas metadata with powerful filtering options.
+
+        **Query parameters:**
+        - `search`: Filter sprites by name (case-insensitive partial match)
+        - `cat`: Filter by category (seeds, plants, pets, etc.)
+        - `full=1`: Include detailed sprite information (anchors, frames, source sizes)
+        - `flat=1`: Return flat array instead of grouped by category
+
+        **Use cases:**
+        - Find sprite URLs for specific items
+        - Browse available sprites by category
+        - Get sprite dimensions and atlas coordinates
+        - Build sprite catalogs
+
+        **Examples:**
+        - `/assets/sprite-data?search=Carrot` - Find all Carrot sprites
+        - `/assets/sprite-data?cat=seeds` - Get all seed sprites
+        - `/assets/sprite-data?search=Bunny&full=1` - Get detailed Bunny sprite info
+        - `/assets/sprite-data?cat=pets&flat=1` - Flat list of pet sprites
+      parameters:
+        - name: full
+          in: query
+          description: Include full sprite information (anchors, source sizes)
+          schema:
+            type: string
+            enum: ['1']
+          example: '1'
+        - name: search
+          in: query
+          description: Filter sprites by ID (partial match, case-insensitive)
+          schema:
+            type: string
+          example: 'Carrot'
+        - name: cat
+          in: query
+          description: Filter by category
+          schema:
+            type: string
+            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+          example: 'seeds'
+        - name: flat
+          in: query
+          description: Return flat list instead of grouped by category
+          schema:
+            type: string
+            enum: ['1']
+          example: '1'
+      responses:
+        '200':
+          description: Sprites data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpritesResponse'
+              examples:
+                grouped:
+                  summary: Grouped response (default)
+                  value:
+                    baseUrl: "http://localhost:3000"
+                    count: 3
+                    categories:
+                      - cat: "seeds"
+                        items:
+                          - id: "Carrot"
+                            url: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                          - id: "Wheat"
+                            url: "http://localhost:3000/assets/sprites/seeds/Wheat.png"
+                      - cat: "plants"
+                        items:
+                          - id: "Carrot"
+                            url: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                flat:
+                  summary: Flat response (with flat=1)
+                  value:
+                    baseUrl: "http://localhost:3000"
+                    count: 3
+                    items:
+                      - id: "Carrot"
+                        cat: "seeds"
+                        url: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                      - id: "Wheat"
+                        cat: "seeds"
+                        url: "http://localhost:3000/assets/sprites/seeds/Wheat.png"
+                      - id: "Carrot"
+                        cat: "plants"
+                        url: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                fullDetails:
+                  summary: Full details (with full=1)
+                  value:
+                    baseUrl: "http://localhost:3000"
+                    count: 1
+                    categories:
+                      - cat: "seeds"
+                        items:
+                          - id: "Carrot"
+                            url: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                            frame:
+                              x: 0
+                              y: 0
+                              w: 64
+                              h: 64
+                            anchor:
+                              x: 0.5
+                              y: 0.5
+                            sourceSize:
+                              w: 64
+                              h: 64
+
+  /assets/cosmetics:
+    get:
+      tags:
+        - Assets
+      summary: Get cosmetics data
+      description: |
+        Returns all cosmetic items for player avatar customization.
+
+        **Categories include:**
+        - Hats
+        - Outfits
+        - Accessories
+        - Hair styles
+        - Face customization
+
+        **Query parameters:**
+        - `full=1`: Include detailed sprite information (frames, anchors)
+
+        **Use cases:**
+        - Build character customization UI
+        - Display cosmetic shop
+        - Show available customization options
+      parameters:
+        - name: full
+          in: query
+          description: Include full cosmetic information (sprite frames, anchors)
+          schema:
+            type: string
+            enum: ['1']
+          example: '1'
+      responses:
+        '200':
+          description: Cosmetics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CosmeticsResponse'
+              examples:
+                cosmeticsData:
+                  summary: Example cosmetics
+                  value:
+                    baseUrl: "http://localhost:3000"
+                    count: 25
+                    categories:
+                      - cat: "hats"
+                        items:
+                          - id: "StrawHat"
+                            url: "http://localhost:3000/assets/cosmetics/hats/StrawHat.png"
+                          - id: "WizardHat"
+                            url: "http://localhost:3000/assets/cosmetics/hats/WizardHat.png"
+                      - cat: "outfits"
+                        items:
+                          - id: "FarmerOutfit"
+                            url: "http://localhost:3000/assets/cosmetics/outfits/FarmerOutfit.png"
+
+  /assets/audios:
+    get:
+      tags:
+        - Assets
+      summary: Get audio data
+      description: |
+        Returns all audio assets including music themes and sound effects.
+
+        **Includes:**
+        - **Themes**: Music and ambience tracks for different areas
+        - **SFX**: Sound effects atlas with timing information
+
+        **Use cases:**
+        - Build custom music players
+        - Access sound effects for fan projects
+        - Create audio previews
+        - Extract specific sound effects from atlas
+
+        **Note:** Audio URLs point to the original game assets.
+      responses:
+        '200':
+          description: Audio data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioResponse'
+              examples:
+                audioData:
+                  summary: Example audio data
+                  value:
+                    baseUrl: "http://localhost:3000"
+                    themes:
+                      - name: "Garden"
+                        ambience: "https://magiccircle.gg/audio/garden_ambience.mp3"
+                        music: "https://magiccircle.gg/audio/garden_music.mp3"
+                      - name: "Shop"
+                        ambience: "https://magiccircle.gg/audio/shop_ambience.mp3"
+                        music: "https://magiccircle.gg/audio/shop_music.mp3"
+                    sfx:
+                      url: "https://magiccircle.gg/audio/sfx_atlas.mp3"
+                      items:
+                        - name: "plant_seed"
+                          start: 0
+                          end: 0.5
+                          duration: 0.5
+                        - name: "harvest"
+                          start: 0.5
+                          end: 1.2
+                          duration: 0.7
+                        - name: "water"
+                          start: 1.2
+                          end: 1.8
+                          duration: 0.6
+
+  /assets/sprites:
+    get:
+      tags:
+        - Assets
+      summary: List sprite categories
+      description: |
+        Returns available sprite categories and download instructions.
+
+        **Available categories:**
+        - `seeds` - Seed sprites
+        - `plants` - Plant growth stages
+        - `tallPlants` - Tall plant varieties
+        - `mutations` - Mutation variants
+        - `pets` - Pet companions
+        - `decor` - Garden decorations
+        - `items` - Tools and consumables
+        - `objects` - Interactive objects
+        - `ui` - UI elements
+        - `animations` - Animation frames
+        - `weather` - Weather effects
+        - `tiles` - Ground tiles
+        - `winter` - Winter seasonal sprites
+
+        **Use cases:**
+        - Discover available sprite categories
+        - Get download URLs for specific sprites
+        - Browse sprite collections
+      responses:
+        '200':
+          description: Sprite categories
           content:
             application/json:
               schema:
@@ -103,189 +980,161 @@ paths:
                     type: array
                     items:
                       type: string
-                  assets:
-                    type: array
-                    items:
-                      type: string
+                    description: List of available sprite categories
+                    example: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items"]
+                  baseUrl:
+                    type: string
+                    description: Base URL for the API
+                    example: "http://localhost:3000"
+                  exportDir:
+                    type: string
+                    description: Local export directory path
+                    example: "./sprites_dump"
+                  usage:
+                    type: object
+                    description: Usage instructions and examples
+                    properties:
+                      endpoint:
+                        type: string
+                        example: "/assets/sprites/:category/:name"
+                      example:
+                        type: string
+                        example: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+              examples:
+                categoriesList:
+                  summary: Sprite categories response
+                  value:
+                    categories: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+                    baseUrl: "http://localhost:3000"
+                    exportDir: "./sprites_dump"
+                    usage:
+                      endpoint: "/assets/sprites/:category/:name"
+                      example: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                      description: "Download individual sprites as PNG files"
 
-  /data/plants:
-    get:
-      tags:
-        - Data
-      summary: Get plants data
-      description: Returns all plants (seeds, plants, crops) from the game
-      responses:
-        '200':
-          description: Plants data
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          $ref: '#/components/responses/InternalError'
-
-  /data/pets:
-    get:
-      tags:
-        - Data
-      summary: Get pets data
-      description: Returns all pets from the game
-      responses:
-        '200':
-          description: Pets data
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /data/items:
-    get:
-      tags:
-        - Data
-      summary: Get items data
-      description: Returns all items (tools, consumables) from the game
-      responses:
-        '200':
-          description: Items data
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /data/decor:
-    get:
-      tags:
-        - Data
-      summary: Get decorations data
-      description: Returns all decorations from the game
-      responses:
-        '200':
-          description: Decorations data
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /data/eggs:
-    get:
-      tags:
-        - Data
-      summary: Get eggs data
-      description: Returns all eggs from the game
-      responses:
-        '200':
-          description: Eggs data
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /data/abilities:
-    get:
-      tags:
-        - Data
-      summary: Get abilities data
-      description: Returns all pet abilities from the game
-      responses:
-        '200':
-          description: Abilities data
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /data/mutations:
-    get:
-      tags:
-        - Data
-      summary: Get mutations data
-      description: Returns all plant mutations from the game
-      responses:
-        '200':
-          description: Mutations data
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /data/sprites:
+  /assets/sprites/{category}/{name}:
     get:
       tags:
         - Assets
-      summary: Get sprites data
-      description: Returns sprite atlas information
+      summary: Download sprite file
+      description: |
+        Download a specific sprite as a PNG file.
+
+        **Usage:**
+        - Sprites are returned as binary PNG images
+        - Can be used directly in `<img>` tags
+        - Suitable for downloading to disk
+
+        **Examples:**
+        - `/assets/sprites/seeds/Carrot.png` - Carrot seed sprite
+        - `/assets/sprites/pets/Bunny.png` - Bunny pet sprite
+        - `/assets/sprites/plants/Wheat.png` - Wheat plant sprite
+
+        **Integration examples:**
+
+        **HTML:**
+        ```html
+        <img src="http://localhost:3000/assets/sprites/seeds/Carrot.png" alt="Carrot Seed">
+        ```
+
+        **JavaScript:**
+        ```javascript
+        const spriteUrl = 'http://localhost:3000/assets/sprites/seeds/Carrot.png';
+        const img = new Image();
+        img.src = spriteUrl;
+        ```
+
+        **Download with cURL:**
+        ```bash
+        curl http://localhost:3000/assets/sprites/seeds/Carrot.png -o carrot.png
+        ```
+
+        **Python:**
+        ```python
+        import requests
+        response = requests.get('http://localhost:3000/assets/sprites/seeds/Carrot.png')
+        with open('carrot.png', 'wb') as f:
+            f.write(response.content)
+        ```
       parameters:
-        - name: full
-          in: query
-          description: Include full sprite information (anchors, source sizes)
+        - name: category
+          in: path
+          required: true
+          description: Sprite category (seeds, plants, pets, etc.)
           schema:
             type: string
-            enum: ['1']
-        - name: search
-          in: query
-          description: Filter sprites by ID
+            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+          example: "seeds"
+        - name: name
+          in: path
+          required: true
+          description: Sprite filename (must end with .png)
           schema:
             type: string
-        - name: cat
-          in: query
-          description: Filter by category
-          schema:
-            type: string
-        - name: flat
-          in: query
-          description: Return flat list instead of grouped
-          schema:
-            type: string
-            enum: ['1']
+            pattern: '^[^/\\]+\.png$'
+          example: "Carrot.png"
       responses:
         '200':
-          description: Sprites data
+          description: Sprite PNG file
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid category or filename
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SpritesResponse'
-
-  /data/cosmetics:
-    get:
-      tags:
-        - Assets
-      summary: Get cosmetics data
-      description: Returns cosmetic items (player customization)
-      parameters:
-        - name: full
-          in: query
-          description: Include full cosmetic information
-          schema:
-            type: string
-            enum: ['1']
-      responses:
-        '200':
-          description: Cosmetics data
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidCategory:
+                  summary: Invalid category
+                  value:
+                    error:
+                      code: "INVALID_CATEGORY"
+                      message: "Invalid sprite category"
+                      details:
+                        category: "invalid_cat"
+                        validCategories: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+        '404':
+          description: Sprite not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CosmeticsResponse'
-
-  /data/audios:
-    get:
-      tags:
-        - Assets
-      summary: Get audio data
-      description: Returns audio themes and SFX atlas
-      responses:
-        '200':
-          description: Audio data
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AudioResponse'
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  summary: Sprite not found
+                  value:
+                    error:
+                      code: "SPRITE_NOT_FOUND"
+                      message: "Sprite file not found"
+                      details:
+                        category: "seeds"
+                        filename: "NonExistent.png"
 
   /live:
     get:
       tags:
         - Live
       summary: Get all live data
-      description: Returns current weather and shop data
+      description: |
+        Returns a complete snapshot of all live game data.
+
+        **Includes:**
+        - Current weather condition
+        - All shop inventories (seed, tool, egg, decor)
+        - Restock timers for each shop
+
+        **Use cases:**
+        - Get complete game state in one request
+        - Initial data load for apps
+        - Periodic polling (combine with SSE for updates)
+
+        **Note:** For real-time updates, use the stream endpoints:
+        - `/live/weather/stream` for weather updates
+        - `/live/shops/stream` for shop updates
       responses:
         '200':
           description: Live data
@@ -296,15 +1145,54 @@ paths:
                 properties:
                   weather:
                     type: string
+                    description: Current weather condition
                   shops:
                     $ref: '#/components/schemas/Shops'
+              examples:
+                liveSnapshot:
+                  summary: Complete live data snapshot
+                  value:
+                    weather: "Clear Skies"
+                    shops:
+                      seed:
+                        secondsUntilRestock: 3600
+                        items:
+                          - name: "Carrot"
+                            stock: 10
+                          - name: "Wheat"
+                            stock: 15
+                      tool:
+                        secondsUntilRestock: 7200
+                        items:
+                          - name: "WateringCan"
+                            stock: 3
+                      egg:
+                        secondsUntilRestock: 10800
+                        items:
+                          - name: "BunnyEgg"
+                            stock: 2
+                      decor:
+                        secondsUntilRestock: 14400
+                        items:
+                          - name: "Fence"
+                            stock: 10
 
   /live/weather:
     get:
       tags:
         - Live
       summary: Get current weather
-      description: Returns the current in-game weather
+      description: |
+        Returns the current in-game weather snapshot from the WebSocket connection.
+
+        **Weather types:**
+        - Clear Skies
+        - Rainy
+        - Stormy
+        - Snowy
+        - Foggy
+
+        **Note:** This is a snapshot. For real-time updates, use `/live/weather/stream`.
       responses:
         '200':
           description: Current weather
@@ -315,14 +1203,43 @@ paths:
                 properties:
                   weather:
                     type: string
-                    example: Clear Skies
+                    description: Current weather condition
+                    example: "Clear Skies"
+              examples:
+                clearSkies:
+                  summary: Clear weather
+                  value:
+                    weather: "Clear Skies"
+                rainy:
+                  summary: Rainy weather
+                  value:
+                    weather: "Rainy"
 
   /live/shops:
     get:
       tags:
         - Live
       summary: Get shop inventory
-      description: Returns current shop inventory and restock timers
+      description: |
+        Returns current shop inventory and restock timers for all shops.
+
+        **Available shops:**
+        - **seed**: Seed shop (plants)
+        - **tool**: Tool shop (equipment)
+        - **egg**: Egg shop (pets)
+        - **decor**: Decoration shop (cosmetics)
+
+        Each shop includes:
+        - Current stock items with quantities
+        - Time until next restock (in seconds)
+
+        **Use cases:**
+        - Track shop rotations
+        - Alert when specific items are in stock
+        - Calculate restock schedules
+        - Build shop tracking bots
+
+        **Note:** This is a snapshot. For real-time updates, use `/live/shops/stream`.
       responses:
         '200':
           description: Shop data
@@ -330,13 +1247,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Shops'
+              examples:
+                shopsData:
+                  summary: Example shop inventory
+                  value:
+                    seed:
+                      secondsUntilRestock: 3600
+                      items:
+                        - name: "Carrot"
+                          stock: 10
+                        - name: "Wheat"
+                          stock: 15
+                        - name: "Tomato"
+                          stock: 5
+                    tool:
+                      secondsUntilRestock: 7200
+                      items:
+                        - name: "WateringCan"
+                          stock: 3
+                        - name: "Fertilizer"
+                          stock: 20
+                    egg:
+                      secondsUntilRestock: 10800
+                      items:
+                        - name: "BunnyEgg"
+                          stock: 2
+                        - name: "CatEgg"
+                          stock: 1
+                    decor:
+                      secondsUntilRestock: 14400
+                      items:
+                        - name: "Fence"
+                          stock: 10
+                        - name: "Lamp"
+                          stock: 5
 
   /live/weather/stream:
     get:
       tags:
         - Live
       summary: Weather SSE stream
-      description: Server-Sent Events stream for weather updates
+      description: |
+        Server-Sent Events (SSE) stream for real-time weather updates.
+
+        **Connection:**
+        - Opens a persistent connection
+        - Receives weather updates as they happen
+        - Auto-reconnects on disconnect
+
+        **Event format:**
+        ```
+        data: {"weather": "Clear Skies"}
+
+        data: {"weather": "Rainy"}
+        ```
+
+        **Usage examples:**
+
+        **JavaScript:**
+        ```javascript
+        const eventSource = new EventSource('http://localhost:3000/live/weather/stream');
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          console.log('Weather changed to:', data.weather);
+        };
+        ```
+
+        **cURL:**
+        ```bash
+        curl -N http://localhost:3000/live/weather/stream
+        ```
+
+        **Python:**
+        ```python
+        import requests
+        response = requests.get('http://localhost:3000/live/weather/stream', stream=True)
+        for line in response.iter_lines():
+            if line.startswith(b'data:'):
+                print(line.decode())
+        ```
       responses:
         '200':
           description: SSE stream
@@ -344,13 +1333,64 @@ paths:
             text/event-stream:
               schema:
                 type: string
+              example: |
+                data: {"weather":"Clear Skies"}
+
+                data: {"weather":"Rainy"}
 
   /live/shops/stream:
     get:
       tags:
         - Live
       summary: Shops SSE stream
-      description: Server-Sent Events stream for shop updates
+      description: |
+        Server-Sent Events (SSE) stream for real-time shop inventory updates.
+
+        **Connection:**
+        - Opens a persistent connection
+        - Receives shop updates when inventory changes or restocks occur
+        - Auto-reconnects on disconnect
+
+        **Event format:**
+        ```
+        data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10}]},"tool":{...},"egg":{...},"decor":{...}}
+        ```
+
+        **Usage examples:**
+
+        **JavaScript:**
+        ```javascript
+        const eventSource = new EventSource('http://localhost:3000/live/shops/stream');
+        eventSource.onmessage = (event) => {
+          const shops = JSON.parse(event.data);
+          console.log('Seed shop:', shops.seed);
+          console.log('Time until restock:', shops.seed.secondsUntilRestock);
+        };
+        ```
+
+        **React Hook:**
+        ```javascript
+        import { useEffect, useState } from 'react';
+
+        function useShops() {
+          const [shops, setShops] = useState(null);
+
+          useEffect(() => {
+            const eventSource = new EventSource('http://localhost:3000/live/shops/stream');
+            eventSource.onmessage = (event) => {
+              setShops(JSON.parse(event.data));
+            };
+            return () => eventSource.close();
+          }, []);
+
+          return shops;
+        }
+        ```
+
+        **cURL:**
+        ```bash
+        curl -N http://localhost:3000/live/shops/stream
+        ```
       responses:
         '200':
           description: SSE stream
@@ -358,61 +1398,227 @@ paths:
             text/event-stream:
               schema:
                 type: string
+              example: |
+                data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10},{"name":"Wheat","stock":15}]},"tool":{"secondsUntilRestock":7200,"items":[{"name":"WateringCan","stock":3}]},"egg":{"secondsUntilRestock":10800,"items":[]},"decor":{"secondsUntilRestock":14400,"items":[]}}
 
 components:
   schemas:
+    PlantData:
+      type: object
+      description: Complete plant lifecycle data (seed → plant → crop)
+      properties:
+        seed:
+          type: object
+          description: Seed stage information
+          properties:
+            name:
+              type: string
+              example: "Carrot Seed"
+            coinPrice:
+              type: integer
+              description: Purchase price in coins
+              example: 10
+            sprite:
+              type: string
+              format: uri
+              description: Absolute URL to seed sprite
+              example: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+        plant:
+          type: object
+          description: Growing plant stage information
+          properties:
+            name:
+              type: string
+              example: "Carrot Plant"
+            harvestType:
+              type: string
+              enum: ["Single", "Multi"]
+              description: Single harvest or multiple harvests
+              example: "Single"
+            sprite:
+              type: string
+              format: uri
+              description: Absolute URL to plant sprite
+              example: "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
+        crop:
+          type: object
+          description: Harvested crop information
+          properties:
+            name:
+              type: string
+              example: "Carrot"
+            baseSellPrice:
+              type: integer
+              description: Base sell price (can be affected by quality)
+              example: 20
+            sprite:
+              type: string
+              format: uri
+              description: Absolute URL to crop sprite
+              example: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+
+    PetData:
+      type: object
+      description: Pet companion data
+      properties:
+        name:
+          type: string
+          example: "Bunny"
+        coinPrice:
+          type: integer
+          description: Purchase price in coins
+          example: 500
+        ability:
+          type: string
+          description: Special ability ID
+          example: "HarvestBoost"
+        sprite:
+          type: string
+          format: uri
+          description: Absolute URL to pet sprite
+          example: "http://localhost:3000/assets/sprites/pets/Bunny.png"
+
+    ItemData:
+      type: object
+      description: Item/tool data
+      properties:
+        name:
+          type: string
+          example: "Watering Can"
+        type:
+          type: string
+          enum: ["tool", "consumable"]
+          example: "tool"
+        coinPrice:
+          type: integer
+          description: Purchase price in coins
+          example: 100
+        sprite:
+          type: string
+          format: uri
+          description: Absolute URL to item sprite
+          example: "http://localhost:3000/assets/sprites/items/WateringCan.png"
+
     HealthStatus:
       type: object
+      description: Comprehensive health status of the API server
       properties:
         status:
           type: string
-          example: ok
+          description: Overall health status
+          enum: ["ok", "degraded", "error"]
+          example: "ok"
         timestamp:
           type: string
           format: date-time
+          description: Timestamp of the health check
+          example: "2024-01-20T10:30:00.000Z"
         uptime:
           type: integer
-          description: Server uptime in seconds
+          description: Server uptime in seconds since startup
+          example: 3600
         cache:
           type: object
+          description: Cache status information
           properties:
             hasBundleCached:
               type: boolean
+              description: Whether the game bundle is cached
+              example: true
             bundleUrl:
               type: string
+              description: URL of the cached bundle
+              example: "https://magiccircle.gg/assets/main-DvXv24E7.js"
             bundleFetchedAt:
               type: string
+              format: date-time
+              description: When the bundle was last fetched
+              example: "2024-01-20T10:00:00.000Z"
             categoriesCached:
               type: array
+              description: List of successfully cached data categories
               items:
                 type: string
+              example: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
+      example:
+        status: "ok"
+        timestamp: "2024-01-20T10:30:00.000Z"
+        uptime: 3600
+        cache:
+          hasBundleCached: true
+          bundleUrl: "https://magiccircle.gg/assets/main-DvXv24E7.js"
+          bundleFetchedAt: "2024-01-20T10:00:00.000Z"
+          categoriesCached: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
 
     Shops:
       type: object
+      description: All shop inventories
       properties:
         seed:
+          description: Seed shop (plants and crops)
           $ref: '#/components/schemas/Shop'
         tool:
+          description: Tool shop (equipment and consumables)
           $ref: '#/components/schemas/Shop'
         egg:
+          description: Egg shop (pet eggs)
           $ref: '#/components/schemas/Shop'
         decor:
+          description: Decoration shop (cosmetic items)
           $ref: '#/components/schemas/Shop'
+      example:
+        seed:
+          secondsUntilRestock: 3600
+          items:
+            - name: "Carrot"
+              stock: 10
+            - name: "Wheat"
+              stock: 15
+        tool:
+          secondsUntilRestock: 7200
+          items:
+            - name: "WateringCan"
+              stock: 3
+        egg:
+          secondsUntilRestock: 10800
+          items:
+            - name: "BunnyEgg"
+              stock: 2
+        decor:
+          secondsUntilRestock: 14400
+          items:
+            - name: "Fence"
+              stock: 10
 
     Shop:
       type: object
+      description: Individual shop inventory data
       properties:
         secondsUntilRestock:
           type: integer
+          description: Time remaining until shop restocks (in seconds)
+          example: 3600
         items:
           type: array
+          description: Current shop inventory
           items:
             type: object
             properties:
               name:
                 type: string
+                description: Item identifier (matches data endpoints)
+                example: "Carrot"
               stock:
                 type: integer
+                description: Current stock quantity
+                example: 10
+      example:
+        secondsUntilRestock: 3600
+        items:
+          - name: "Carrot"
+            stock: 10
+          - name: "Wheat"
+            stock: 15
 
     SpritesResponse:
       type: object
@@ -489,16 +1695,34 @@ components:
 
     Error:
       type: object
+      description: Standard error response format
       properties:
         error:
           type: object
+          description: Error details
           properties:
             code:
               type: string
+              description: Machine-readable error code
+              example: "SPRITE_NOT_FOUND"
             message:
               type: string
+              description: Human-readable error message
+              example: "The requested sprite was not found"
             details:
               type: object
+              description: Additional error context (varies by error type)
+              additionalProperties: true
+              example:
+                category: "seeds"
+                filename: "NonExistent.png"
+      example:
+        error:
+          code: "SPRITE_NOT_FOUND"
+          message: "The requested sprite was not found"
+          details:
+            category: "seeds"
+            filename: "NonExistent.png"
 
   responses:
     InternalError:
