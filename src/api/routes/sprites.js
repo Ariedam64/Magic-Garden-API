@@ -134,7 +134,7 @@ spritesRouter.get(
 );
 
 /**
- * GET /sprites
+ * GET /assets/sprites
  * List available sprite categories.
  */
 spritesRouter.get("/", (_req, res) => {
@@ -143,8 +143,8 @@ spritesRouter.get("/", (_req, res) => {
     baseUrl: config.sprites.baseUrl,
     exportDir: config.sprites.exportDir,
     usage: {
-      endpoint: "GET /sprites/:category/:name",
-      example: `${config.sprites.baseUrl}/sprites/seeds/Carrot.png`,
+      endpoint: "GET /assets/sprites/:category/:name",
+      example: `${config.sprites.baseUrl}/assets/sprites/seeds/Carrot.png`,
     },
   });
 });

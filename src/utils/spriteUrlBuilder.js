@@ -21,7 +21,7 @@ function buildSpriteUrl(category, spriteName, options = {}) {
     return null;
   }
 
-  const relativePath = `/sprites/${category}/${spriteName}.png`;
+  const relativePath = `/assets/sprites/${category}/${spriteName}.png`;
 
   if (absolute && baseUrl) {
     // Remove trailing slash from baseUrl if present

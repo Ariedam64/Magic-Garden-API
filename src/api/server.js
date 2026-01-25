@@ -13,7 +13,7 @@ import {
   errorHandler,
 } from "./middleware/index.js";
 
-import { dataRouter, liveRouter, healthRouter, docsRouter, spritesRouter } from "./routes/index.js";
+import { dataRouter, liveRouter, healthRouter, docsRouter, assetsRouter } from "./routes/index.js";
 
 /**
  * Crée l'application Express avec tous les middlewares.
@@ -62,8 +62,8 @@ export function createApp() {
   // Live routes (WebSocket data via SSE)
   app.use("/live", liveRouter);
 
-  // Sprites (exported PNG files)
-  app.use("/sprites", spritesRouter);
+  // Assets routes (cosmetics, audios, etc.)
+  app.use("/assets", assetsRouter);
 
   // Root endpoint
   app.get("/", (_req, res) => {
