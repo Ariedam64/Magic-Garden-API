@@ -1,12 +1,14 @@
 // src/index.js
 // Main entry point for MG API
 
+import fs from "node:fs/promises";
 import { config } from "./config/index.js";
 import { logger } from "./logger/index.js";
 import { startApiServer } from "./api/server.js";
 import { MagicGardenConnection } from "./core/websocket/connection.js";
 import { liveDataService } from "./services/index.js";
 import { registerSpriteSyncListener } from "./services/spriteSync.js";
+import { exportSpritesToDisk } from "./assets/sprites/exportSpritesToDisk.js";
 
 // =====================
 // 1) Start API Server
