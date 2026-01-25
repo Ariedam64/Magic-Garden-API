@@ -65,7 +65,7 @@ dataRouter.get(
 );
 
 dataRouter.get(
-  "/decor",
+  "/decors",
   asyncHandler(async (_req, res) => {
     const data = await gameDataService.getDecor();
     const transformed = transformDataWithSprites(data, "decor");
@@ -98,4 +98,3 @@ dataRouter.get(
     res.json(transformed);
   })
 );
-

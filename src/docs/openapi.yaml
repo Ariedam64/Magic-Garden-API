@@ -542,7 +542,7 @@ paths:
                       coinPrice: 200
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/items/Pickaxe.png"
 
-  /data/decor:
+  /data/decors:
     get:
       tags:
         - Data

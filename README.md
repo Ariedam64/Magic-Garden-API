@@ -66,7 +66,7 @@ The server starts on `http://localhost:3000`
 | `GET /data/plants` | Complete plants (seed/plant/crop + sprites) |
 | `GET /data/pets` | Companion pets with sprites |
 | `GET /data/items` | Items and equipment with sprites |
-| `GET /data/decor` | Decorations with sprites |
+| `GET /data/decors` | Decorations with sprites |
 | `GET /data/mutations` | Plant mutations with sprites |
 | `GET /data/eggs` | Animal eggs with sprites |
 | `GET /data/abilities` | Special abilities |
