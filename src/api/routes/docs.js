@@ -15,6 +15,17 @@ const swaggerDocument = YAML.load(openapiPath);
 
 export const docsRouter = express.Router();
 
+// Disable caching for docs assets/spec to avoid stale UI behind CDN caches.
+docsRouter.use((_req, res, next) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 // Theme colors - Dark Nature/Garden inspired
 const THEME = {
   primary: "#52b788", // Bright green

@@ -15,21 +15,21 @@ info:
 
     ### Get All Game Data
     ```bash
-    curl http://localhost:3000/data
+    curl https://mg-api.ariedam.fr/data
     ```
 
     ### Get Specific Plant
     ```bash
-    curl http://localhost:3000/data/plants | jq '.Carrot'
+    curl https://mg-api.ariedam.fr/data/plants | jq '.Carrot'
     ```
 
     ### Stream Live Shop Updates
     ```javascript
-    const eventSource = new EventSource('http://localhost:3000/live/shops/stream');
-    eventSource.onmessage = (event) => {
+    const eventSource = new EventSource('https://mg-api.ariedam.fr/live/shops/stream');
+    eventSource.addEventListener('shops', (event) => {
       const shops = JSON.parse(event.data);
       console.log('Shop inventory:', shops);
-    };
+    });
     ```
 
     ## Key Features
@@ -52,7 +52,7 @@ info:
 
     - Default: 100 requests per minute per IP
     - Configurable via environment variables
-    - SSE streams don't count against rate limits
+    - SSE streams use a separate limiter (defaults to RATE_LIMIT_MAX / 10 per window)
 
     ## CORS
 
@@ -69,6 +69,8 @@ info:
     name: ISC
 
 servers:
+  - url: https://mg-api.ariedam.fr
+    description: Production server
   - url: http://localhost:3000
     description: Local development server
 
@@ -123,7 +125,7 @@ paths:
     get:
       summary: API root
       description: |
-        Returns API information and available endpoint categories.
+        Returns API information and core endpoint categories.
 
         **Use cases:**
         - Discover available endpoints
@@ -139,13 +141,13 @@ paths:
                 properties:
                   name:
                     type: string
-                    example: "Magic Garden API"
+                    example: "MG API"
                   version:
                     type: string
                     example: "2.0.0"
                   description:
                     type: string
-                    example: "Unofficial API for Magic Garden game data"
+                    example: "Unofficial Magic Garden API"
                   endpoints:
                     type: object
                     description: Available endpoint categories
@@ -153,9 +155,6 @@ paths:
                       data:
                         type: string
                         example: "/data"
-                      assets:
-                        type: string
-                        example: "/assets"
                       live:
                         type: string
                         example: "/live"
@@ -169,12 +168,11 @@ paths:
                 root:
                   summary: API root response
                   value:
-                    name: "Magic Garden API"
+                    name: "MG API"
                     version: "2.0.0"
-                    description: "Unofficial API for Magic Garden game data"
+                    description: "Unofficial Magic Garden API"
                     endpoints:
                       data: "/data"
-                      assets: "/assets"
                       live: "/live"
                       health: "/health"
                       docs: "/docs"
@@ -190,7 +188,6 @@ paths:
         **Includes:**
         - Server status and uptime
         - Bundle cache status
-        - WebSocket connection status
         - Cached data categories
 
         **Use cases:**
@@ -214,8 +211,9 @@ paths:
                     uptime: 3600
                     cache:
                       hasBundleCached: true
-                      bundleUrl: "https://magiccircle.gg/assets/main-DvXv24E7.js"
+                      bundleUrl: "https://magicgarden.gg/assets/main-DvXv24E7.js"
                       bundleFetchedAt: "2024-01-20T10:00:00.000Z"
+                      bundleAge: 180000
                       categoriesCached: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
 
   /health/ready:
@@ -229,11 +227,9 @@ paths:
         **Returns 200 when:**
         - Server is running
         - Game bundle is cached
-        - Data extraction is complete
 
         **Returns 503 when:**
         - Bundle is not yet cached
-        - Data is still loading
         - System is starting up
 
         **Use cases:**
@@ -249,14 +245,14 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    example: "ready"
+                  ready:
+                    type: boolean
+                    example: true
               examples:
                 ready:
                   summary: Service ready
                   value:
-                    status: "ready"
+                    ready: true
         '503':
           description: Service is not ready
           content:
@@ -264,17 +260,17 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    example: "not ready"
+                  ready:
+                    type: boolean
+                    example: false
                   reason:
                     type: string
               examples:
                 notReady:
                   summary: Service not ready
                   value:
-                    status: "not ready"
-                    reason: "Bundle not cached yet"
+                    ready: false
+                    reason: "Bundle not yet cached"
 
   /health/live:
     get:
@@ -303,14 +299,14 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    example: "alive"
+                  alive:
+                    type: boolean
+                    example: true
               examples:
                 alive:
                   summary: Service alive
                   value:
-                    status: "alive"
+                    alive: true
 
   /data:
     get:
@@ -368,27 +364,27 @@ paths:
                         seed:
                           name: "Carrot Seed"
                           coinPrice: 10
-                          sprite: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                          sprite: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
                         plant:
                           name: "Carrot Plant"
                           harvestType: "Single"
-                          sprite: "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
+                          sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/BabyCarrot.png"
                         crop:
                           name: "Carrot"
                           baseSellPrice: 20
-                          sprite: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                          sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/Carrot.png"
                     pets:
                       Bunny:
                         name: "Bunny"
                         coinPrice: 500
                         ability: "HarvestBoost"
-                        sprite: "http://localhost:3000/assets/sprites/pets/Bunny.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Bunny.png"
                     items:
                       WateringCan:
                         name: "Watering Can"
                         type: "tool"
                         coinPrice: 100
-                        sprite: "http://localhost:3000/assets/sprites/items/WateringCan.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/items/WateringCan.png"
                     mutations: {}
                     eggs: {}
                     decor: {}
@@ -429,28 +425,28 @@ paths:
                       seed:
                         name: "Carrot Seed"
                         coinPrice: 10
-                        sprite: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
                       plant:
                         name: "Carrot Plant"
                         harvestType: "Single"
-                        sprite: "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/BabyCarrot.png"
                       crop:
                         name: "Carrot"
                         baseSellPrice: 20
-                        sprite: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/Carrot.png"
                     Wheat:
                       seed:
                         name: "Wheat Seed"
                         coinPrice: 5
-                        sprite: "http://localhost:3000/assets/sprites/seeds/Wheat.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/seeds/Wheat.png"
                       plant:
                         name: "Wheat Plant"
                         harvestType: "Multi"
-                        sprite: "http://localhost:3000/assets/sprites/plants/BabyWheat.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/BabyWheat.png"
                       crop:
                         name: "Wheat"
                         baseSellPrice: 8
-                        sprite: "http://localhost:3000/assets/sprites/plants/Wheat.png"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/Wheat.png"
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -488,17 +484,17 @@ paths:
                       name: "Bunny"
                       coinPrice: 500
                       ability: "HarvestBoost"
-                      sprite: "http://localhost:3000/assets/sprites/pets/Bunny.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Bunny.png"
                     Cat:
                       name: "Cat"
                       coinPrice: 750
                       ability: "LuckBoost"
-                      sprite: "http://localhost:3000/assets/sprites/pets/Cat.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Cat.png"
                     Dog:
                       name: "Dog"
                       coinPrice: 600
                       ability: "FindTreasure"
-                      sprite: "http://localhost:3000/assets/sprites/pets/Dog.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Dog.png"
 
   /data/items:
     get:
@@ -534,17 +530,17 @@ paths:
                       name: "Watering Can"
                       type: "tool"
                       coinPrice: 100
-                      sprite: "http://localhost:3000/assets/sprites/items/WateringCan.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/items/WateringCan.png"
                     Fertilizer:
                       name: "Fertilizer"
                       type: "consumable"
                       coinPrice: 50
-                      sprite: "http://localhost:3000/assets/sprites/items/Fertilizer.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/items/Fertilizer.png"
                     Pickaxe:
                       name: "Pickaxe"
                       type: "tool"
                       coinPrice: 200
-                      sprite: "http://localhost:3000/assets/sprites/items/Pickaxe.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/items/Pickaxe.png"
 
   /data/decor:
     get:
@@ -580,12 +576,12 @@ paths:
                       name: "Wooden Fence"
                       coinPrice: 50
                       category: "boundary"
-                      sprite: "http://localhost:3000/assets/sprites/decor/Fence.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/Fence.png"
                     Lamp:
                       name: "Garden Lamp"
                       coinPrice: 100
                       category: "lighting"
-                      sprite: "http://localhost:3000/assets/sprites/decor/Lamp.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/Lamp.png"
 
   /data/eggs:
     get:
@@ -622,12 +618,12 @@ paths:
                       name: "Bunny Egg"
                       coinPrice: 250
                       hatchesInto: "Bunny"
-                      sprite: "http://localhost:3000/assets/sprites/eggs/BunnyEgg.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/eggs/BunnyEgg.png"
                     CatEgg:
                       name: "Cat Egg"
                       coinPrice: 375
                       hatchesInto: "Cat"
-                      sprite: "http://localhost:3000/assets/sprites/eggs/CatEgg.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/eggs/CatEgg.png"
 
   /data/abilities:
     get:
@@ -711,12 +707,12 @@ paths:
                       name: "Golden Carrot"
                       basePlant: "Carrot"
                       rarity: "rare"
-                      sprite: "http://localhost:3000/assets/sprites/mutations/GoldenCarrot.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/mutations/GoldenCarrot.png"
                     GiantWheat:
                       name: "Giant Wheat"
                       basePlant: "Wheat"
                       rarity: "epic"
-                      sprite: "http://localhost:3000/assets/sprites/mutations/GiantWheat.png"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/mutations/GiantWheat.png"
 
   /assets/sprite-data:
     get:
@@ -737,6 +733,10 @@ paths:
         - Browse available sprites by category
         - Get sprite dimensions and atlas coordinates
         - Build sprite catalogs
+
+        **Response notes:**
+        - `baseUrl` points to the game's versioned asset base, not the API host.
+        - `url` points to the atlas PNG; use `/assets/sprites` for individual sprite PNGs.
 
         **Examples:**
         - `/assets/sprite-data?search=Carrot` - Find all Carrot sprites
@@ -782,44 +782,44 @@ paths:
                 grouped:
                   summary: Grouped response (default)
                   value:
-                    baseUrl: "http://localhost:3000"
+                    baseUrl: "https://magicgarden.gg/version/<version>/assets/"
                     count: 3
                     categories:
                       - cat: "seeds"
                         items:
                           - id: "Carrot"
-                            url: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                           - id: "Wheat"
-                            url: "http://localhost:3000/assets/sprites/seeds/Wheat.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                       - cat: "plants"
                         items:
                           - id: "Carrot"
-                            url: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                 flat:
                   summary: Flat response (with flat=1)
                   value:
-                    baseUrl: "http://localhost:3000"
+                    baseUrl: "https://magicgarden.gg/version/<version>/assets/"
                     count: 3
                     items:
                       - id: "Carrot"
                         cat: "seeds"
-                        url: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                        url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                       - id: "Wheat"
                         cat: "seeds"
-                        url: "http://localhost:3000/assets/sprites/seeds/Wheat.png"
+                        url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                       - id: "Carrot"
                         cat: "plants"
-                        url: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+                        url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                 fullDetails:
                   summary: Full details (with full=1)
                   value:
-                    baseUrl: "http://localhost:3000"
+                    baseUrl: "https://magicgarden.gg/version/<version>/assets/"
                     count: 1
                     categories:
                       - cat: "seeds"
                         items:
                           - id: "Carrot"
-                            url: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                             frame:
                               x: 0
                               y: 0
@@ -854,6 +854,9 @@ paths:
         - Build character customization UI
         - Display cosmetic shop
         - Show available customization options
+
+        **Response notes:**
+        - `baseUrl` points to the game's versioned asset base, not the API host.
       parameters:
         - name: full
           in: query
@@ -873,19 +876,19 @@ paths:
                 cosmeticsData:
                   summary: Example cosmetics
                   value:
-                    baseUrl: "http://localhost:3000"
+                    baseUrl: "https://magicgarden.gg/version/<version>/assets/"
                     count: 25
                     categories:
                       - cat: "hats"
                         items:
                           - id: "StrawHat"
-                            url: "http://localhost:3000/assets/cosmetics/hats/StrawHat.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/cosmetic/hats/StrawHat.png"
                           - id: "WizardHat"
-                            url: "http://localhost:3000/assets/cosmetics/hats/WizardHat.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/cosmetic/hats/WizardHat.png"
                       - cat: "outfits"
                         items:
                           - id: "FarmerOutfit"
-                            url: "http://localhost:3000/assets/cosmetics/outfits/FarmerOutfit.png"
+                            url: "https://magicgarden.gg/version/<version>/assets/cosmetic/outfits/FarmerOutfit.png"
 
   /assets/audios:
     get:
@@ -906,6 +909,8 @@ paths:
         - Extract specific sound effects from atlas
 
         **Note:** Audio URLs point to the original game assets.
+        **Response notes:**
+        - `baseUrl` points to the game's versioned asset base, not the API host.
       responses:
         '200':
           description: Audio data
@@ -917,16 +922,16 @@ paths:
                 audioData:
                   summary: Example audio data
                   value:
-                    baseUrl: "http://localhost:3000"
+                    baseUrl: "https://magicgarden.gg/version/<version>/assets/"
                     themes:
-                      - name: "Garden"
-                        ambience: "https://magiccircle.gg/audio/garden_ambience.mp3"
-                        music: "https://magiccircle.gg/audio/garden_music.mp3"
-                      - name: "Shop"
-                        ambience: "https://magiccircle.gg/audio/shop_ambience.mp3"
-                        music: "https://magiccircle.gg/audio/shop_music.mp3"
+                      - name: "garden"
+                        ambience: "https://magicgarden.gg/version/<version>/assets/audio/ambience/garden.mp3"
+                        music: "https://magicgarden.gg/version/<version>/assets/audio/music/garden.mp3"
+                      - name: "shop"
+                        ambience: "https://magicgarden.gg/version/<version>/assets/audio/ambience/shop.mp3"
+                        music: "https://magicgarden.gg/version/<version>/assets/audio/music/shop.mp3"
                     sfx:
-                      url: "https://magiccircle.gg/audio/sfx_atlas.mp3"
+                      url: "https://magicgarden.gg/version/<version>/assets/audio/sfx/sfx.mp3"
                       items:
                         - name: "plant_seed"
                           start: 0
@@ -968,6 +973,9 @@ paths:
         - Discover available sprite categories
         - Get download URLs for specific sprites
         - Browse sprite collections
+
+        **Response notes:**
+        - `baseUrl` reflects the public API base used for sprite URLs (`SPRITES_BASE_URL`).
       responses:
         '200':
           description: Sprite categories
@@ -985,7 +993,7 @@ paths:
                   baseUrl:
                     type: string
                     description: Base URL for the API
-                    example: "http://localhost:3000"
+                    example: "https://mg-api.ariedam.fr"
                   exportDir:
                     type: string
                     description: Local export directory path
@@ -999,17 +1007,17 @@ paths:
                         example: "/assets/sprites/:category/:name"
                       example:
                         type: string
-                        example: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                        example: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
               examples:
                 categoriesList:
                   summary: Sprite categories response
                   value:
                     categories: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
-                    baseUrl: "http://localhost:3000"
+                    baseUrl: "https://mg-api.ariedam.fr"
                     exportDir: "./sprites_dump"
                     usage:
                       endpoint: "/assets/sprites/:category/:name"
-                      example: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+                      example: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
                       description: "Download individual sprites as PNG files"
 
   /assets/sprites/{category}/{name}:
@@ -1034,25 +1042,25 @@ paths:
 
         **HTML:**
         ```html
-        <img src="http://localhost:3000/assets/sprites/seeds/Carrot.png" alt="Carrot Seed">
+        <img src="https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png" alt="Carrot Seed">
         ```
 
         **JavaScript:**
         ```javascript
-        const spriteUrl = 'http://localhost:3000/assets/sprites/seeds/Carrot.png';
+        const spriteUrl = 'https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png';
         const img = new Image();
         img.src = spriteUrl;
         ```
 
         **Download with cURL:**
         ```bash
-        curl http://localhost:3000/assets/sprites/seeds/Carrot.png -o carrot.png
+        curl https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png -o carrot.png
         ```
 
         **Python:**
         ```python
         import requests
-        response = requests.get('http://localhost:3000/assets/sprites/seeds/Carrot.png')
+        response = requests.get('https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png')
         with open('carrot.png', 'wb') as f:
             f.write(response.content)
         ```
@@ -1092,11 +1100,8 @@ paths:
                   summary: Invalid category
                   value:
                     error:
-                      code: "INVALID_CATEGORY"
-                      message: "Invalid sprite category"
-                      details:
-                        category: "invalid_cat"
-                        validCategories: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+                      code: "BAD_REQUEST"
+                      message: "Invalid category 'invalid_cat'. Allowed: seeds, plants, tallPlants, mutations, pets, decor, items, objects, ui, animations, weather, tiles, winter"
         '404':
           description: Sprite not found
           content:
@@ -1108,11 +1113,8 @@ paths:
                   summary: Sprite not found
                   value:
                     error:
-                      code: "SPRITE_NOT_FOUND"
-                      message: "Sprite file not found"
-                      details:
-                        category: "seeds"
-                        filename: "NonExistent.png"
+                      code: "NOT_FOUND"
+                      message: "Sprite not found: seeds/NonExistent.png"
 
   /live:
     get:
@@ -1297,8 +1299,10 @@ paths:
 
         **Event format:**
         ```
+        event: weather
         data: {"weather": "Clear Skies"}
 
+        event: weather
         data: {"weather": "Rainy"}
         ```
 
@@ -1306,22 +1310,22 @@ paths:
 
         **JavaScript:**
         ```javascript
-        const eventSource = new EventSource('http://localhost:3000/live/weather/stream');
-        eventSource.onmessage = (event) => {
+        const eventSource = new EventSource('https://mg-api.ariedam.fr/live/weather/stream');
+        eventSource.addEventListener('weather', (event) => {
           const data = JSON.parse(event.data);
           console.log('Weather changed to:', data.weather);
-        };
+        });
         ```
 
         **cURL:**
         ```bash
-        curl -N http://localhost:3000/live/weather/stream
+        curl -N https://mg-api.ariedam.fr/live/weather/stream
         ```
 
         **Python:**
         ```python
         import requests
-        response = requests.get('http://localhost:3000/live/weather/stream', stream=True)
+        response = requests.get('https://mg-api.ariedam.fr/live/weather/stream', stream=True)
         for line in response.iter_lines():
             if line.startswith(b'data:'):
                 print(line.decode())
@@ -1334,8 +1338,10 @@ paths:
               schema:
                 type: string
               example: |
+                event: weather
                 data: {"weather":"Clear Skies"}
 
+                event: weather
                 data: {"weather":"Rainy"}
 
   /live/shops/stream:
@@ -1353,6 +1359,7 @@ paths:
 
         **Event format:**
         ```
+        event: shops
         data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10}]},"tool":{...},"egg":{...},"decor":{...}}
         ```
 
@@ -1360,12 +1367,12 @@ paths:
 
         **JavaScript:**
         ```javascript
-        const eventSource = new EventSource('http://localhost:3000/live/shops/stream');
-        eventSource.onmessage = (event) => {
+        const eventSource = new EventSource('https://mg-api.ariedam.fr/live/shops/stream');
+        eventSource.addEventListener('shops', (event) => {
           const shops = JSON.parse(event.data);
           console.log('Seed shop:', shops.seed);
           console.log('Time until restock:', shops.seed.secondsUntilRestock);
-        };
+        });
         ```
 
         **React Hook:**
@@ -1376,10 +1383,10 @@ paths:
           const [shops, setShops] = useState(null);
 
           useEffect(() => {
-            const eventSource = new EventSource('http://localhost:3000/live/shops/stream');
-            eventSource.onmessage = (event) => {
+            const eventSource = new EventSource('https://mg-api.ariedam.fr/live/shops/stream');
+            eventSource.addEventListener('shops', (event) => {
               setShops(JSON.parse(event.data));
-            };
+            });
             return () => eventSource.close();
           }, []);
 
@@ -1389,7 +1396,7 @@ paths:
 
         **cURL:**
         ```bash
-        curl -N http://localhost:3000/live/shops/stream
+        curl -N https://mg-api.ariedam.fr/live/shops/stream
         ```
       responses:
         '200':
@@ -1399,6 +1406,7 @@ paths:
               schema:
                 type: string
               example: |
+                event: shops
                 data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10},{"name":"Wheat","stock":15}]},"tool":{"secondsUntilRestock":7200,"items":[{"name":"WateringCan","stock":3}]},"egg":{"secondsUntilRestock":10800,"items":[]},"decor":{"secondsUntilRestock":14400,"items":[]}}
 
 components:
@@ -1422,7 +1430,7 @@ components:
               type: string
               format: uri
               description: Absolute URL to seed sprite
-              example: "http://localhost:3000/assets/sprites/seeds/Carrot.png"
+              example: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
         plant:
           type: object
           description: Growing plant stage information
@@ -1439,7 +1447,7 @@ components:
               type: string
               format: uri
               description: Absolute URL to plant sprite
-              example: "http://localhost:3000/assets/sprites/plants/BabyCarrot.png"
+              example: "https://mg-api.ariedam.fr/assets/sprites/plants/BabyCarrot.png"
         crop:
           type: object
           description: Harvested crop information
@@ -1455,7 +1463,7 @@ components:
               type: string
               format: uri
               description: Absolute URL to crop sprite
-              example: "http://localhost:3000/assets/sprites/plants/Carrot.png"
+              example: "https://mg-api.ariedam.fr/assets/sprites/plants/Carrot.png"
 
     PetData:
       type: object
@@ -1476,7 +1484,7 @@ components:
           type: string
           format: uri
           description: Absolute URL to pet sprite
-          example: "http://localhost:3000/assets/sprites/pets/Bunny.png"
+          example: "https://mg-api.ariedam.fr/assets/sprites/pets/Bunny.png"
 
     ItemData:
       type: object
@@ -1497,7 +1505,7 @@ components:
           type: string
           format: uri
           description: Absolute URL to item sprite
-          example: "http://localhost:3000/assets/sprites/items/WateringCan.png"
+          example: "https://mg-api.ariedam.fr/assets/sprites/items/WateringCan.png"
 
     HealthStatus:
       type: object
@@ -1528,12 +1536,16 @@ components:
             bundleUrl:
               type: string
               description: URL of the cached bundle
-              example: "https://magiccircle.gg/assets/main-DvXv24E7.js"
+              example: "https://magicgarden.gg/assets/main-DvXv24E7.js"
             bundleFetchedAt:
               type: string
               format: date-time
               description: When the bundle was last fetched
               example: "2024-01-20T10:00:00.000Z"
+            bundleAge:
+              type: integer
+              description: Bundle age in milliseconds
+              example: 180000
             categoriesCached:
               type: array
               description: List of successfully cached data categories
@@ -1546,8 +1558,9 @@ components:
         uptime: 3600
         cache:
           hasBundleCached: true
-          bundleUrl: "https://magiccircle.gg/assets/main-DvXv24E7.js"
+          bundleUrl: "https://magicgarden.gg/assets/main-DvXv24E7.js"
           bundleFetchedAt: "2024-01-20T10:00:00.000Z"
+          bundleAge: 180000
           categoriesCached: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
 
     Shops:
@@ -1625,6 +1638,7 @@ components:
       properties:
         baseUrl:
           type: string
+          description: Game assets base URL (versioned)
         count:
           type: integer
         categories:
@@ -1644,6 +1658,7 @@ components:
       properties:
         baseUrl:
           type: string
+          description: Game assets base URL (versioned)
         count:
           type: integer
         categories:
@@ -1663,6 +1678,7 @@ components:
       properties:
         baseUrl:
           type: string
+          description: Game assets base URL (versioned)
         themes:
           type: array
           items:

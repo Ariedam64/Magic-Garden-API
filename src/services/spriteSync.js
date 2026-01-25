@@ -1,5 +1,6 @@
 // src/services/spriteSync.js
 
+import fs from "node:fs/promises";
 import { config } from "../config/index.js";
 import { logger } from "../logger/index.js";
 import { CloseCodes } from "../core/websocket/closeCodes.js";
@@ -21,6 +22,28 @@ let isSyncing = false;
 const SYNC_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Check if sprites directory exists and has content.
+ * Returns true if sprites need to be exported (dir missing or empty).
+ */
+async function needsInitialExport() {
+  const exportDir = config.sprites.exportDir;
+  const spriteDir = `${exportDir}/sprite`;
+
+  try {
+    const stats = await fs.stat(spriteDir);
+    if (!stats.isDirectory()) return true;
+
+    const entries = await fs.readdir(spriteDir);
+    if (entries.length === 0) return true;
+
+    return false;
+  } catch (err) {
+    // Directory doesn't exist
+    return true;
+  }
+}
+
+/**
  * Fetch JSON from URL.
  */
 async function fetchJson(url) {
@@ -35,8 +58,27 @@ async function fetchJson(url) {
 }
 
 /**
+ * Extract all asset source files from a bundle.
+ */
+function extractAllSources(bundle) {
+  if (!bundle || !Array.isArray(bundle.assets)) return [];
+
+  const sources = new Set();
+  for (const asset of bundle.assets) {
+    const srcs = Array.isArray(asset?.src) ? asset.src : [];
+    for (const src of srcs) {
+      if (typeof src === "string") {
+        sources.add(src);
+      }
+    }
+  }
+  return Array.from(sources);
+}
+
+/**
  * Fetch all atlas JSON files from the game server.
  * Returns a map of sourceJson -> atlasJson.
+ * Also discovers JSON files for webp atlases not listed in manifest.
  */
 async function fetchAllAtlases(baseUrl) {
   const manifest = await loadManifest({ baseUrl });
@@ -45,15 +87,30 @@ async function fetchAllAtlases(baseUrl) {
   const bundle = getBundleByName(manifest, "default");
   if (!bundle) throw new Error("No 'default' bundle in manifest");
 
+  // Get explicitly listed JSON files
   const jsonFiles = extractJsonFiles(bundle);
-  const atlasFiles = jsonFiles.filter(
-    (f) => f.includes("sprite") || f.includes("tiles") || f.includes("weather")
+  const atlasJsonFiles = new Set(
+    jsonFiles.filter((f) => f.includes("sprite") || f.includes("tiles") || f.includes("weather"))
   );
 
-  logger.debug({ atlasFiles }, "Atlas files to fetch");
+  // Also look for webp files and try to find corresponding JSON
+  const allSources = extractAllSources(bundle);
+  const webpFiles = allSources.filter(
+    (f) => f.endsWith(".webp") && (f.includes("sprite") || f.includes("tiles") || f.includes("weather"))
+  );
+
+  // Add potential JSON files for webp atlases
+  for (const webp of webpFiles) {
+    const jsonFile = webp.replace(".webp", ".json");
+    if (!atlasJsonFiles.has(jsonFile)) {
+      atlasJsonFiles.add(jsonFile);
+    }
+  }
+
+  logger.debug({ atlasFiles: Array.from(atlasJsonFiles) }, "Atlas files to fetch");
 
   const atlasMap = {};
-  for (const jsonFile of atlasFiles) {
+  for (const jsonFile of atlasJsonFiles) {
     try {
       const url = joinUrl(baseUrl, jsonFile);
       const atlasJson = await fetchJson(url);
@@ -131,8 +188,8 @@ export async function checkAndSyncSprites({ force = false } = {}) {
       "Atlas comparison result"
     );
 
-    // 5. If no changes, just update version and skip export
-    if (!comparison.hasChanges) {
+    // 5. If no changes and not forced, skip export
+    if (!comparison.hasChanges && !force) {
       logger.info("No sprite changes detected, updating version only");
       await saveVersion(currentVersion);
       return {
@@ -142,22 +199,29 @@ export async function checkAndSyncSprites({ force = false } = {}) {
       };
     }
 
-    // 6. Export only changed sprites
-    logger.info(
-      {
-        framesToExport: comparison.framesToExport.size,
-        added: comparison.summary.totalAdded,
-        modified: comparison.summary.totalModified,
-        removed: comparison.summary.totalRemoved,
-      },
-      "Starting selective sprite export"
-    );
+    // 5b. If forced but no changes, do full export (initial export case)
+    const doFullExport = force && !comparison.hasChanges;
+
+    // 6. Export sprites (full or selective)
+    if (doFullExport) {
+      logger.info({ exportDir: config.sprites.exportDir }, "Starting FULL sprite export (initial)");
+    } else {
+      logger.info(
+        {
+          framesToExport: comparison.framesToExport.size,
+          added: comparison.summary.totalAdded,
+          modified: comparison.summary.totalModified,
+          removed: comparison.summary.totalRemoved,
+        },
+        "Starting selective sprite export"
+      );
+    }
 
     const startTime = Date.now();
     const exportResult = await exportSpritesToDisk({
       outDir: config.sprites.exportDir,
       restoreTrim: true,
-      onlyKeys: comparison.framesToExport,
+      onlyKeys: doFullExport ? null : comparison.framesToExport,
     });
 
     const elapsed = Date.now() - startTime;
@@ -217,10 +281,18 @@ async function handleVersionMismatch() {
 /**
  * Check sprites on connection open.
  * This is called when WebSocket connects successfully.
+ * Forces full export if sprites directory is missing or empty.
  */
 export async function checkSpritesOnConnect() {
   logger.info("Checking sprites on connection...");
-  const result = await checkAndSyncSprites({ force: false });
+
+  // Check if we need initial export (directory missing or empty)
+  const forceExport = await needsInitialExport();
+  if (forceExport) {
+    logger.info({ exportDir: config.sprites.exportDir }, "Sprites directory missing or empty - forcing full export");
+  }
+
+  const result = await checkAndSyncSprites({ force: forceExport });
 
   if (result?.success) {
     logger.info(

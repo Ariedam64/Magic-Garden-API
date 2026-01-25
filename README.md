@@ -29,6 +29,10 @@ Connection to the game server to retrieve dynamic data:
 
 ## Quick Start
 
+### Requirements
+
+- Node.js >= 18
+
 ### Installation
 
 ```bash
@@ -73,6 +77,8 @@ The server starts on `http://localhost:3000`
 | `GET /assets/sprites/:category/:name` | Download individual sprite PNG |
 
 **Available sprite categories**: `seeds`, `plants`, `tallPlants`, `mutations`, `pets`, `decor`, `items`, `objects`, `ui`, `animations`, `weather`, `tiles`, `winter`
+
+Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return URLs pointing to the game's versioned asset base. `/assets/sprites` serves PNGs from this API (controlled by `SPRITES_BASE_URL`).
 
 ### Live data (Real-time via SSE)
 
@@ -172,6 +178,22 @@ curl http://localhost:3000/live/shops | jq
 curl -N http://localhost:3000/live/weather/stream
 ```
 
+SSE events are named `weather` and `shops`. Use `addEventListener` to subscribe.
+
+```javascript
+const weatherStream = new EventSource('http://localhost:3000/live/weather/stream');
+weatherStream.addEventListener('weather', (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Weather:', data.weather);
+});
+
+const shopsStream = new EventSource('http://localhost:3000/live/shops/stream');
+shopsStream.addEventListener('shops', (event) => {
+  const shops = JSON.parse(event.data);
+  console.log('Seed shop:', shops.seed);
+});
+```
+
 ## Technical Architecture
 
 ```
@@ -233,15 +255,19 @@ Environment variables (create a `.env` file):
 
 ```env
 # Server
+HOST=0.0.0.0
 PORT=3000
 NODE_ENV=development
 
-# Bundle cache (in milliseconds)
-BUNDLE_TTL=300000
+# Cache (in milliseconds)
+CACHE_BUNDLE_TTL=300000
+CACHE_MANIFEST_TTL=600000
 
-# WebSocket
+# WebSocket reconnection
 WS_AUTO_RECONNECT=true
 WS_MAX_RETRIES=999
+WS_MIN_DELAY=500
+WS_MAX_DELAY=8000
 
 # CORS
 CORS_ENABLED=true
@@ -250,11 +276,21 @@ CORS_ORIGIN=*
 # Rate limiting
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_MAX=100
-RATE_LIMIT_WINDOW=60000
+RATE_LIMIT_WINDOW_MS=60000
+
+# Game origin
+GAME_ORIGIN=https://magicgarden.gg
+GAME_PAGE_URL=https://magicgarden.gg/r/test
+
+# Logging
+LOG_LEVEL=info
 
 # Sprites
 SPRITES_EXPORT_DIR=./sprites_dump
+SPRITES_BASE_URL=http://localhost:3000
 ```
+
+Set `CORS_ENABLED=false` or `RATE_LIMIT_ENABLED=false` to disable those features. SSE streams use a separate limiter (defaults to `RATE_LIMIT_MAX / 10` per window).
 
 ## Limitations & Warnings
 
@@ -265,10 +301,8 @@ SPRITES_EXPORT_DIR=./sprites_dump
 
 ## Statistics
 
-- 42+ extractable plants
-- 1000+ available sprites
-- 12 data categories
-- API latency < 100ms (with cache)
+- Counts vary by game version and bundle updates
+- Use `/data` and `/assets/sprite-data` to inspect current totals
 
 ## License
 

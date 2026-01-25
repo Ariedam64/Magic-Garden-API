@@ -21,6 +21,9 @@ import { dataRouter, liveRouter, healthRouter, docsRouter, assetsRouter } from "
 export function createApp() {
   const app = express();
 
+  // Trust proxy (Nginx)
+  app.set("trust proxy", 1);
+
   // =====================
   // Security & Global Middlewares
   // =====================

@@ -33,4 +33,5 @@ nul
 
 # Runtime
 sprites_dump/
+data/
 data/version.json
