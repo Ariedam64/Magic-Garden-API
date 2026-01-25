@@ -1,0 +1,31 @@
+{
+  "name": "mg-api",
+  "version": "2.0.0",
+  "description": "Unofficial Magic Garden API to fetch data from the game",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": ["magic-garden", "api", "game", "websocket"],
+  "author": "Ariedam",
+  "license": "ISC",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "pino": "^10.3.0",
+    "sharp": "^0.34.5",
+    "swagger-ui-express": "^5.0.1",
+    "ws": "^8.19.0",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.1.3"
+  }
+}

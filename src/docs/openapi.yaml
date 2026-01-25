@@ -1,0 +1,516 @@
+openapi: 3.0.3
+info:
+  title: Magic Garden API
+  version: 2.0.0
+  description: |
+    Unofficial API for Magic Garden game data.
+
+    This API provides two types of data:
+    - **Static data**: Extracted from the game's minified bundle (plants, pets, items, etc.)
+    - **Live data**: Real-time data from the game's WebSocket (shops, weather)
+  contact:
+    name: Ariedam
+  license:
+    name: ISC
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: Data
+    description: Static game data extracted from the bundle
+  - name: Assets
+    description: Game assets (sprites, cosmetics, audio)
+  - name: Live
+    description: Real-time game data from WebSocket
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /:
+    get:
+      summary: API root
+      description: Returns API information and available endpoints
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  version:
+                    type: string
+                  description:
+                    type: string
+                  endpoints:
+                    type: object
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns health status and cache information
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe
+      description: Checks if the service is ready to handle requests
+      responses:
+        '200':
+          description: Service is ready
+        '503':
+          description: Service is not ready
+
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe
+      description: Checks if the service is alive
+      responses:
+        '200':
+          description: Service is alive
+
+  /data:
+    get:
+      tags:
+        - Data
+      summary: List available categories
+      description: Returns all available data categories
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      type: string
+                  assets:
+                    type: array
+                    items:
+                      type: string
+
+  /data/plants:
+    get:
+      tags:
+        - Data
+      summary: Get plants data
+      description: Returns all plants (seeds, plants, crops) from the game
+      responses:
+        '200':
+          description: Plants data
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /data/pets:
+    get:
+      tags:
+        - Data
+      summary: Get pets data
+      description: Returns all pets from the game
+      responses:
+        '200':
+          description: Pets data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /data/items:
+    get:
+      tags:
+        - Data
+      summary: Get items data
+      description: Returns all items (tools, consumables) from the game
+      responses:
+        '200':
+          description: Items data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /data/decor:
+    get:
+      tags:
+        - Data
+      summary: Get decorations data
+      description: Returns all decorations from the game
+      responses:
+        '200':
+          description: Decorations data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /data/eggs:
+    get:
+      tags:
+        - Data
+      summary: Get eggs data
+      description: Returns all eggs from the game
+      responses:
+        '200':
+          description: Eggs data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /data/abilities:
+    get:
+      tags:
+        - Data
+      summary: Get abilities data
+      description: Returns all pet abilities from the game
+      responses:
+        '200':
+          description: Abilities data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /data/mutations:
+    get:
+      tags:
+        - Data
+      summary: Get mutations data
+      description: Returns all plant mutations from the game
+      responses:
+        '200':
+          description: Mutations data
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /data/sprites:
+    get:
+      tags:
+        - Assets
+      summary: Get sprites data
+      description: Returns sprite atlas information
+      parameters:
+        - name: full
+          in: query
+          description: Include full sprite information (anchors, source sizes)
+          schema:
+            type: string
+            enum: ['1']
+        - name: search
+          in: query
+          description: Filter sprites by ID
+          schema:
+            type: string
+        - name: cat
+          in: query
+          description: Filter by category
+          schema:
+            type: string
+        - name: flat
+          in: query
+          description: Return flat list instead of grouped
+          schema:
+            type: string
+            enum: ['1']
+      responses:
+        '200':
+          description: Sprites data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpritesResponse'
+
+  /data/cosmetics:
+    get:
+      tags:
+        - Assets
+      summary: Get cosmetics data
+      description: Returns cosmetic items (player customization)
+      parameters:
+        - name: full
+          in: query
+          description: Include full cosmetic information
+          schema:
+            type: string
+            enum: ['1']
+      responses:
+        '200':
+          description: Cosmetics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CosmeticsResponse'
+
+  /data/audios:
+    get:
+      tags:
+        - Assets
+      summary: Get audio data
+      description: Returns audio themes and SFX atlas
+      responses:
+        '200':
+          description: Audio data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioResponse'
+
+  /live:
+    get:
+      tags:
+        - Live
+      summary: Get all live data
+      description: Returns current weather and shop data
+      responses:
+        '200':
+          description: Live data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  weather:
+                    type: string
+                  shops:
+                    $ref: '#/components/schemas/Shops'
+
+  /live/weather:
+    get:
+      tags:
+        - Live
+      summary: Get current weather
+      description: Returns the current in-game weather
+      responses:
+        '200':
+          description: Current weather
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  weather:
+                    type: string
+                    example: Clear Skies
+
+  /live/shops:
+    get:
+      tags:
+        - Live
+      summary: Get shop inventory
+      description: Returns current shop inventory and restock timers
+      responses:
+        '200':
+          description: Shop data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Shops'
+
+  /live/weather/stream:
+    get:
+      tags:
+        - Live
+      summary: Weather SSE stream
+      description: Server-Sent Events stream for weather updates
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /live/shops/stream:
+    get:
+      tags:
+        - Live
+      summary: Shops SSE stream
+      description: Server-Sent Events stream for shop updates
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: integer
+          description: Server uptime in seconds
+        cache:
+          type: object
+          properties:
+            hasBundleCached:
+              type: boolean
+            bundleUrl:
+              type: string
+            bundleFetchedAt:
+              type: string
+            categoriesCached:
+              type: array
+              items:
+                type: string
+
+    Shops:
+      type: object
+      properties:
+        seed:
+          $ref: '#/components/schemas/Shop'
+        tool:
+          $ref: '#/components/schemas/Shop'
+        egg:
+          $ref: '#/components/schemas/Shop'
+        decor:
+          $ref: '#/components/schemas/Shop'
+
+    Shop:
+      type: object
+      properties:
+        secondsUntilRestock:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              stock:
+                type: integer
+
+    SpritesResponse:
+      type: object
+      properties:
+        baseUrl:
+          type: string
+        count:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              cat:
+                type: string
+              items:
+                type: array
+                items:
+                  type: object
+
+    CosmeticsResponse:
+      type: object
+      properties:
+        baseUrl:
+          type: string
+        count:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              cat:
+                type: string
+              items:
+                type: array
+                items:
+                  type: object
+
+    AudioResponse:
+      type: object
+      properties:
+        baseUrl:
+          type: string
+        themes:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              ambience:
+                type: string
+              music:
+                type: string
+        sfx:
+          type: object
+          properties:
+            url:
+              type: string
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  start:
+                    type: number
+                  end:
+                    type: number
+                  duration:
+                    type: number
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+  responses:
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
