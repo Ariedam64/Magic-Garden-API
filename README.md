@@ -27,6 +27,11 @@ Connection to the game server to retrieve dynamic data:
 - **Sprites included**: URLs and direct sprite downloads
 - **Smart cache**: Optimal performance
 
+## Hosted API
+
+Production base URL: `https://mg-api.ariedam.fr`  
+Documentation: `https://mg-api.ariedam.fr/docs`
+
 ## Quick Start
 
 ### Requirements
