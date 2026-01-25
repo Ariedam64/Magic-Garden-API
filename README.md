@@ -18,8 +18,6 @@ Automatic extraction from the game's minified JavaScript file (`main-*.js`):
 Connection to the game server to retrieve dynamic data:
 - Current shop
 - Current weather
-- Plant states
-- Growth events
 
 ## Advantages
 
