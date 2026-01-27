@@ -324,6 +324,7 @@ paths:
         - Eggs (pet eggs with hatch requirements)
         - Mutations (special plant variations)
         - Abilities (special pet abilities)
+        - Weathers (weather definitions and icons)
 
         **Note:** All sprite URLs are absolute and ready to use.
       responses:
@@ -355,6 +356,9 @@ paths:
                   abilities:
                     type: object
                     description: All abilities data (keyed by ability ID)
+                  weathers:
+                    type: object
+                    description: All weathers data (keyed by weather ID)
               examples:
                 complete:
                   summary: Complete data response
@@ -389,6 +393,7 @@ paths:
                     eggs: {}
                     decor: {}
                     abilities: {}
+                    weathers: {}
 
   /data/plants:
     get:
@@ -713,6 +718,45 @@ paths:
                       basePlant: "Wheat"
                       rarity: "epic"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/mutations/GiantWheat.png"
+
+  /data/weathers:
+    get:
+      tags:
+        - Data
+      summary: Get weathers data
+      description: |
+        Returns all weather definitions extracted from the bundle.
+
+        Each weather entry includes:
+        - Name and type (when available)
+        - Mutator effects (if any)
+        - Sprite URL (from iconSpriteKey)
+
+        **Note:** A default `Sunny` weather is included (no special effects).
+      responses:
+        '200':
+          description: Weathers data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              examples:
+                weatherData:
+                  summary: Example weathers
+                  value:
+                    Rain:
+                      name: "Rain"
+                      type: "primary"
+                      durationMinutes: 5
+                      mutator:
+                        mutation: "Wet"
+                        chancePerMinutePerCrop: 7
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/RainIcon.png"
+                    Sunny:
+                      name: "Sunny"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/SunnyIcon.png"
 
   /assets/sprite-data:
     get:

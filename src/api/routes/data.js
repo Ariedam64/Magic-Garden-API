@@ -4,7 +4,10 @@ import express from "express";
 import { asyncHandler, Errors } from "../middleware/index.js";
 import { gameDataService, assetDataService } from "../../services/index.js";
 import { getTransformedPlants } from "../../services/plantTransformer.js";
-import { transformDataWithSprites } from "../../services/dataTransformer.js";
+import {
+  transformDataWithSprites,
+  transformWeathersWithSprites,
+} from "../../services/dataTransformer.js";
 
 export const dataRouter = express.Router();
 
@@ -16,7 +19,7 @@ export const dataRouter = express.Router();
 dataRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const [plants, pets, items, decor, eggs, mutations, abilities] = await Promise.all([
+    const [plants, pets, items, decor, eggs, mutations, abilities, weathers] = await Promise.all([
       getTransformedPlants(),
       gameDataService.getPets().then(data => transformDataWithSprites(data, "pets")),
       gameDataService.getItems().then(data => transformDataWithSprites(data, "items")),
@@ -24,6 +27,7 @@ dataRouter.get(
       gameDataService.getEggs().then(data => transformDataWithSprites(data, "eggs")),
       gameDataService.getMutations().then(data => transformDataWithSprites(data, "mutations")),
       gameDataService.getAbilities(),
+      gameDataService.getWeathers().then(data => transformWeathersWithSprites(data)),
     ]);
 
     res.json({
@@ -34,6 +38,7 @@ dataRouter.get(
       eggs,
       mutations,
       abilities,
+      weathers,
     });
   })
 );
@@ -95,6 +100,15 @@ dataRouter.get(
   asyncHandler(async (_req, res) => {
     const data = await gameDataService.getMutations();
     const transformed = transformDataWithSprites(data, "mutations");
+    res.json(transformed);
+  })
+);
+
+dataRouter.get(
+  "/weathers",
+  asyncHandler(async (_req, res) => {
+    const data = await gameDataService.getWeathers();
+    const transformed = transformWeathersWithSprites(data);
     res.json(transformed);
   })
 );

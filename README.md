@@ -13,6 +13,7 @@ Automatic extraction from the game's minified JavaScript file (`main-*.js`):
 - Items and decorations
 - Mutations
 - Special abilities
+- Weathers
 
 ### **Live WebSocket** → Real-time data
 Connection to the game server to retrieve dynamic data:
@@ -70,6 +71,7 @@ The server starts on `http://localhost:3000`
 | `GET /data/mutations` | Plant mutations with sprites |
 | `GET /data/eggs` | Animal eggs with sprites |
 | `GET /data/abilities` | Special abilities |
+| `GET /data/weathers` | Weather definitions with sprites |
 
 ### Assets
 
@@ -122,7 +124,8 @@ curl http://localhost:3000/data | jq
   "decor": { ... },
   "eggs": { ... },
   "mutations": { ... },
-  "abilities": { ... }
+  "abilities": { ... },
+  "weathers": { ... }
 }
 ```
 

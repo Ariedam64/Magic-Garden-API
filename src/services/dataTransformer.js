@@ -87,6 +87,48 @@ function transformPet(petKey, petData) {
 }
 
 /**
+ * Build sprite URL from iconSpriteKey (e.g., "sprite/ui/FrostIcon").
+ * @param {string} iconSpriteKey - Icon sprite key from bundle
+ * @returns {string|null} Sprite URL
+ */
+function buildWeatherSprite(iconSpriteKey) {
+  if (!iconSpriteKey || typeof iconSpriteKey !== "string") {
+    return null;
+  }
+
+  const match = iconSpriteKey.match(/^sprite\/([^/]+)\/([^/]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, category, spriteName] = match;
+  return buildSpriteUrl(category, spriteName);
+}
+
+/**
+ * Transform a single weather entry by replacing iconSpriteKey with sprite URL
+ * @param {string} weatherKey - Weather key (e.g., "Rain")
+ * @param {Object} weatherData - Weather data object
+ * @returns {Object} Transformed weather data
+ */
+function transformWeather(weatherKey, weatherData) {
+  if (!weatherData || typeof weatherData !== "object") {
+    return weatherData;
+  }
+
+  const transformed = { ...weatherData };
+  const sprite = buildWeatherSprite(transformed.iconSpriteKey);
+
+  if ("iconSpriteKey" in transformed) {
+    delete transformed.iconSpriteKey;
+  }
+
+  transformed.sprite = sprite;
+
+  return transformed;
+}
+
+/**
  * Transform all items in a category
  * @param {Object} data - Complete data object
  * @param {string} category - Category type (decor, eggs, items, mutations, pets)
@@ -116,6 +158,36 @@ export function transformDataWithSprites(data, category) {
       // Include original data if transformation fails
       transformed[key] = value;
     }
+  }
+
+  return transformed;
+}
+
+/**
+ * Transform weather data by replacing iconSpriteKey with sprite URLs
+ * and ensuring a default Sunny weather exists.
+ * @param {Object} data - Complete weather data object
+ * @returns {Object} Transformed weather data
+ */
+export function transformWeathersWithSprites(data) {
+  const transformed = {};
+
+  if (data && typeof data === "object") {
+    for (const [key, value] of Object.entries(data)) {
+      try {
+        transformed[key] = transformWeather(key, value);
+      } catch (error) {
+        logger.error(`Error transforming weather ${key}:`, error);
+        transformed[key] = value;
+      }
+    }
+  }
+
+  if (!("Sunny" in transformed)) {
+    transformed.Sunny = transformWeather("Sunny", {
+      name: "Sunny",
+      iconSpriteKey: "sprite/ui/SunnyIcon",
+    });
   }
 
   return transformed;
