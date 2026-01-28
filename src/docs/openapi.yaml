@@ -23,12 +23,16 @@ info:
     curl https://mg-api.ariedam.fr/data/plants | jq '.Carrot'
     ```
 
-    ### Stream Live Shop Updates
+    ### Stream Live Updates
     ```javascript
-    const eventSource = new EventSource('https://mg-api.ariedam.fr/live/shops/stream');
+    const eventSource = new EventSource('https://mg-api.ariedam.fr/live/stream');
+    eventSource.addEventListener('weather', (event) => {
+      const data = JSON.parse(event.data);
+      console.log('Weather:', data.weather);
+    });
     eventSource.addEventListener('shops', (event) => {
       const shops = JSON.parse(event.data);
-      console.log('Shop inventory:', shops);
+      console.log('Seed shop:', shops.seed);
     });
     ```
 
@@ -1179,8 +1183,9 @@ paths:
         - Periodic polling (combine with SSE for updates)
 
         **Note:** For real-time updates, use the stream endpoints:
-        - `/live/weather/stream` for weather updates
-        - `/live/shops/stream` for shop updates
+        - `/live/stream` for a single SSE connection (weather + shops)
+        - `/live/weather/stream` for weather updates only
+        - `/live/shops/stream` for shop updates only
       responses:
         '200':
           description: Live data
@@ -1238,7 +1243,7 @@ paths:
         - Snowy
         - Foggy
 
-        **Note:** This is a snapshot. For real-time updates, use `/live/weather/stream`.
+        **Note:** This is a snapshot. For real-time updates, use `/live/stream` (combined) or `/live/weather/stream`.
       responses:
         '200':
           description: Current weather
@@ -1285,7 +1290,7 @@ paths:
         - Calculate restock schedules
         - Build shop tracking bots
 
-        **Note:** This is a snapshot. For real-time updates, use `/live/shops/stream`.
+        **Note:** This is a snapshot. For real-time updates, use `/live/stream` (combined) or `/live/shops/stream`.
       responses:
         '200':
           description: Shop data
@@ -1327,6 +1332,61 @@ paths:
                           stock: 10
                         - name: "Lamp"
                           stock: 5
+
+  /live/stream:
+    get:
+      tags:
+        - Live
+      summary: Live SSE stream (weather + shops)
+      description: |
+        Server-Sent Events (SSE) stream for real-time weather and shop updates on a single connection.
+
+        **Connection:**
+        - Opens a persistent connection
+        - Emits `weather` and `shops` events
+        - Auto-reconnects on disconnect
+
+        **Event format:**
+        ```
+        event: weather
+        data: {"weather": "Clear Skies"}
+
+        event: shops
+        data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10}]},"tool":{...},"egg":{...},"decor":{...}}
+        ```
+
+        **Usage examples:**
+
+        **JavaScript:**
+        ```javascript
+        const eventSource = new EventSource('https://mg-api.ariedam.fr/live/stream');
+        eventSource.addEventListener('weather', (event) => {
+          const data = JSON.parse(event.data);
+          console.log('Weather:', data.weather);
+        });
+        eventSource.addEventListener('shops', (event) => {
+          const shops = JSON.parse(event.data);
+          console.log('Seed shop:', shops.seed);
+        });
+        ```
+
+        **cURL:**
+        ```bash
+        curl -N https://mg-api.ariedam.fr/live/stream
+        ```
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: weather
+                data: {"weather":"Clear Skies"}
+
+                event: shops
+                data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10}]}}
 
   /live/weather/stream:
     get:

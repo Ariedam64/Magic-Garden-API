@@ -45,6 +45,30 @@ liveRouter.get("/shops", (_req, res) => {
 // SSE Stream endpoints
 // =====================
 
+// GET /live/stream
+liveRouter.get("/stream", streamLimiter, (req, res) => {
+  sseHeaders(res);
+
+  // Send initial state
+  sseSend(res, "weather", { weather: liveDataService.getWeather() });
+  sseSend(res, "shops", liveDataService.getShops());
+
+  // Subscribe to changes
+  const unsubscribeWeather = liveDataService.onWeatherChange((weather) => {
+    sseSend(res, "weather", { weather });
+  });
+
+  const unsubscribeShops = liveDataService.onShopsChange((shops) => {
+    sseSend(res, "shops", shops);
+  });
+
+  req.on("close", () => {
+    unsubscribeWeather();
+    unsubscribeShops();
+    res.end();
+  });
+});
+
 // GET /live/weather/stream
 liveRouter.get("/weather/stream", streamLimiter, (req, res) => {
   sseHeaders(res);

@@ -94,6 +94,7 @@ Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return UR
 | `GET /live` | All live data snapshot (weather + shops) |
 | `GET /live/weather` | Current weather snapshot |
 | `GET /live/shops` | Current shops snapshot |
+| `GET /live/stream` | Weather + shops updates via Server-Sent Events |
 | `GET /live/weather/stream` | Weather updates via Server-Sent Events |
 | `GET /live/shops/stream` | Shop updates via Server-Sent Events |
 
@@ -180,27 +181,28 @@ curl http://localhost:3000/assets/sprites/seeds/Carrot.png -o carrot.png
 curl http://localhost:3000/live/shops | jq
 ```
 
-### Stream weather updates (SSE)
+### Stream live updates (SSE)
 
 ```bash
-curl -N http://localhost:3000/live/weather/stream
+curl -N http://localhost:3000/live/stream
 ```
 
 SSE events are named `weather` and `shops`. Use `addEventListener` to subscribe.
 
 ```javascript
-const weatherStream = new EventSource('http://localhost:3000/live/weather/stream');
-weatherStream.addEventListener('weather', (event) => {
+const liveStream = new EventSource('http://localhost:3000/live/stream');
+liveStream.addEventListener('weather', (event) => {
   const data = JSON.parse(event.data);
   console.log('Weather:', data.weather);
 });
 
-const shopsStream = new EventSource('http://localhost:3000/live/shops/stream');
-shopsStream.addEventListener('shops', (event) => {
+liveStream.addEventListener('shops', (event) => {
   const shops = JSON.parse(event.data);
   console.log('Seed shop:', shops.seed);
 });
 ```
+
+You can also subscribe to specific streams with `/live/weather/stream` or `/live/shops/stream`.
 
 ## Technical Architecture
 
