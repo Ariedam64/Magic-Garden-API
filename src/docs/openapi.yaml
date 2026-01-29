@@ -38,12 +38,12 @@ info:
 
     ## Key Features
 
-    - **🔄 Auto-updating**: Data automatically refreshes from the game bundle
-    - **⚡ Real-time**: WebSocket connection for live shop and weather data
-    - **🖼️ Sprites included**: All data includes sprite URLs ready to use
-    - **📊 Server-Sent Events**: Real-time streaming via SSE
-    - **💾 Smart caching**: Optimized performance with automatic cache invalidation
-    - **🔍 Searchable**: Filter and search sprites by category and name
+    - **Auto-updating**: Data automatically refreshes from the game bundle
+    - **Real-time**: WebSocket connection for live shop and weather data
+    - **Sprites included**: All data includes sprite URLs ready to use
+    - **Server-Sent Events**: Real-time streaming via SSE
+    - **Smart caching**: Optimized performance with automatic cache invalidation
+    - **Searchable**: Filter and search sprites by category and name
 
     ## Data Structure
 
