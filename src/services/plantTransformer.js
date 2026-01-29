@@ -16,7 +16,7 @@ let cachedResult = null;
  * @param {"seed"|"plant"|"crop"} type - The plant part type
  * @returns {string|null} The sprite URL or null if not found
  */
-function resolveSpriteUrl(tileRef, type) {
+function resolveSpriteUrl(tileRef, type, spriteVersion) {
   if (!tileRef || typeof tileRef !== "string") {
     return null;
   }
@@ -24,7 +24,7 @@ function resolveSpriteUrl(tileRef, type) {
   // Seeds always use the "seeds" category
   if (type === "seed") {
     const spriteName = matchSpriteName(tileRef, "seeds");
-    return spriteName ? buildSpriteUrl("seeds", spriteName) : null;
+    return spriteName ? buildSpriteUrl("seeds", spriteName, { version: spriteVersion }) : null;
   }
 
   // For plants and crops, check tallPlants first, then plants
@@ -34,12 +34,12 @@ function resolveSpriteUrl(tileRef, type) {
   );
 
   if (tallPlantsMatch) {
-    return buildSpriteUrl("tallPlants", tallPlantsMatch);
+    return buildSpriteUrl("tallPlants", tallPlantsMatch, { version: spriteVersion });
   }
 
   // Fallback to plants category
   const spriteName = matchSpriteName(tileRef, "plants");
-  return spriteName ? buildSpriteUrl("plants", spriteName) : null;
+  return spriteName ? buildSpriteUrl("plants", spriteName, { version: spriteVersion }) : null;
 }
 
 /**
@@ -49,7 +49,7 @@ function resolveSpriteUrl(tileRef, type) {
  * @param {"seed"|"plant"|"crop"} type - The plant part type
  * @returns {Object} Transformed part data
  */
-function transformPlantPart(partData, type) {
+function transformPlantPart(partData, type, spriteVersion) {
   if (!partData || typeof partData !== "object") {
     return partData;
   }
@@ -58,28 +58,32 @@ function transformPlantPart(partData, type) {
 
   // Replace tileRef with sprite URL
   if (transformed.tileRef !== undefined) {
-    const sprite = resolveSpriteUrl(transformed.tileRef, type);
+    const sprite = resolveSpriteUrl(transformed.tileRef, type, spriteVersion);
     delete transformed.tileRef;
     transformed.sprite = sprite;
   }
 
   // Also handle immatureTileRef if present (for plants like Starweaver)
   if (transformed.immatureTileRef !== undefined) {
-    const immatureSprite = resolveSpriteUrl(transformed.immatureTileRef, "plant");
+    const immatureSprite = resolveSpriteUrl(transformed.immatureTileRef, "plant", spriteVersion);
     delete transformed.immatureTileRef;
     transformed.immatureSprite = immatureSprite;
   }
 
   // Handle topmostLayerTileRef if present
   if (transformed.topmostLayerTileRef !== undefined) {
-    const topmostSprite = resolveSpriteUrl(transformed.topmostLayerTileRef, "plant");
+    const topmostSprite = resolveSpriteUrl(transformed.topmostLayerTileRef, "plant", spriteVersion);
     delete transformed.topmostLayerTileRef;
     transformed.topmostLayerSprite = topmostSprite;
   }
 
   // Handle activeState.tileRef if present
   if (transformed.activeState && transformed.activeState.tileRef !== undefined) {
-    const activeStateSprite = resolveSpriteUrl(transformed.activeState.tileRef, "plant");
+    const activeStateSprite = resolveSpriteUrl(
+      transformed.activeState.tileRef,
+      "plant",
+      spriteVersion
+    );
     transformed.activeState = {
       ...transformed.activeState,
       sprite: activeStateSprite,
@@ -96,7 +100,7 @@ function transformPlantPart(partData, type) {
  * @param {Object} plantData - The plant data object
  * @returns {Object} Transformed plant data
  */
-function transformPlant(plantData) {
+function transformPlant(plantData, spriteVersion) {
   if (!plantData || typeof plantData !== "object") {
     return plantData;
   }
@@ -104,15 +108,15 @@ function transformPlant(plantData) {
   const transformed = {};
 
   if (plantData.seed) {
-    transformed.seed = transformPlantPart(plantData.seed, "seed");
+    transformed.seed = transformPlantPart(plantData.seed, "seed", spriteVersion);
   }
 
   if (plantData.plant) {
-    transformed.plant = transformPlantPart(plantData.plant, "plant");
+    transformed.plant = transformPlantPart(plantData.plant, "plant", spriteVersion);
   }
 
   if (plantData.crop) {
-    transformed.crop = transformPlantPart(plantData.crop, "crop");
+    transformed.crop = transformPlantPart(plantData.crop, "crop", spriteVersion);
   }
 
   return transformed;
@@ -123,7 +127,8 @@ function transformPlant(plantData) {
  *
  * @returns {Object} Plants data with sprite URLs instead of tileRef
  */
-export async function getTransformedPlants() {
+export async function getTransformedPlants(options = {}) {
+  const { spriteVersion = null } = options;
   try {
     const plants = await gameDataService.getPlants();
 
@@ -136,7 +141,7 @@ export async function getTransformedPlants() {
     // Transform each plant
     const transformed = {};
     for (const [key, value] of Object.entries(plants)) {
-      transformed[key] = transformPlant(value);
+      transformed[key] = transformPlant(value, spriteVersion);
     }
 
     cachedResult = transformed;

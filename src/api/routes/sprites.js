@@ -6,8 +6,11 @@ import path from "node:path";
 import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import { asyncHandler, Errors } from "../middleware/index.js";
+import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 
 export const spritesRouter = express.Router();
+
+const SPRITES_LIST_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=300";
 
 // Whitelist of allowed categories
 const ALLOWED_CATEGORIES = new Set([
@@ -137,14 +140,31 @@ spritesRouter.get(
  * GET /assets/sprites
  * List available sprite categories.
  */
-spritesRouter.get("/", (_req, res) => {
-  res.json({
-    categories: Array.from(ALLOWED_CATEGORIES).sort(),
+spritesRouter.get("/", (req, res) => {
+  const categories = Array.from(ALLOWED_CATEGORIES).sort();
+  const payload = {
+    categories,
     baseUrl: config.sprites.baseUrl,
     exportDir: config.sprites.exportDir,
     usage: {
       endpoint: "GET /assets/sprites/:category/:name",
       example: `${config.sprites.baseUrl}/assets/sprites/seeds/Carrot.png`,
     },
-  });
+  };
+
+  const etag = buildWeakEtag(
+    "assets:sprites",
+    config.sprites.baseUrl,
+    config.sprites.exportDir,
+    categories.join(",")
+  );
+
+  if (isFresh(req, etag)) {
+    applyCacheHeaders(res, { etag, cacheControl: SPRITES_LIST_CACHE_CONTROL });
+    res.status(304).end();
+    return;
+  }
+
+  applyCacheHeaders(res, { etag, cacheControl: SPRITES_LIST_CACHE_CONTROL });
+  res.json(payload);
 });

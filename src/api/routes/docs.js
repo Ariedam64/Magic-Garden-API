@@ -349,6 +349,30 @@ const options = {
       line-height: 1.6;
     }
 
+    .swagger-ui .opblock-tag-section .markdown,
+    .swagger-ui .opblock-tag-section .markdown .renderedMarkdown {
+      background: transparent;
+    }
+
+    .swagger-ui .opblock-tag-section .markdown ul,
+    .swagger-ui .opblock-tag-section .markdown ol {
+      margin: 10px 0 0 20px;
+      color: ${THEME.text};
+    }
+
+    .swagger-ui .opblock-tag-section .markdown li {
+      margin: 6px 0;
+    }
+
+    .swagger-ui .opblock-tag-section .markdown code {
+      background: rgba(79, 227, 193, 0.14);
+      color: ${THEME.primary};
+      border: 1px solid rgba(79, 227, 193, 0.2);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.85em;
+    }
+
     .swagger-ui .opblock-tag-section .opblock {
       margin-left: 6px;
       margin-right: 6px;

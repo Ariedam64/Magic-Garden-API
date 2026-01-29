@@ -4,12 +4,15 @@ import express from "express";
 import { asyncHandler } from "../middleware/index.js";
 import { assetDataService } from "../../services/index.js";
 import { spritesRouter } from "./sprites.js";
+import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 
 export const assetsRouter = express.Router();
 
 // =====================
 // Assets (sprite metadata, cosmetics, audio)
 // =====================
+
+const ASSETS_CACHE_CONTROL = "public, max-age=600, stale-while-revalidate=300";
 
 // Sprite metadata (JSON list)
 assetsRouter.get(
@@ -22,6 +25,13 @@ assetsRouter.get(
       flat: req.query.flat === "1",
     };
     const data = await assetDataService.getSprites(options);
+    const etag = buildWeakEtag("assets:sprite-data", data.baseUrl, req.originalUrl);
+    if (isFresh(req, etag)) {
+      applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
+      res.status(304).end();
+      return;
+    }
+    applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
     res.json(data);
   })
 );
@@ -33,14 +43,28 @@ assetsRouter.get(
       full: req.query.full === "1",
     };
     const data = await assetDataService.getCosmetics(options);
+    const etag = buildWeakEtag("assets:cosmetics", data.baseUrl, req.originalUrl);
+    if (isFresh(req, etag)) {
+      applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
+      res.status(304).end();
+      return;
+    }
+    applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
     res.json(data);
   })
 );
 
 assetsRouter.get(
   "/audios",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const data = await assetDataService.getAudio();
+    const etag = buildWeakEtag("assets:audios", data.baseUrl, req.originalUrl);
+    if (isFresh(req, etag)) {
+      applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
+      res.status(304).end();
+      return;
+    }
+    applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
     res.json(data);
   })
 );

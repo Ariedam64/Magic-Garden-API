@@ -12,24 +12,27 @@ import { config } from "../config/index.js";
  * @param {Object} options - Options
  * @param {string} options.baseUrl - Base URL for sprites (defaults to config)
  * @param {boolean} options.absolute - Whether to return absolute URL (default: true)
+ * @param {string|null} options.version - Optional version for cache-busting
  * @returns {string} Sprite URL
  */
 function buildSpriteUrl(category, spriteName, options = {}) {
-  const { baseUrl = config.sprites.baseUrl, absolute = true } = options;
+  const { baseUrl = config.sprites.baseUrl, absolute = true, version = null } = options;
 
   if (!spriteName) {
     return null;
   }
 
   const relativePath = `/assets/sprites/${category}/${spriteName}.png`;
+  const query = version ? `?v=${encodeURIComponent(version)}` : "";
+  const pathWithQuery = `${relativePath}${query}`;
 
   if (absolute && baseUrl) {
     // Remove trailing slash from baseUrl if present
     const cleanBaseUrl = baseUrl.replace(/\/$/, "");
-    return `${cleanBaseUrl}${relativePath}`;
+    return `${cleanBaseUrl}${pathWithQuery}`;
   }
 
-  return relativePath;
+  return pathWithQuery;
 }
 
 /**
@@ -48,7 +51,7 @@ function buildSpriteUrls(sprites, options = {}) {
  * @param {string} spriteName - Sprite filename
  * @returns {Object} Object with different URL formats
  */
-function buildSpriteUrlObject(category, spriteName) {
+function buildSpriteUrlObject(category, spriteName, options = {}) {
   if (!spriteName) {
     return {
       absolute: null,
@@ -59,8 +62,8 @@ function buildSpriteUrlObject(category, spriteName) {
   }
 
   return {
-    absolute: buildSpriteUrl(category, spriteName, { absolute: true }),
-    relative: buildSpriteUrl(category, spriteName, { absolute: false }),
+    absolute: buildSpriteUrl(category, spriteName, { ...options, absolute: true }),
+    relative: buildSpriteUrl(category, spriteName, { ...options, absolute: false }),
     category,
     name: spriteName,
   };

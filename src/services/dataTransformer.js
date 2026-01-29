@@ -14,7 +14,7 @@ import { logger } from "../logger/index.js";
  * @param {string} spriteCategory - Sprite category (decor, items, pets, mutations)
  * @returns {Object} Transformed item data
  */
-function transformItem(itemKey, itemData, spriteCategory) {
+function transformItem(itemKey, itemData, spriteCategory, spriteVersion) {
   if (!itemData || typeof itemData !== "object") {
     return itemData;
   }
@@ -27,7 +27,9 @@ function transformItem(itemKey, itemData, spriteCategory) {
   // Replace tileRef with sprite
   if (transformed.tileRef !== undefined) {
     delete transformed.tileRef;
-    transformed.sprite = spriteName ? buildSpriteUrl(spriteCategory, spriteName) : null;
+    transformed.sprite = spriteName
+      ? buildSpriteUrl(spriteCategory, spriteName, { version: spriteVersion })
+      : null;
   }
 
   return transformed;
@@ -39,7 +41,7 @@ function transformItem(itemKey, itemData, spriteCategory) {
  * @param {Object} mutationData - Mutation data object
  * @returns {Object} Transformed mutation data
  */
-function transformMutation(mutationKey, mutationData) {
+function transformMutation(mutationKey, mutationData, spriteVersion) {
   if (!mutationData || typeof mutationData !== "object") {
     return mutationData;
   }
@@ -52,7 +54,9 @@ function transformMutation(mutationKey, mutationData) {
   // Replace tileRef with sprite
   if (transformed.tileRef !== undefined) {
     delete transformed.tileRef;
-    transformed.sprite = spriteName ? buildSpriteUrl("mutations", spriteName) : null;
+    transformed.sprite = spriteName
+      ? buildSpriteUrl("mutations", spriteName, { version: spriteVersion })
+      : null;
   }
 
   return transformed;
@@ -64,7 +68,7 @@ function transformMutation(mutationKey, mutationData) {
  * @param {Object} petData - Pet data object
  * @returns {Object} Transformed pet data
  */
-function transformPet(petKey, petData) {
+function transformPet(petKey, petData, spriteVersion) {
   if (!petData || typeof petData !== "object") {
     return petData;
   }
@@ -80,7 +84,9 @@ function transformPet(petKey, petData) {
   // Replace tileRef with sprite
   if (transformed.tileRef !== undefined) {
     delete transformed.tileRef;
-    transformed.sprite = spriteName ? buildSpriteUrl(category, spriteName) : null;
+    transformed.sprite = spriteName
+      ? buildSpriteUrl(category, spriteName, { version: spriteVersion })
+      : null;
   }
 
   return transformed;
@@ -91,7 +97,7 @@ function transformPet(petKey, petData) {
  * @param {string} iconSpriteKey - Icon sprite key from bundle
  * @returns {string|null} Sprite URL
  */
-function buildWeatherSprite(iconSpriteKey) {
+function buildWeatherSprite(iconSpriteKey, spriteVersion) {
   if (!iconSpriteKey || typeof iconSpriteKey !== "string") {
     return null;
   }
@@ -102,7 +108,7 @@ function buildWeatherSprite(iconSpriteKey) {
   }
 
   const [, category, spriteName] = match;
-  return buildSpriteUrl(category, spriteName);
+  return buildSpriteUrl(category, spriteName, { version: spriteVersion });
 }
 
 /**
@@ -111,13 +117,13 @@ function buildWeatherSprite(iconSpriteKey) {
  * @param {Object} weatherData - Weather data object
  * @returns {Object} Transformed weather data
  */
-function transformWeather(weatherKey, weatherData) {
+function transformWeather(weatherKey, weatherData, spriteVersion) {
   if (!weatherData || typeof weatherData !== "object") {
     return weatherData;
   }
 
   const transformed = { ...weatherData };
-  const sprite = buildWeatherSprite(transformed.iconSpriteKey);
+  const sprite = buildWeatherSprite(transformed.iconSpriteKey, spriteVersion);
 
   if ("iconSpriteKey" in transformed) {
     delete transformed.iconSpriteKey;
@@ -134,7 +140,8 @@ function transformWeather(weatherKey, weatherData) {
  * @param {string} category - Category type (decor, eggs, items, mutations, pets)
  * @returns {Object} Transformed data
  */
-export function transformDataWithSprites(data, category) {
+export function transformDataWithSprites(data, category, options = {}) {
+  const { spriteVersion = null } = options;
   if (!data || typeof data !== "object") {
     return {};
   }
@@ -145,13 +152,13 @@ export function transformDataWithSprites(data, category) {
     try {
       // Use specialized transformer based on category
       if (category === "mutations") {
-        transformed[key] = transformMutation(key, value);
+        transformed[key] = transformMutation(key, value, spriteVersion);
       } else if (category === "pets") {
-        transformed[key] = transformPet(key, value);
+        transformed[key] = transformPet(key, value, spriteVersion);
       } else {
         // For eggs, use pets folder
         const spriteCategory = category === "eggs" ? "pets" : category;
-        transformed[key] = transformItem(key, value, spriteCategory);
+        transformed[key] = transformItem(key, value, spriteCategory, spriteVersion);
       }
     } catch (error) {
       logger.error(`Error transforming ${category} ${key}:`, error);
@@ -169,13 +176,14 @@ export function transformDataWithSprites(data, category) {
  * @param {Object} data - Complete weather data object
  * @returns {Object} Transformed weather data
  */
-export function transformWeathersWithSprites(data) {
+export function transformWeathersWithSprites(data, options = {}) {
+  const { spriteVersion = null } = options;
   const transformed = {};
 
   if (data && typeof data === "object") {
     for (const [key, value] of Object.entries(data)) {
       try {
-        transformed[key] = transformWeather(key, value);
+        transformed[key] = transformWeather(key, value, spriteVersion);
       } catch (error) {
         logger.error(`Error transforming weather ${key}:`, error);
         transformed[key] = value;
@@ -184,10 +192,14 @@ export function transformWeathersWithSprites(data) {
   }
 
   if (!("Sunny" in transformed)) {
-    transformed.Sunny = transformWeather("Sunny", {
-      name: "Sunny",
-      iconSpriteKey: "sprite/ui/SunnyIcon",
-    });
+    transformed.Sunny = transformWeather(
+      "Sunny",
+      {
+        name: "Sunny",
+        iconSpriteKey: "sprite/ui/SunnyIcon",
+      },
+      spriteVersion
+    );
   }
 
   return transformed;
