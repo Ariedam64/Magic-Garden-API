@@ -1222,11 +1222,75 @@ paths:
                         items:
                           - name: "BunnyEgg"
                             stock: 2
-                      decor:
-                        secondsUntilRestock: 14400
-                        items:
-                          - name: "Fence"
-                            stock: 10
+                    decor:
+                      secondsUntilRestock: 14400
+                      items:
+                        - name: "Fence"
+                          stock: 10
+
+  /live/health:
+    get:
+      tags:
+        - Live
+      summary: Live health & SSE stats
+      description: |
+        Returns SSE connection statistics.
+
+        **Includes:**
+        - SSE connection counts (active and total)
+        - Event emission stats
+      responses:
+        '200':
+          description: Live health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  sse:
+                    type: object
+                    properties:
+                      activeConnections:
+                        type: integer
+                        example: 42
+                      activeByStream:
+                        type: object
+                        properties:
+                          all:
+                            type: integer
+                            example: 20
+                          weather:
+                            type: integer
+                            example: 10
+                          shops:
+                            type: integer
+                            example: 12
+                      totalConnections:
+                        type: integer
+                        example: 1200
+                      eventsSent:
+                        type: integer
+                        example: 5843
+                      lastEventAt:
+                        type: string
+                        nullable: true
+                        example: "2026-01-29T19:32:25.123Z"
+              examples:
+                liveHealth:
+                  summary: Live health example
+                  value:
+                    ok: true
+                    sse:
+                      activeConnections: 42
+                      activeByStream:
+                        all: 20
+                        weather: 10
+                        shops: 12
+                      totalConnections: 1200
+                      eventsSent: 5843
+                      lastEventAt: "2026-01-29T19:32:25.123Z"
 
   /live/weather:
     get:

@@ -94,6 +94,7 @@ Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return UR
 | `GET /live` | All live data snapshot (weather + shops) |
 | `GET /live/weather` | Current weather snapshot |
 | `GET /live/shops` | Current shops snapshot |
+| `GET /live/health` | SSE connection stats |
 | `GET /live/stream` | Weather + shops updates via Server-Sent Events |
 | `GET /live/weather/stream` | Weather updates via Server-Sent Events |
 | `GET /live/shops/stream` | Shop updates via Server-Sent Events |
@@ -188,6 +189,12 @@ curl -N http://localhost:3000/live/stream
 ```
 
 SSE events are named `weather` and `shops`. Use `addEventListener` to subscribe.
+
+### Live health (SSE stats)
+
+```bash
+curl http://localhost:3000/live/health | jq
+```
 
 ```javascript
 const liveStream = new EventSource('http://localhost:3000/live/stream');
