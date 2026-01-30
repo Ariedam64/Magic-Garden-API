@@ -27,6 +27,14 @@ nul
 .env
 .env.local
 
+# TLS / SSL secrets
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+
 # Cache
 .cache/
 *.tmp
