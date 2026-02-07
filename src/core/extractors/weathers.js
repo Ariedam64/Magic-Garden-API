@@ -7,8 +7,7 @@ import { buildBaseSandbox } from "./sandbox.js";
  * Signatures pour trouver les données des weathers dans le bundle.
  */
 const SIGNATURES = [
-  "mutator:{mutation:",
-  "possibleEvolutions:[{weatherId:",
+  "mutator:{mutation:"
 ];
 
 /**

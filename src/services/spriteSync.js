@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { config } from "../config/index.js";
 import { logger } from "../logger/index.js";
 import { CloseCodes } from "../core/websocket/closeCodes.js";
-import { fetchGameVersion } from "../core/game/version.js";
+import { fetchGameVersion, invalidateVersionCache } from "../core/game/version.js";
 import { loadStoredVersion, saveVersion } from "../core/game/versionStorage.js";
 import {
   loadStoredAtlases,
@@ -55,6 +55,43 @@ async function fetchJson(url) {
 
   if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${url}`);
   return res.json();
+}
+
+/**
+ * Check for version change after a WebSocket disconnect and sync if needed.
+ */
+async function checkSpritesAfterDisconnect(mgConnection, { code, reason } = {}) {
+  try {
+    invalidateVersionCache();
+
+    const latestVersion = await fetchGameVersion({ origin: mgConnection?.origin });
+    const previousVersion = (await loadStoredVersion()) || mgConnection?.version;
+
+    if (!latestVersion || !previousVersion) {
+      logger.debug(
+        { latestVersion, previousVersion, code, reason },
+        "Skipping sprite sync check after disconnect (missing version)"
+      );
+      return;
+    }
+
+    if (latestVersion === previousVersion) {
+      logger.debug(
+        { latestVersion, previousVersion, code, reason },
+        "Game version unchanged after disconnect, skipping sprite sync"
+      );
+      return;
+    }
+
+    logger.warn(
+      { from: previousVersion, to: latestVersion, code, reason },
+      "Game version changed after disconnect, syncing sprites"
+    );
+
+    await checkAndSyncSprites({ force: false });
+  } catch (err) {
+    logger.error({ error: err?.message || String(err), code, reason }, "Failed version check after disconnect");
+  }
 }
 
 /**
@@ -335,6 +372,11 @@ export function registerSpriteSyncListener(mgConnection) {
       handleVersionMismatch().catch((err) => {
         logger.error({ error: err?.message }, "Unexpected error in version mismatch handler");
       });
+      return;
     }
+
+    checkSpritesAfterDisconnect(mgConnection, { code, reason }).catch((err) => {
+      logger.error({ error: err?.message }, "Unexpected error in disconnect version check");
+    });
   });
 }
