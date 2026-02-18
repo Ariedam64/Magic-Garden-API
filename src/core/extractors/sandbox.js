@@ -5,6 +5,7 @@ import {
   makeGlobalSandboxProxy,
   tryExtractStringEnum,
 } from "../game/bundle/sandbox.js";
+import { extractSpriteMapping } from "../game/bundle/spriteMapping.js";
 
 /**
  * Applique l'enum Rarity au sandbox.
@@ -24,7 +25,7 @@ export function applyWeatherEnums(mainJs, objLiteral, sandbox) {
   const ids = new Set(
     [
       ...objLiteral.matchAll(
-        /\b(?:requiredWeather|weather|desiredWeather|triggeredWeather):([A-Za-z_$][\w$]*)\./g
+        /\b(?:requiredWeather|weather|desiredWeather|triggeredWeather|weatherRequirement):([A-Za-z_$][\w$]*)\./g
       ),
     ].map((m) => m[1])
   );
@@ -47,25 +48,32 @@ export function applyHarvestTypeEnum(mainJs, objLiteral, sandbox) {
 }
 
 /**
+ * Détecte et injecte l'objet sprite mapping dans le sandbox.
+ * Cherche les patterns sprite:IDENTIFIER.(Seed|Plant|...) dans le literal
+ * pour détecter dynamiquement le nom de variable (qui change après minification).
+ */
+export function applySpriteMapping(mainJs, objLiteral, sandbox) {
+  const match = objLiteral.match(
+    /\b(?:sprite|immatureSprite|topmostLayerSprite):([A-Za-z_$][\w$]*)\.(?:Seed|Plant|TallPlant|Pet|Decor|Item|Mutation|MutationOverlay|Animation)\./
+  );
+  if (!match) return;
+
+  const result = extractSpriteMapping(mainJs);
+  if (result?.mapping) {
+    sandbox[match[1]] = result.mapping;
+  }
+}
+
+/**
  * Sandbox de base partagé par toutes les catégories.
- * Résout automatiquement: rarity, weather, tileRef.
+ * Résout automatiquement: rarity, weather, sprite mapping.
  */
 export function buildBaseSandbox(mainJs, objLiteral) {
   const sandbox = makeGlobalSandboxProxy();
 
   applyRarityEnum(mainJs, objLiteral, sandbox);
   applyWeatherEnums(mainJs, objLiteral, sandbox);
-
-  // Résout les tileRef en retournant le nom de propriété comme string
-  // (au lieu des valeurs numériques) pour permettre la résolution des sprites
-  const tileRefIds = new Set(
-    [...objLiteral.matchAll(/\btileRef:([A-Za-z_$][\w$]*)\./g)].map((m) => m[1])
-  );
-
-  for (const tid of tileRefIds) {
-    // On utilise makeEnumProxy() pour retourner le nom (ex: "Carrot" au lieu de 23)
-    sandbox[tid] = makeEnumProxy();
-  }
+  applySpriteMapping(mainJs, objLiteral, sandbox);
 
   return sandbox;
 }

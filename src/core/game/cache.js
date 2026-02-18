@@ -4,6 +4,7 @@ import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import { fetchMainBundle } from "./bundle/resolver.js";
 import { clearEnumCaches } from "./bundle/sandbox.js";
+import { clearSpriteMappingCache } from "./bundle/spriteMapping.js";
 
 /**
  * Cache pour le bundle et les catégories extraites.
@@ -41,6 +42,7 @@ export async function getMainBundle() {
         logger.info({ oldUrl: cache.mainUrl, newUrl: mainUrl }, "Bundle version changed, clearing caches");
         cache.categories.clear();
         clearEnumCaches();
+        clearSpriteMappingCache();
       }
 
       cache.mainUrl = mainUrl;
@@ -90,6 +92,7 @@ export function invalidateAllCaches() {
   cache.fetchedAt = 0;
   cache.categories.clear();
   clearEnumCaches();
+  clearSpriteMappingCache();
   logger.info("All caches invalidated");
 }
 

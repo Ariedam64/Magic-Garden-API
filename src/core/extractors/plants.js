@@ -6,7 +6,7 @@ import { buildBaseSandbox, applyHarvestTypeEnum } from "./sandbox.js";
 /**
  * Signatures pour trouver les données des plantes dans le bundle.
  */
-const SIGNATURES = ["seed:{tileRef", "plant:{tileRef", "crop:{tileRef"];
+const SIGNATURES = ["seed:{sprite", "plant:{sprite", "crop:{sprite"];
 
 /**
  * Extrait les données des plantes du bundle.

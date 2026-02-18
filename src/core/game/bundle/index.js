@@ -14,6 +14,10 @@ export {
   makeEnumProxy,
   makeGlobalSandboxProxy,
   tryExtractStringEnum,
-  tryExtractCcEnum,
   clearEnumCaches,
 } from "./sandbox.js";
+
+export {
+  extractSpriteMapping,
+  clearSpriteMappingCache,
+} from "./spriteMapping.js";

@@ -1,7 +1,7 @@
 // src/core/game/bundle/sandbox.js
 
 import vm from "node:vm";
-import { extractBalancedParens, extractBalancedBraces } from "./extractor.js";
+import { extractBalancedParens } from "./extractor.js";
 
 /**
  * Crée un proxy enum qui retourne le nom de la propriété comme valeur.
@@ -47,9 +47,8 @@ export function makeGlobalSandboxProxy() {
   });
 }
 
-// Caches pour éviter re-extraction des enums
+// Cache pour éviter re-extraction des enums
 const enumCache = new Map();
-const ccEnumCache = new Map();
 
 /**
  * Extrait une enum "string" du bundle.
@@ -111,57 +110,8 @@ export function tryExtractStringEnum(mainJs, enumId, requiredKeys = []) {
 }
 
 /**
- * Extrait une enum "numérique" du bundle.
- * Pattern: X=cc(...,{A:1,B:2,...})
- */
-export function tryExtractCcEnum(mainJs, enumId) {
-  const cacheKey = `cc:${enumId}`;
-  if (ccEnumCache.has(cacheKey)) return ccEnumCache.get(cacheKey);
-
-  const needle = `${enumId}=cc(`;
-  let from = 0;
-
-  while (true) {
-    const pos = mainJs.indexOf(needle, from);
-    if (pos === -1) {
-      ccEnumCache.set(cacheKey, null);
-      return null;
-    }
-
-    const brace = mainJs.indexOf("{", pos);
-    if (brace === -1) break;
-
-    let objLiteral;
-    try {
-      objLiteral = extractBalancedBraces(mainJs, brace);
-    } catch {
-      from = pos + 1;
-      continue;
-    }
-
-    try {
-      const sandbox = makeGlobalSandboxProxy();
-      const obj = vm.runInNewContext(`(${objLiteral})`, sandbox, { timeout: 1000 });
-      if (obj && typeof obj === "object") {
-        ccEnumCache.set(cacheKey, obj);
-        return obj;
-      }
-    } catch {
-      // continue
-    }
-
-    from = pos + 1;
-  }
-
-  ccEnumCache.set(cacheKey, null);
-  return null;
-}
-
-/**
  * Vide les caches d'enums.
- * Utile après un changement de version du bundle.
  */
 export function clearEnumCaches() {
   enumCache.clear();
-  ccEnumCache.clear();
 }
