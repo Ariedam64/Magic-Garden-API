@@ -3,6 +3,7 @@
 import express from "express";
 import { streamLimiter } from "../middleware/index.js";
 import { liveDataService } from "../../services/index.js";
+import { jsonToCsv, sendCsv } from "../../utils/csvConverter.js";
 
 export const liveRouter = express.Router();
 
@@ -73,6 +74,43 @@ liveRouter.get("/health", (_req, res) => {
     ok: true,
     sse: sseStats,
   });
+});
+
+// =====================
+// CSV Snapshot endpoints
+// =====================
+
+// GET /live.csv - All live data (mounted at app level in server.js)
+export const liveCsvRootHandler = (_req, res) => {
+  const all = liveDataService.getAll();
+  const combined = {};
+
+  if (all.weather) {
+    combined.weather = { current: all.weather };
+  }
+  if (all.shops) {
+    for (const [shopName, shopData] of Object.entries(all.shops)) {
+      combined[shopName] = typeof shopData === "object" && shopData !== null ? shopData : { value: shopData };
+    }
+  }
+
+  sendCsv(res, jsonToCsv(combined), "live.csv");
+};
+
+// GET /live/weather.csv
+liveRouter.get("/weather.csv", (_req, res) => {
+  const weather = liveDataService.getWeather();
+  const data = weather && typeof weather === "object"
+    ? weather
+    : { current: { value: weather } };
+  sendCsv(res, jsonToCsv(data), "weather.csv");
+});
+
+// GET /live/shops.csv
+liveRouter.get("/shops.csv", (_req, res) => {
+  const shops = liveDataService.getShops();
+  const data = shops && typeof shops === "object" ? shops : {};
+  sendCsv(res, jsonToCsv(data), "shops.csv");
 });
 
 // =====================

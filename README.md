@@ -73,6 +73,25 @@ The server starts on `http://localhost:3000`
 | `GET /data/abilities` | Special abilities |
 | `GET /data/weathers` | Weather definitions with sprites |
 
+### CSV Export
+
+Every data and live endpoint is also available in CSV format by appending `.csv` to the URL. Ideal for Excel, Google Sheets, or any spreadsheet tool.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /data.csv` | All game data combined (with `category` column) |
+| `GET /data/plants.csv` | Plants (seed/plant/crop flattened with dot notation) |
+| `GET /data/pets.csv` | Pets with stats and ability weights |
+| `GET /data/items.csv` | Items and equipment |
+| `GET /data/decors.csv` | Decorations |
+| `GET /data/eggs.csv` | Pet eggs |
+| `GET /data/abilities.csv` | Special abilities |
+| `GET /data/mutations.csv` | Plant mutations |
+| `GET /data/weathers.csv` | Weather definitions |
+| `GET /live.csv` | Current weather + shops combined |
+| `GET /live/weather.csv` | Current weather |
+| `GET /live/shops.csv` | Current shop inventories |
+
 ### Assets
 
 | Endpoint | Description |
@@ -210,6 +229,23 @@ liveStream.addEventListener('shops', (event) => {
 ```
 
 You can also subscribe to specific streams with `/live/weather/stream` or `/live/shops/stream`.
+
+### Export data as CSV
+
+```bash
+# Download pets data as CSV
+curl https://mg-api.ariedam.fr/data/pets.csv -o pets.csv
+
+# Open plants data directly in Excel (Windows)
+start https://mg-api.ariedam.fr/data/plants.csv
+```
+
+In Excel, use **Data > From Web** and paste the URL (e.g. `https://mg-api.ariedam.fr/data/pets.csv`) to create an auto-refreshing data connection.
+
+In Google Sheets:
+```
+=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
+```
 
 ## Technical Architecture
 

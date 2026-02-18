@@ -113,6 +113,46 @@ tags:
       - Snapshot: One-time GET request for current state
       - Stream: Server-Sent Events for real-time updates
 
+  - name: CSV Export
+    description: |
+      CSV export endpoints for spreadsheet integration.
+
+      Every data and live endpoint is available in CSV format by appending `.csv` to the URL. This is ideal for users who want to import game data into **Excel**, **Google Sheets**, or any spreadsheet tool.
+
+      **Features:**
+      - Nested objects are flattened with dot notation (e.g., `seed.name`, `plant.sprite`)
+      - Arrays are serialized as JSON strings within cells
+      - Combined `/data.csv` includes a `category` column to distinguish data types
+      - `Content-Disposition` header suggests a filename for download
+      - Same caching as JSON endpoints (ETags, Cache-Control)
+
+      ---
+
+      ### Google Sheets
+
+      Use `IMPORTDATA` to pull live data directly into your spreadsheet:
+
+      ```
+      =IMPORTDATA("https://mg-api.ariedam.fr/data/plants.csv")
+      =IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
+      =IMPORTDATA("https://mg-api.ariedam.fr/live/shops.csv")
+      ```
+
+      The data refreshes automatically every time the spreadsheet recalculates.
+
+      ### Excel — Power Query (auto-refresh)
+
+      1. Go to **Data > From Web**
+      2. Enter the URL, e.g. `https://mg-api.ariedam.fr/data/pets.csv`
+      3. Click **Load** — Excel imports the data as a table
+      4. To auto-refresh: right-click the table > **Properties** > set a refresh interval
+
+      ### cURL
+
+      ```bash
+      curl https://mg-api.ariedam.fr/data/pets.csv -o pets.csv
+      ```
+
   - name: Health
     description: |
       Health check and monitoring endpoints.
@@ -761,6 +801,221 @@ paths:
                     Sunny:
                       name: "Sunny"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/SunnyIcon.png"
+
+  /data.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: All game data as CSV
+      description: |
+        Returns all game data combined into a single CSV file.
+
+        Each row includes a `category` column (plants, pets, items, decor, eggs, mutations, abilities, weathers) followed by the `id` and all flattened fields.
+
+        **Note:** Since different categories have different fields, some columns will be empty for certain categories.
+
+        **Google Sheets:**
+        ```
+        =IMPORTDATA("https://mg-api.ariedam.fr/data.csv")
+        ```
+
+        **Excel:** Data > From Web > `https://mg-api.ariedam.fr/data.csv`
+      responses:
+        '200':
+          description: CSV file with all game data
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: |
+                category,id,seed.name,seed.coinPrice,seed.sprite,...
+                plants,Carrot,Carrot Seed,10,https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png,...
+                pets,Bunny,,,,Bunny,500,...
+
+  /data/plants.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Plants data as CSV
+      description: |
+        Returns all plants as CSV with flattened seed/plant/crop columns.
+
+        Columns use dot notation: `seed.name`, `seed.coinPrice`, `seed.sprite`, `plant.name`, `plant.harvestType`, `crop.name`, `crop.baseSellPrice`, etc.
+
+        **Google Sheets:**
+        ```
+        =IMPORTDATA("https://mg-api.ariedam.fr/data/plants.csv")
+        ```
+      responses:
+        '200':
+          description: CSV file with plants data
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: |
+                id,seed.sprite,seed.name,seed.coinPrice,plant.sprite,plant.name,plant.harvestType,crop.sprite,crop.name,crop.baseSellPrice
+                Carrot,https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png,Carrot Seed,10,...,Carrot Plant,Single,...,Carrot,20
+
+  /data/pets.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Pets data as CSV
+      description: |
+        Returns all pets as CSV with all stats and ability weights flattened.
+
+        **Google Sheets:**
+        ```
+        =IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
+        ```
+      responses:
+        '200':
+          description: CSV file with pets data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /data/items.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Items data as CSV
+      description: |
+        Returns all items (tools and consumables) as CSV.
+      responses:
+        '200':
+          description: CSV file with items data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /data/decors.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Decorations data as CSV
+      description: |
+        Returns all garden decorations as CSV.
+      responses:
+        '200':
+          description: CSV file with decorations data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /data/eggs.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Eggs data as CSV
+      description: |
+        Returns all pet eggs as CSV.
+      responses:
+        '200':
+          description: CSV file with eggs data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /data/abilities.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Abilities data as CSV
+      description: |
+        Returns all special abilities as CSV.
+      responses:
+        '200':
+          description: CSV file with abilities data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /data/mutations.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Mutations data as CSV
+      description: |
+        Returns all plant mutations as CSV.
+      responses:
+        '200':
+          description: CSV file with mutations data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /data/weathers.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Weathers data as CSV
+      description: |
+        Returns all weather definitions as CSV.
+      responses:
+        '200':
+          description: CSV file with weathers data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /live.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: All live data as CSV
+      description: |
+        Returns current weather and shop inventories as CSV.
+      responses:
+        '200':
+          description: CSV file with live data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /live/weather.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Current weather as CSV
+      description: |
+        Returns the current weather as CSV.
+      responses:
+        '200':
+          description: CSV file with weather data
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /live/shops.csv:
+    get:
+      tags:
+        - CSV Export
+      summary: Shop inventory as CSV
+      description: |
+        Returns current shop inventories as CSV. Each shop (seed, tool, egg, decor) is a row with its restock timer and items list.
+
+        **Google Sheets:**
+        ```
+        =IMPORTDATA("https://mg-api.ariedam.fr/live/shops.csv")
+        ```
+      responses:
+        '200':
+          description: CSV file with shop data
+          content:
+            text/csv:
+              schema:
+                type: string
 
   /assets/sprite-data:
     get:
