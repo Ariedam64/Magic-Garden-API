@@ -1,7 +1,7 @@
 // src/utils/csvConverter.js
 
 /**
- * Converts JSON data (keyed objects) to CSV format.
+ * Converts JSON data (keyed objects) to delimited text formats (CSV, TSV).
  * Handles nested objects by flattening keys with dot notation.
  */
 
@@ -28,29 +28,30 @@ function flattenObject(obj, prefix = "") {
 }
 
 /**
- * Escape a CSV field value.
- * Wraps in quotes if it contains commas, quotes, or newlines.
+ * Escape a field value for delimited output.
+ * Wraps in quotes if it contains the delimiter, quotes, or newlines.
  */
-function escapeCsvField(value) {
+function escapeField(value, delimiter) {
   if (value === null || value === undefined) return "";
 
   const str = String(value);
-  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+  if (str.includes(delimiter) || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
 }
 
 /**
- * Convert a keyed object (e.g. { Carrot: {...}, Tomato: {...} }) to CSV.
+ * Convert a keyed object (e.g. { Carrot: {...}, Tomato: {...} }) to delimited text.
  * Each top-level key becomes a row, with an "id" column prepended.
  *
  * @param {Object} data - Object with string keys and object values
  * @param {Object} options
  * @param {string} [options.idColumn="id"] - Name of the ID column
- * @returns {string} CSV string
+ * @param {string} [options.delimiter=","] - Field delimiter
+ * @returns {string} Delimited string
  */
-export function jsonToCsv(data, { idColumn = "id" } = {}) {
+function jsonToDelimited(data, { idColumn = "id", delimiter = "," } = {}) {
   if (!data || typeof data !== "object") return "";
 
   const entries = Object.entries(data);
@@ -78,19 +79,19 @@ export function jsonToCsv(data, { idColumn = "id" } = {}) {
   }
   const columns = [...columnSet];
 
-  // Build CSV
+  // Build output
   const lines = [];
 
   // Header
-  lines.push(columns.map(escapeCsvField).join(","));
+  lines.push(columns.map((c) => escapeField(c, delimiter)).join(delimiter));
 
   // Rows
   for (const row of flatRows) {
     const values = columns.map((col) => {
       const val = col === idColumn ? row.id : row[col];
-      return escapeCsvField(val);
+      return escapeField(val, delimiter);
     });
-    lines.push(values.join(","));
+    lines.push(values.join(delimiter));
   }
 
   return lines.join("\n");
@@ -98,12 +99,14 @@ export function jsonToCsv(data, { idColumn = "id" } = {}) {
 
 /**
  * Convert a "combined" data response (e.g. { plants: {...}, pets: {...} })
- * into CSV. Each category's items are flattened with a "category" column.
+ * into delimited text. Each category's items are flattened with a "category" column.
  *
  * @param {Object} data - Object with category keys containing keyed objects
- * @returns {string} CSV string
+ * @param {Object} options
+ * @param {string} [options.delimiter=","] - Field delimiter
+ * @returns {string} Delimited string
  */
-export function combinedJsonToCsv(data) {
+function combinedJsonToDelimited(data, { delimiter = "," } = {}) {
   if (!data || typeof data !== "object") return "";
 
   const allRows = [];
@@ -130,27 +133,50 @@ export function combinedJsonToCsv(data) {
   }
   const columns = [...columnSet];
 
-  // Build CSV
+  // Build output
   const lines = [];
-  lines.push(columns.map(escapeCsvField).join(","));
+  lines.push(columns.map((c) => escapeField(c, delimiter)).join(delimiter));
 
   for (const row of allRows) {
-    const values = columns.map((col) => escapeCsvField(row[col]));
-    lines.push(values.join(","));
+    const values = columns.map((col) => escapeField(row[col], delimiter));
+    lines.push(values.join(delimiter));
   }
 
   return lines.join("\n");
 }
 
-/**
- * Send a CSV response with appropriate headers.
- *
- * @param {import("express").Response} res
- * @param {string} csv - CSV content
- * @param {string} filename - Suggested download filename
- */
-export function sendCsv(res, csv, filename) {
+// =====================
+// CSV exports (comma-separated)
+// =====================
+
+export function jsonToCsv(data, options = {}) {
+  return jsonToDelimited(data, { ...options, delimiter: "," });
+}
+
+export function combinedJsonToCsv(data) {
+  return combinedJsonToDelimited(data, { delimiter: "," });
+}
+
+export function sendCsv(res, content, filename) {
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.send(csv);
+  res.send(content);
+}
+
+// =====================
+// TSV exports (tab-separated)
+// =====================
+
+export function jsonToTsv(data, options = {}) {
+  return jsonToDelimited(data, { ...options, delimiter: "\t" });
+}
+
+export function combinedJsonToTsv(data) {
+  return combinedJsonToDelimited(data, { delimiter: "\t" });
+}
+
+export function sendTsv(res, content, filename) {
+  res.setHeader("Content-Type", "text/tab-separated-values; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(content);
 }

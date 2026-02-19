@@ -11,7 +11,10 @@ import {
   transformWeathersWithSprites,
 } from "../../services/dataTransformer.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
-import { jsonToCsv, combinedJsonToCsv, sendCsv } from "../../utils/csvConverter.js";
+import {
+  jsonToCsv, combinedJsonToCsv, sendCsv,
+  jsonToTsv, combinedJsonToTsv, sendTsv,
+} from "../../utils/csvConverter.js";
 
 export const dataRouter = express.Router();
 
@@ -292,176 +295,67 @@ dataRouter.get(
 );
 
 // =====================
-// CSV endpoints
+// CSV & TSV endpoints
 // =====================
 
-// Helper: build CSV data for a single category
-async function getCategoryCsvData(category, spriteVersion, builder) {
-  const data = await getOrBuildCached(category, spriteVersion, builder);
-  return jsonToCsv(data);
+const FORMAT_CONFIG = {
+  csv: { convert: jsonToCsv, convertCombined: combinedJsonToCsv, send: sendCsv },
+  tsv: { convert: jsonToTsv, convertCombined: combinedJsonToTsv, send: sendTsv },
+};
+
+// Category definitions: [routeName, cacheKey, builder(spriteVersion)]
+const CATEGORY_DEFS = [
+  ["plants", "plants", (sv) => getTransformedPlants({ spriteVersion: sv })],
+  ["pets", "pets", (sv) => gameDataService.getPets().then((d) => transformDataWithSprites(d, "pets", { spriteVersion: sv }))],
+  ["items", "items", (sv) => gameDataService.getItems().then((d) => transformDataWithSprites(d, "items", { spriteVersion: sv }))],
+  ["decors", "decor", (sv) => gameDataService.getDecor().then((d) => transformDataWithSprites(d, "decor", { spriteVersion: sv }))],
+  ["eggs", "eggs", (sv) => gameDataService.getEggs().then((d) => transformDataWithSprites(d, "eggs", { spriteVersion: sv }))],
+  ["abilities", "abilities", () => gameDataService.getAbilities()],
+  ["mutations", "mutations", (sv) => gameDataService.getMutations().then((d) => transformDataWithSprites(d, "mutations", { spriteVersion: sv }))],
+  ["weathers", "weathers", (sv) => gameDataService.getWeathers().then((d) => transformWeathersWithSprites(d, { spriteVersion: sv }))],
+];
+
+// Build all data (shared by root .csv/.tsv handlers)
+async function getAllData(spriteVersion) {
+  return getOrBuildCached("all", spriteVersion, async () => {
+    const results = await Promise.all(
+      CATEGORY_DEFS.map(([, cacheKey, builder]) =>
+        getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion))
+      )
+    );
+    const obj = {};
+    CATEGORY_DEFS.forEach(([, cacheKey], i) => { obj[cacheKey] = results[i]; });
+    return obj;
+  });
 }
 
-// GET /data.csv - All data combined (mounted at app level in server.js)
-export const dataCsvRootHandler = asyncHandler(async (req, res) => {
-  const spriteVersion = await getStoredVersionCached();
-
-  const data = await getOrBuildCached("all", spriteVersion, async () => {
-    const [plants, pets, items, decor, eggs, mutations, abilities, weathers] = await Promise.all([
-      getOrBuildCached("plants", spriteVersion, () =>
-        getTransformedPlants({ spriteVersion })
-      ),
-      getOrBuildCached("pets", spriteVersion, () =>
-        gameDataService.getPets().then((d) =>
-          transformDataWithSprites(d, "pets", { spriteVersion })
-        )
-      ),
-      getOrBuildCached("items", spriteVersion, () =>
-        gameDataService.getItems().then((d) =>
-          transformDataWithSprites(d, "items", { spriteVersion })
-        )
-      ),
-      getOrBuildCached("decor", spriteVersion, () =>
-        gameDataService.getDecor().then((d) =>
-          transformDataWithSprites(d, "decor", { spriteVersion })
-        )
-      ),
-      getOrBuildCached("eggs", spriteVersion, () =>
-        gameDataService.getEggs().then((d) =>
-          transformDataWithSprites(d, "eggs", { spriteVersion })
-        )
-      ),
-      getOrBuildCached("mutations", spriteVersion, () =>
-        gameDataService.getMutations().then((d) =>
-          transformDataWithSprites(d, "mutations", { spriteVersion })
-        )
-      ),
-      getOrBuildCached("abilities", spriteVersion, () => gameDataService.getAbilities()),
-      getOrBuildCached("weathers", spriteVersion, () =>
-        gameDataService.getWeathers().then((d) =>
-          transformWeathersWithSprites(d, { spriteVersion })
-        )
-      ),
-    ]);
-
-    return { plants, pets, items, decor, eggs, mutations, abilities, weathers };
+// Root handlers: GET /data.csv and GET /data.tsv (mounted at app level in server.js)
+function makeRootHandler(fmt) {
+  const { convertCombined, send } = FORMAT_CONFIG[fmt];
+  return asyncHandler(async (_req, res) => {
+    const spriteVersion = await getStoredVersionCached();
+    const data = await getAllData(spriteVersion);
+    setDataCacheHeaders(res, "all", spriteVersion);
+    send(res, convertCombined(data), `data.${fmt}`);
   });
+}
 
-  setDataCacheHeaders(res, "all", spriteVersion);
-  sendCsv(res, combinedJsonToCsv(data), "data.csv");
-});
+export const dataCsvRootHandler = makeRootHandler("csv");
+export const dataTsvRootHandler = makeRootHandler("tsv");
 
-// GET /data/plants.csv
-dataRouter.get(
-  "/plants.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("plants", spriteVersion, () =>
-      getTransformedPlants({ spriteVersion })
+// Register per-category routes for each format
+for (const fmt of ["csv", "tsv"]) {
+  const { convert, send } = FORMAT_CONFIG[fmt];
+
+  for (const [routeName, cacheKey, builder] of CATEGORY_DEFS) {
+    dataRouter.get(
+      `/${routeName}.${fmt}`,
+      asyncHandler(async (_req, res) => {
+        const spriteVersion = await getStoredVersionCached();
+        const data = await getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion));
+        setDataCacheHeaders(res, cacheKey, spriteVersion);
+        send(res, convert(data), `${routeName}.${fmt}`);
+      })
     );
-    setDataCacheHeaders(res, "plants", spriteVersion);
-    sendCsv(res, csv, "plants.csv");
-  })
-);
-
-// GET /data/pets.csv
-dataRouter.get(
-  "/pets.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("pets", spriteVersion, () =>
-      gameDataService.getPets().then((d) =>
-        transformDataWithSprites(d, "pets", { spriteVersion })
-      )
-    );
-    setDataCacheHeaders(res, "pets", spriteVersion);
-    sendCsv(res, csv, "pets.csv");
-  })
-);
-
-// GET /data/items.csv
-dataRouter.get(
-  "/items.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("items", spriteVersion, () =>
-      gameDataService.getItems().then((d) =>
-        transformDataWithSprites(d, "items", { spriteVersion })
-      )
-    );
-    setDataCacheHeaders(res, "items", spriteVersion);
-    sendCsv(res, csv, "items.csv");
-  })
-);
-
-// GET /data/decors.csv
-dataRouter.get(
-  "/decors.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("decor", spriteVersion, () =>
-      gameDataService.getDecor().then((d) =>
-        transformDataWithSprites(d, "decor", { spriteVersion })
-      )
-    );
-    setDataCacheHeaders(res, "decor", spriteVersion);
-    sendCsv(res, csv, "decors.csv");
-  })
-);
-
-// GET /data/eggs.csv
-dataRouter.get(
-  "/eggs.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("eggs", spriteVersion, () =>
-      gameDataService.getEggs().then((d) =>
-        transformDataWithSprites(d, "eggs", { spriteVersion })
-      )
-    );
-    setDataCacheHeaders(res, "eggs", spriteVersion);
-    sendCsv(res, csv, "eggs.csv");
-  })
-);
-
-// GET /data/abilities.csv
-dataRouter.get(
-  "/abilities.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("abilities", spriteVersion, () =>
-      gameDataService.getAbilities()
-    );
-    setDataCacheHeaders(res, "abilities", spriteVersion);
-    sendCsv(res, csv, "abilities.csv");
-  })
-);
-
-// GET /data/mutations.csv
-dataRouter.get(
-  "/mutations.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("mutations", spriteVersion, () =>
-      gameDataService.getMutations().then((d) =>
-        transformDataWithSprites(d, "mutations", { spriteVersion })
-      )
-    );
-    setDataCacheHeaders(res, "mutations", spriteVersion);
-    sendCsv(res, csv, "mutations.csv");
-  })
-);
-
-// GET /data/weathers.csv
-dataRouter.get(
-  "/weathers.csv",
-  asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
-    const csv = await getCategoryCsvData("weathers", spriteVersion, () =>
-      gameDataService.getWeathers().then((d) =>
-        transformWeathersWithSprites(d, { spriteVersion })
-      )
-    );
-    setDataCacheHeaders(res, "weathers", spriteVersion);
-    sendCsv(res, csv, "weathers.csv");
-  })
-);
+  }
+}

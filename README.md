@@ -73,24 +73,24 @@ The server starts on `http://localhost:3000`
 | `GET /data/abilities` | Special abilities |
 | `GET /data/weathers` | Weather definitions with sprites |
 
-### CSV Export
+### CSV / TSV Export
 
-Every data and live endpoint is also available in CSV format by appending `.csv` to the URL. Ideal for Excel, Google Sheets, or any spreadsheet tool.
+Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (`.tsv`) format by appending the extension to the URL. Ideal for Excel, Google Sheets, or any spreadsheet tool.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /data.csv` | All game data combined (with `category` column) |
-| `GET /data/plants.csv` | Plants (seed/plant/crop flattened with dot notation) |
-| `GET /data/pets.csv` | Pets with stats and ability weights |
-| `GET /data/items.csv` | Items and equipment |
-| `GET /data/decors.csv` | Decorations |
-| `GET /data/eggs.csv` | Pet eggs |
-| `GET /data/abilities.csv` | Special abilities |
-| `GET /data/mutations.csv` | Plant mutations |
-| `GET /data/weathers.csv` | Weather definitions |
-| `GET /live.csv` | Current weather + shops combined |
-| `GET /live/weather.csv` | Current weather |
-| `GET /live/shops.csv` | Current shop inventories |
+| `GET /data.csv` or `.tsv` | All game data combined (with `category` column) |
+| `GET /data/plants.csv` or `.tsv` | Plants (seed/plant/crop flattened with dot notation) |
+| `GET /data/pets.csv` or `.tsv` | Pets with stats and ability weights |
+| `GET /data/items.csv` or `.tsv` | Items and equipment |
+| `GET /data/decors.csv` or `.tsv` | Decorations |
+| `GET /data/eggs.csv` or `.tsv` | Pet eggs |
+| `GET /data/abilities.csv` or `.tsv` | Special abilities |
+| `GET /data/mutations.csv` or `.tsv` | Plant mutations |
+| `GET /data/weathers.csv` or `.tsv` | Weather definitions |
+| `GET /live.csv` or `.tsv` | Current weather + shops combined |
+| `GET /live/weather.csv` or `.tsv` | Current weather |
+| `GET /live/shops.csv` or `.tsv` | Current shop inventories |
 
 ### Assets
 
