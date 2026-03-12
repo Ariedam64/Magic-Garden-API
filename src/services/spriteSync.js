@@ -78,7 +78,7 @@ function extractAllSources(bundle) {
 /**
  * Fetch all atlas JSON files from the game server.
  * Returns a map of sourceJson -> atlasJson.
- * Also discovers JSON files for webp atlases not listed in manifest.
+ * Also discovers JSON files for ktx2/webp atlases not listed in manifest.
  */
 async function fetchAllAtlases(baseUrl) {
   const manifest = await loadManifest({ baseUrl });
@@ -93,15 +93,17 @@ async function fetchAllAtlases(baseUrl) {
     jsonFiles.filter((f) => f.includes("sprite") || f.includes("tiles") || f.includes("weather"))
   );
 
-  // Also look for webp files and try to find corresponding JSON
+  // Also look for image files (ktx2/webp) and try to find corresponding JSON
   const allSources = extractAllSources(bundle);
-  const webpFiles = allSources.filter(
-    (f) => f.endsWith(".webp") && (f.includes("sprite") || f.includes("tiles") || f.includes("weather"))
+  const imageFiles = allSources.filter(
+    (f) =>
+      (f.endsWith(".ktx2") || f.endsWith(".webp")) &&
+      (f.includes("sprite") || f.includes("tiles") || f.includes("weather"))
   );
 
-  // Add potential JSON files for webp atlases
-  for (const webp of webpFiles) {
-    const jsonFile = webp.replace(".webp", ".json");
+  // Add potential JSON files for atlas images
+  for (const img of imageFiles) {
+    const jsonFile = img.replace(/\.(ktx2|webp)$/, ".json");
     if (!atlasJsonFiles.has(jsonFile)) {
       atlasJsonFiles.add(jsonFile);
     }

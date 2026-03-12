@@ -5,9 +5,15 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/*.test.js"
   },
-  "keywords": ["magic-garden", "api", "game", "websocket"],
+  "keywords": [
+    "magic-garden",
+    "api",
+    "game",
+    "websocket"
+  ],
   "author": "Ariedam",
   "license": "ISC",
   "type": "module",

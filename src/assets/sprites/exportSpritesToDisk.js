@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import { getSpritesPayload } from "./sprites.js";
+import { decodeKTX2, isKTX2 } from "../ktx2Decoder.js";
 
 async function downloadBuffer(url) {
   const res = await fetch(url, {
@@ -14,6 +15,24 @@ async function downloadBuffer(url) {
   if (!res.ok) throw new Error(`Download failed (${res.status}) for ${url}`);
   const ab = await res.arrayBuffer();
   return Buffer.from(ab);
+}
+
+/**
+ * Load atlas image buffer and return a sharp-compatible source.
+ * For KTX2 files, decodes to raw RGBA first.
+ * For other formats (webp/png), returns the buffer directly.
+ *
+ * @returns {{ sharpInput: Buffer|object, sharpOptions: object|undefined }}
+ */
+async function loadAtlasImage(url, rawBuffer) {
+  if (isKTX2(url)) {
+    const { width, height, rgba } = await decodeKTX2(rawBuffer);
+    return {
+      sharpInput: rgba,
+      sharpOptions: { raw: { width, height, channels: 4 } },
+    };
+  }
+  return { sharpInput: rawBuffer, sharpOptions: undefined };
 }
 
 function safeName(name) {
@@ -77,14 +96,15 @@ export async function exportSpritesToDisk({
 
   await ensureDir(outDir);
 
-  const atlasCache = new Map(); // url -> Buffer
+  const atlasCache = new Map(); // url -> { sharpInput, sharpOptions }
   let exported = 0;
 
   for (const [atlasUrl, list] of byAtlas) {
-    let atlasBuf = atlasCache.get(atlasUrl);
-    if (!atlasBuf) {
-      atlasBuf = await downloadBuffer(atlasUrl);
-      atlasCache.set(atlasUrl, atlasBuf);
+    let atlas = atlasCache.get(atlasUrl);
+    if (!atlas) {
+      const rawBuf = await downloadBuffer(atlasUrl);
+      atlas = await loadAtlasImage(atlasUrl, rawBuf);
+      atlasCache.set(atlasUrl, atlas);
     }
 
     for (const s of list) {
@@ -95,7 +115,7 @@ export async function exportSpritesToDisk({
       const cropW = rotated ? frame.h : frame.w;
       const cropH = rotated ? frame.w : frame.h;
 
-      let piece = sharp(atlasBuf).extract({
+      let piece = sharp(atlas.sharpInput, atlas.sharpOptions).extract({
         left: frame.x,
         top: frame.y,
         width: cropW,
