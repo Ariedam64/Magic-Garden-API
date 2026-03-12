@@ -8,6 +8,10 @@ import { logger } from "../../logger/index.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../..", "data");
 const VERSION_FILE = path.join(DATA_DIR, "version.json");
+const STORED_VERSION_TTL = 60 * 1000; // 1 min
+
+let cachedStoredVersion = null;
+let cachedStoredAt = 0;
 
 /**
  * Ensure data directory exists.
@@ -41,6 +45,24 @@ export async function loadStoredVersion() {
 }
 
 /**
+ * Load stored version with a short in-memory cache.
+ */
+export async function getStoredVersionCached() {
+  const now = Date.now();
+  if (cachedStoredVersion && now - cachedStoredAt < STORED_VERSION_TTL) {
+    return cachedStoredVersion;
+  }
+
+  const version = await loadStoredVersion();
+  if (version) {
+    cachedStoredVersion = version;
+    cachedStoredAt = now;
+  }
+
+  return version;
+}
+
+/**
  * Save game version to disk.
  */
 export async function saveVersion(version) {
@@ -51,6 +73,8 @@ export async function saveVersion(version) {
       lastUpdated: new Date().toISOString(),
     };
     await fs.writeFile(VERSION_FILE, JSON.stringify(data, null, 2));
+    cachedStoredVersion = data.version;
+    cachedStoredAt = Date.now();
     logger.info({ version: data.version }, "Version saved");
   } catch (err) {
     logger.error({ error: err.message }, "Failed to save version");

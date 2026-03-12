@@ -68,6 +68,8 @@ export class ShopParser extends BaseParser {
   constructor() {
     super();
     this.shops = null;
+    this.lastSlim = null;
+    this.lastSlimHash = null;
   }
 
   /**
@@ -81,7 +83,16 @@ export class ShopParser extends BaseParser {
    * Retourne les données simplifiées des shops.
    */
   getSlimShops() {
-    return simplifyShops(this.shops);
+    if (!this.shops) return null;
+
+    if (this.lastSlim) {
+      return this.lastSlim;
+    }
+
+    const slim = simplifyShops(this.shops);
+    this.lastSlim = slim;
+    this.lastSlimHash = JSON.stringify(slim);
+    return slim;
   }
 
   /**
@@ -97,7 +108,13 @@ export class ShopParser extends BaseParser {
 
       if (game.shops) {
         this.shops = game.shops;
-        this.emit("shops", this.getSlimShops());
+        const slim = simplifyShops(this.shops);
+        const hash = JSON.stringify(slim);
+        if (hash !== this.lastSlimHash) {
+          this.lastSlim = slim;
+          this.lastSlimHash = hash;
+          this.emit("shops", slim);
+        }
       }
       return;
     }
@@ -127,7 +144,13 @@ export class ShopParser extends BaseParser {
     }
 
     if (dirty) {
-      this.emit("shops", this.getSlimShops());
+      const slim = simplifyShops(this.shops);
+      const hash = JSON.stringify(slim);
+      if (hash !== this.lastSlimHash) {
+        this.lastSlim = slim;
+        this.lastSlimHash = hash;
+        this.emit("shops", slim);
+      }
     }
   }
 }

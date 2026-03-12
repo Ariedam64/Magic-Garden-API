@@ -9,6 +9,7 @@ import {
   extractEggs,
   extractAbilities,
   extractMutations,
+  extractWeathers,
   ExtractorRegistry,
 } from "../core/extractors/index.js";
 import { logger } from "../logger/index.js";
@@ -64,6 +65,13 @@ export const gameDataService = {
    */
   async getMutations() {
     return getCategoryCached("mutations", extractMutations);
+  },
+
+  /**
+   * Récupère les données des weathers.
+   */
+  async getWeathers() {
+    return getCategoryCached("weathers", extractWeathers);
   },
 
   /**

@@ -13,7 +13,11 @@ import {
   errorHandler,
 } from "./middleware/index.js";
 
-import { dataRouter, liveRouter, healthRouter, docsRouter, assetsRouter } from "./routes/index.js";
+import {
+  dataRouter, dataCsvRootHandler, dataTsvRootHandler,
+  liveRouter, liveCsvRootHandler, liveTsvRootHandler,
+  healthRouter, docsRouter, assetsRouter,
+} from "./routes/index.js";
 
 /**
  * Crée l'application Express avec tous les middlewares.
@@ -60,9 +64,13 @@ export function createApp() {
   app.use("/docs", docsRouter);
 
   // Data routes (static game data + assets)
+  app.get("/data.csv", dataCsvRootHandler);
+  app.get("/data.tsv", dataTsvRootHandler);
   app.use("/data", dataRouter);
 
   // Live routes (WebSocket data via SSE)
+  app.get("/live.csv", liveCsvRootHandler);
+  app.get("/live.tsv", liveTsvRootHandler);
   app.use("/live", liveRouter);
 
   // Assets routes (cosmetics, audios, etc.)

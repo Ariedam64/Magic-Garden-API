@@ -4,6 +4,8 @@ import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import { fetchMainBundle } from "./bundle/resolver.js";
 import { clearEnumCaches } from "./bundle/sandbox.js";
+import { clearSpriteMappingCache } from "./bundle/spriteMapping.js";
+import { fetchGameVersion } from "./version.js";
 
 /**
  * Cache pour le bundle et les catégories extraites.
@@ -34,13 +36,16 @@ export async function getMainBundle() {
 
   cache.pending = (async () => {
     try {
-      const { mainUrl, mainJs } = await fetchMainBundle();
+      const version = await fetchGameVersion();
+      const pageUrl = `${config.game.origin}/version/${version}/index.html`;
+      const { mainUrl, mainJs } = await fetchMainBundle(pageUrl);
 
       // Si la version a changé, flush les caches
       if (cache.mainUrl && cache.mainUrl !== mainUrl) {
         logger.info({ oldUrl: cache.mainUrl, newUrl: mainUrl }, "Bundle version changed, clearing caches");
         cache.categories.clear();
         clearEnumCaches();
+        clearSpriteMappingCache();
       }
 
       cache.mainUrl = mainUrl;
@@ -90,6 +95,7 @@ export function invalidateAllCaches() {
   cache.fetchedAt = 0;
   cache.categories.clear();
   clearEnumCaches();
+  clearSpriteMappingCache();
   logger.info("All caches invalidated");
 }
 

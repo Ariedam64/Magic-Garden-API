@@ -6,7 +6,6 @@ import WebSocket from "ws";
 import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import { fetchGameVersion } from "../game/version.js";
-import { saveVersion } from "../game/versionStorage.js";
 import { generatePlayerId, generateRoomId } from "../../utils/id.js";
 import { buildMagicGardenWsUrl } from "./url.js";
 import { shouldReconnect, getReconnectDelayMs } from "./reconnect.js";
@@ -83,9 +82,6 @@ export class MagicGardenConnection extends EventEmitter {
 
     // Récupère la version du jeu
     this.version = await fetchGameVersion({ origin: this.origin });
-
-    // Sauvegarde la version
-    await saveVersion(this.version);
 
     // Construit l'URL WebSocket
     this.url = buildMagicGardenWsUrl({

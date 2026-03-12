@@ -13,6 +13,7 @@ Automatic extraction from the game's minified JavaScript file (`main-*.js`):
 - Items and decorations
 - Mutations
 - Special abilities
+- Weathers
 
 ### **Live WebSocket** → Real-time data
 Connection to the game server to retrieve dynamic data:
@@ -70,6 +71,26 @@ The server starts on `http://localhost:3000`
 | `GET /data/mutations` | Plant mutations with sprites |
 | `GET /data/eggs` | Animal eggs with sprites |
 | `GET /data/abilities` | Special abilities |
+| `GET /data/weathers` | Weather definitions with sprites |
+
+### CSV / TSV Export
+
+Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (`.tsv`) format by appending the extension to the URL. Ideal for Excel, Google Sheets, or any spreadsheet tool.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /data.csv` or `.tsv` | All game data combined (with `category` column) |
+| `GET /data/plants.csv` or `.tsv` | Plants (seed/plant/crop flattened with dot notation) |
+| `GET /data/pets.csv` or `.tsv` | Pets with stats and ability weights |
+| `GET /data/items.csv` or `.tsv` | Items and equipment |
+| `GET /data/decors.csv` or `.tsv` | Decorations |
+| `GET /data/eggs.csv` or `.tsv` | Pet eggs |
+| `GET /data/abilities.csv` or `.tsv` | Special abilities |
+| `GET /data/mutations.csv` or `.tsv` | Plant mutations |
+| `GET /data/weathers.csv` or `.tsv` | Weather definitions |
+| `GET /live.csv` or `.tsv` | Current weather + shops combined |
+| `GET /live/weather.csv` or `.tsv` | Current weather |
+| `GET /live/shops.csv` or `.tsv` | Current shop inventories |
 
 ### Assets
 
@@ -92,6 +113,8 @@ Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return UR
 | `GET /live` | All live data snapshot (weather + shops) |
 | `GET /live/weather` | Current weather snapshot |
 | `GET /live/shops` | Current shops snapshot |
+| `GET /live/health` | SSE connection stats |
+| `GET /live/stream` | Weather + shops updates via Server-Sent Events |
 | `GET /live/weather/stream` | Weather updates via Server-Sent Events |
 | `GET /live/shops/stream` | Shop updates via Server-Sent Events |
 
@@ -122,7 +145,8 @@ curl http://localhost:3000/data | jq
   "decor": { ... },
   "eggs": { ... },
   "mutations": { ... },
-  "abilities": { ... }
+  "abilities": { ... },
+  "weathers": { ... }
 }
 ```
 
@@ -177,26 +201,50 @@ curl http://localhost:3000/assets/sprites/seeds/Carrot.png -o carrot.png
 curl http://localhost:3000/live/shops | jq
 ```
 
-### Stream weather updates (SSE)
+### Stream live updates (SSE)
 
 ```bash
-curl -N http://localhost:3000/live/weather/stream
+curl -N http://localhost:3000/live/stream
 ```
 
 SSE events are named `weather` and `shops`. Use `addEventListener` to subscribe.
 
+### Live health (SSE stats)
+
+```bash
+curl http://localhost:3000/live/health | jq
+```
+
 ```javascript
-const weatherStream = new EventSource('http://localhost:3000/live/weather/stream');
-weatherStream.addEventListener('weather', (event) => {
+const liveStream = new EventSource('http://localhost:3000/live/stream');
+liveStream.addEventListener('weather', (event) => {
   const data = JSON.parse(event.data);
   console.log('Weather:', data.weather);
 });
 
-const shopsStream = new EventSource('http://localhost:3000/live/shops/stream');
-shopsStream.addEventListener('shops', (event) => {
+liveStream.addEventListener('shops', (event) => {
   const shops = JSON.parse(event.data);
   console.log('Seed shop:', shops.seed);
 });
+```
+
+You can also subscribe to specific streams with `/live/weather/stream` or `/live/shops/stream`.
+
+### Export data as CSV
+
+```bash
+# Download pets data as CSV
+curl https://mg-api.ariedam.fr/data/pets.csv -o pets.csv
+
+# Open plants data directly in Excel (Windows)
+start https://mg-api.ariedam.fr/data/plants.csv
+```
+
+In Excel, use **Data > From Web** and paste the URL (e.g. `https://mg-api.ariedam.fr/data/pets.csv`) to create an auto-refreshing data connection.
+
+In Google Sheets:
+```
+=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
 ```
 
 ## Technical Architecture
