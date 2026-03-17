@@ -60,8 +60,53 @@ export async function resolveMainFromPage(pageUrl = config.game.pageUrl) {
   return { indexUrl, mainUrl };
 }
 
+// Signature stable présente dans le chunk de données du jeu
+const DATA_SIGNATURE = "secondsToHatch";
+
 /**
- * Récupère le contenu du bundle main.js.
+ * Parse les chunks référencés dans le tableau __vite__mapDeps du bundle.
+ */
+function parseViteChunks(mainJs, baseUrl) {
+  const match = mainJs.match(/m\.f\|\|\(m\.f=(\[.*?\])\)/);
+  if (!match) return [];
+  const chunks = [...match[1].matchAll(/"(assets\/[^"]+\.js)"/g)].map((m) => m[1]);
+  const seen = new Set();
+  return chunks
+    .filter((c) => !seen.has(c) && seen.add(c))
+    .map((c) => ({ path: c, url: `${baseUrl}${c}` }));
+}
+
+/**
+ * Cherche le chunk contenant les données du jeu parmi les chunks listés.
+ * Essaie d'abord les chunks "QuinoaView" (heuristique stable), puis tous les autres.
+ */
+async function findDataChunk(mainJs, baseUrl) {
+  const chunks = parseViteChunks(mainJs, baseUrl);
+  const ordered = [
+    ...chunks.filter((c) => c.path.includes("QuinoaView")),
+    ...chunks.filter((c) => !c.path.includes("QuinoaView")),
+  ];
+
+  for (const chunk of ordered) {
+    let content;
+    try {
+      content = await fetchText(chunk.url);
+    } catch {
+      continue;
+    }
+    if (content.includes(DATA_SIGNATURE)) {
+      logger.info({ url: chunk.url, size: content.length }, "Data chunk found");
+      return { dataUrl: chunk.url, dataJs: content };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Récupère le contenu du bundle de données du jeu.
+ * Tente main.js en premier ; si les données n'y sont pas (code-splitting),
+ * cherche le chunk contenant les données dans __vite__mapDeps.
  */
 export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   const { indexUrl, mainUrl } = await resolveMainFromPage(pageUrl);
@@ -72,5 +117,19 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   logger.info({ mainUrl, size: mainJs.length }, "Main bundle fetched");
 
+  if (mainJs.includes(DATA_SIGNATURE)) {
+    return { indexUrl, mainUrl, mainJs };
+  }
+
+  // v125+ : les données sont dans un chunk séparé
+  logger.info({ mainUrl }, "Game data not in main bundle, searching chunks");
+  const baseUrl = mainUrl.replace(/assets\/[^/]+$/, "");
+  const chunk = await findDataChunk(mainJs, baseUrl);
+
+  if (chunk) {
+    return { indexUrl, mainUrl: chunk.dataUrl, mainJs: chunk.dataJs };
+  }
+
+  logger.warn({ mainUrl }, "Data chunk not found, falling back to main bundle");
   return { indexUrl, mainUrl, mainJs };
 }

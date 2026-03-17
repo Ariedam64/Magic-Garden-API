@@ -6,7 +6,7 @@ import { buildBaseSandbox } from "./sandbox.js";
 /**
  * Signatures pour trouver les données des mutations dans le bundle.
  */
-const SIGNATURES = ["coinMultiplier", "baseChance", 'name:"Gold"'];
+const SIGNATURES = ["coinMultiplier", "baseChance", "name:`Gold`"];
 
 /**
  * Extrait les données des mutations du bundle.

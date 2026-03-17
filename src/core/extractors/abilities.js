@@ -6,7 +6,7 @@ import { buildBaseSandbox } from "./sandbox.js";
 /**
  * Signatures pour trouver les données des abilities dans le bundle.
  */
-const SIGNATURES = ['trigger:"continuous"', "baseProbability", "baseParameters:{"];
+const SIGNATURES = ["baseProbability", "baseParameters:{", "trigger:`continuous`"];
 
 /**
  * Extrait les données des abilities du bundle.

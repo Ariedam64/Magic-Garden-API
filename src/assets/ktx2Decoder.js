@@ -14,6 +14,15 @@ const WASM_DIR = resolve(__dirname, "wasm");
 let basisModule = null;
 let initPromise = null;
 
+// Suppress DEP0005 (Buffer() deprecation) triggered by Emscripten's WASM bindings.
+// The Emscripten-generated code uses new Buffer() internally and cannot be patched.
+const origEmitWarning = process.emitWarning;
+process.emitWarning = function (warning, ...args) {
+  const code = typeof args[0] === "string" ? args[1] : args[0]?.code;
+  if (code === "DEP0005") return;
+  return origEmitWarning.call(this, warning, ...args);
+};
+
 /**
  * Load and initialize the Basis Universal WASM transcoder.
  * Cached after first call.
