@@ -8,10 +8,10 @@ import { makeGlobalSandboxProxy } from "./sandbox.js";
  * Ces strings littérales ne changent jamais après minification.
  */
 const SPRITE_MAPPING_SIGNATURES = [
-  '"sprite/seed/',
-  '"sprite/plant/',
-  '"sprite/pet/',
-  '"sprite/decor/',
+  "`sprite/seed/",
+  "`sprite/plant/",
+  "`sprite/pet/",
+  "`sprite/decor/",
 ];
 
 /** Clés attendues dans l'objet sprite mapping pour validation. */

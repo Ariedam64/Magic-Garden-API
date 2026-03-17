@@ -189,12 +189,13 @@ export async function initSprites() {
         });
       }
 
-      // ✅ multi-packs (si présents)
+      // ✅ multi-packs (si présents) — chemins relatifs au répertoire du JSON source
       const related = meta?.related_multi_packs || [];
       if (Array.isArray(related)) {
+        const dir = jsonSrc.includes("/") ? jsonSrc.replace(/[^/]+$/, "") : "";
         for (const rel of related) {
           if (typeof rel !== "string") continue;
-          await loadAtlas(rel, { optional: true });
+          await loadAtlas(dir + rel, { optional: true });
         }
       }
     }
