@@ -54,7 +54,7 @@ export function applyHarvestTypeEnum(mainJs, objLiteral, sandbox) {
  */
 export function applySpriteMapping(mainJs, objLiteral, sandbox) {
   const match = objLiteral.match(
-    /\b(?:sprite|immatureSprite|topmostLayerSprite):([A-Za-z_$][\w$]*)\.(?:Seed|Plant|TallPlant|Pet|Decor|Item|Mutation|MutationOverlay|Animation)\./
+    /\b(?:sprite|immatureSprite|topmostLayerSprite|iconSpriteKey):([A-Za-z_$][\w$]*)\.(?:Seed|Plant|TallPlant|Pet|Decor|Item|Mutation|MutationOverlay|Animation|Ui)\./
   );
   if (!match) return;
 
