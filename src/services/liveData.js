@@ -67,6 +67,21 @@ export const liveDataService = {
   },
 
   /**
+   * Retourne le Set des species de seeds présentes dans le shop.
+   * Retourne null si les données du shop ne sont pas encore disponibles.
+   */
+  getShopSeedSpecies() {
+    const shops = shopParser.getShops();
+    if (!shops?.seed?.inventory) return null;
+
+    return new Set(
+      shops.seed.inventory
+        .map((item) => item.species)
+        .filter(Boolean)
+    );
+  },
+
+  /**
    * Retourne les parsers (pour accès avancé).
    */
   getParsers() {

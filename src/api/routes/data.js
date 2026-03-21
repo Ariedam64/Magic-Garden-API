@@ -5,7 +5,7 @@ import { asyncHandler } from "../middleware/index.js";
 import { gameDataService } from "../../services/index.js";
 import { getCacheStats } from "../../core/game/cache.js";
 import { getStoredVersionCached } from "../../core/game/versionStorage.js";
-import { getTransformedPlants } from "../../services/plantTransformer.js";
+import { getTransformedPlants, enrichPlantsWithPurchasable } from "../../services/plantTransformer.js";
 import {
   transformDataWithSprites,
   transformWeathersWithSprites,
@@ -111,7 +111,6 @@ dataRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const spriteVersion = await getStoredVersionCached();
-    if (maybeNotModified(req, res, "all", spriteVersion)) return;
 
     const data = await getOrBuildCached("all", spriteVersion, async () => {
       const [plants, pets, items, decor, eggs, mutations, abilities, weathers] = await Promise.all([
@@ -164,7 +163,7 @@ dataRouter.get(
     });
 
     setDataCacheHeaders(res, "all", spriteVersion);
-    res.json(data);
+    res.json({ ...data, plants: enrichPlantsWithPurchasable(data.plants) });
   })
 );
 
@@ -172,13 +171,12 @@ dataRouter.get(
   "/plants",
   asyncHandler(async (req, res) => {
     const spriteVersion = await getStoredVersionCached();
-    if (maybeNotModified(req, res, "plants", spriteVersion)) return;
 
     const data = await getOrBuildCached("plants", spriteVersion, () =>
       getTransformedPlants({ spriteVersion })
     );
     setDataCacheHeaders(res, "plants", spriteVersion);
-    res.json(data);
+    res.json(enrichPlantsWithPurchasable(data));
   })
 );
 
@@ -336,7 +334,7 @@ function makeRootHandler(fmt) {
     const spriteVersion = await getStoredVersionCached();
     const data = await getAllData(spriteVersion);
     setDataCacheHeaders(res, "all", spriteVersion);
-    send(res, convertCombined(data), `data.${fmt}`);
+    send(res, convertCombined({ ...data, plants: enrichPlantsWithPurchasable(data.plants) }), `data.${fmt}`);
   });
 }
 
@@ -352,7 +350,8 @@ for (const fmt of ["csv", "tsv"]) {
       `/${routeName}.${fmt}`,
       asyncHandler(async (_req, res) => {
         const spriteVersion = await getStoredVersionCached();
-        const data = await getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion));
+        let data = await getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion));
+        if (cacheKey === "plants") data = enrichPlantsWithPurchasable(data);
         setDataCacheHeaders(res, cacheKey, spriteVersion);
         send(res, convert(data), `${routeName}.${fmt}`);
       })

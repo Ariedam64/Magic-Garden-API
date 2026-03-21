@@ -2,6 +2,7 @@
 
 import { logger } from "../logger/index.js";
 import { gameDataService } from "./gameData.js";
+import { liveDataService } from "./liveData.js";
 import { resolveSpritePath } from "../utils/spritePathResolver.js";
 
 /**
@@ -65,6 +66,33 @@ function transformPlant(plantData, spriteVersion) {
   }
 
   return transformed;
+}
+
+/**
+ * Enrichit les plantes transformées avec le flag `purchasable` sur chaque seed.
+ * Compare les clés des plantes avec les species listées dans le shop.
+ * Si les données du shop ne sont pas disponibles, `purchasable` vaut null.
+ */
+export function enrichPlantsWithPurchasable(plants) {
+  const shopSpecies = liveDataService.getShopSeedSpecies();
+
+  const enriched = {};
+  for (const [key, plant] of Object.entries(plants)) {
+    if (!plant.seed) {
+      enriched[key] = plant;
+      continue;
+    }
+
+    enriched[key] = {
+      ...plant,
+      seed: {
+        ...plant.seed,
+        purchasable: shopSpecies ? shopSpecies.has(key) : null,
+      },
+    };
+  }
+
+  return enriched;
 }
 
 /**
