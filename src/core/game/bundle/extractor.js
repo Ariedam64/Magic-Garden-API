@@ -127,6 +127,14 @@ export function findObjectLiteralBySignatures(mainJs, signatures, windowSize = 1
 
     const braceIndex = eqBrace + 1;
     const objLiteral = extractBalancedBraces(mainJs, braceIndex);
+
+    // Vérifie que toutes les signatures sont dans l'objet extrait
+    const allInside = signatures.every((s) => objLiteral.includes(s));
+    if (!allInside) {
+      from = idx + 1;
+      continue;
+    }
+
     const varName = parseVarNameBeforeEqBrace(mainJs, eqBrace);
 
     return { varName, objLiteral, anchorIndex: idx };

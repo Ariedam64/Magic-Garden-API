@@ -6,7 +6,7 @@ import { buildBaseSandbox } from "./sandbox.js";
 /**
  * Signatures pour trouver les données des décorations dans le bundle.
  */
-const SIGNATURES = ["baseTileScale", "isOneTimePurchase", "rotationVariants"];
+const SIGNATURES = ["avatarNudgeY", "creditPrice", "rotationVariants"];
 
 /**
  * Extrait les données des décorations du bundle.
