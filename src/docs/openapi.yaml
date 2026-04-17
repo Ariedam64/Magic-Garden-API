@@ -115,53 +115,8 @@ tags:
 
   - name: CSV / TSV Export
     description: |
-      CSV and TSV export endpoints for spreadsheet integration.
-
-      Every data and live endpoint is available in **CSV** (`.csv`) and **TSV** (`.tsv`) format by appending the extension to the URL. This is ideal for users who want to import game data into **Excel**, **Google Sheets**, or any spreadsheet tool.
-
-      **Formats:**
-      - `.csv` — Comma-separated values (`text/csv`)
-      - `.tsv` — Tab-separated values (`text/tab-separated-values`)
-
-      **Features:**
-      - Nested objects are flattened with dot notation (e.g., `seed.name`, `plant.sprite`)
-      - Arrays are serialized as JSON strings within cells
-      - Combined `/data.csv` includes a `category` column to distinguish data types
-      - `Content-Disposition` header suggests a filename for download
-      - Same caching as JSON endpoints (ETags, Cache-Control)
-
-      ---
-
-      ### Google Sheets
-
-      Use `IMPORTDATA` to pull live data directly into your spreadsheet:
-
-      ```
-      =IMPORTDATA("https://mg-api.ariedam.fr/data/plants.csv")
-      =IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
-      =IMPORTDATA("https://mg-api.ariedam.fr/live/shops.csv")
-      ```
-
-      TSV also works with `IMPORTDATA`:
-      ```
-      =IMPORTDATA("https://mg-api.ariedam.fr/data/plants.tsv")
-      ```
-
-      The data refreshes automatically every time the spreadsheet recalculates.
-
-      ### Excel — Power Query (auto-refresh)
-
-      1. Go to **Data > From Web**
-      2. Enter the URL, e.g. `https://mg-api.ariedam.fr/data/pets.csv` (or `.tsv`)
-      3. Click **Load** — Excel imports the data as a table
-      4. To auto-refresh: right-click the table > **Properties** > set a refresh interval
-
-      ### cURL
-
-      ```bash
-      curl https://mg-api.ariedam.fr/data/pets.csv -o pets.csv
-      curl https://mg-api.ariedam.fr/data/pets.tsv -o pets.tsv
-      ```
+      Every `/data/*` and `/live/*` endpoint is available as CSV or TSV by appending `.csv` or `.tsv` to the URL.
+      Nested fields are flattened with dot notation. Ideal for Excel, Google Sheets (`=IMPORTDATA(...)`), or any spreadsheet tool.
 
   - name: Health
     description: |
@@ -812,400 +767,49 @@ paths:
                       name: "Sunny"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/SunnyIcon.png"
 
-  /data.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: All game data as CSV
-      description: |
-        Returns all game data combined into a single CSV file.
-
-        Each row includes a `category` column (plants, pets, items, decor, eggs, mutations, abilities, weathers) followed by the `id` and all flattened fields.
-
-        **Note:** Since different categories have different fields, some columns will be empty for certain categories.
-
-        **Google Sheets:**
-        ```
-        =IMPORTDATA("https://mg-api.ariedam.fr/data.csv")
-        ```
-
-        **Excel:** Data > From Web > `https://mg-api.ariedam.fr/data.csv`
-      responses:
-        '200':
-          description: CSV file with all game data
-          content:
-            text/csv:
-              schema:
-                type: string
-              example: |
-                category,id,seed.name,seed.coinPrice,seed.sprite,...
-                plants,Carrot,Carrot Seed,10,https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png,...
-                pets,Bunny,,,,Bunny,500,...
-
   /data/plants.csv:
     get:
       tags:
         - CSV / TSV Export
-      summary: Plants data as CSV
+      summary: "CSV / TSV export — pattern: append .csv or .tsv to any data or live URL"
       description: |
-        Returns all plants as CSV with flattened seed/plant/crop columns.
+        Every `/data/*` and `/live/*` endpoint is also available as **CSV** (`text/csv`) or **TSV**
+        (`text/tab-separated-values`) by appending `.csv` or `.tsv` to the URL.
 
-        Columns use dot notation: `seed.name`, `seed.coinPrice`, `seed.sprite`, `plant.name`, `plant.harvestType`, `crop.name`, `crop.baseSellPrice`, etc.
+        **Available exports:**
+        ```
+        /data.csv             /data.tsv
+        /data/plants.csv      /data/plants.tsv
+        /data/pets.csv        /data/pets.tsv
+        /data/items.csv       /data/items.tsv
+        /data/decors.csv      /data/decors.tsv
+        /data/eggs.csv        /data/eggs.tsv
+        /data/mutations.csv   /data/mutations.tsv
+        /data/abilities.csv   /data/abilities.tsv
+        /data/weathers.csv    /data/weathers.tsv
+        /live.csv             /live.tsv
+        /live/weather.csv     /live/weather.tsv
+        /live/shops.csv       /live/shops.tsv
+        ```
 
-        **Google Sheets:**
-        ```
-        =IMPORTDATA("https://mg-api.ariedam.fr/data/plants.csv")
-        ```
+        Nested fields are flattened with dot notation (`seed.name`, `plant.harvestType`, …).
+        Arrays are serialized as JSON strings within cells.
+        The combined `/data.csv` includes a `category` column.
+
+        **Google Sheets:** `=IMPORTDATA("https://mg-api.ariedam.fr/data/plants.csv")`
+
+        **Excel:** Data > From Web > paste the `.csv` URL
       responses:
         '200':
-          description: CSV file with plants data
+          description: CSV file
           content:
             text/csv:
               schema:
                 type: string
               example: |
-                id,seed.sprite,seed.name,seed.coinPrice,plant.sprite,plant.name,plant.harvestType,crop.sprite,crop.name,crop.baseSellPrice
-                Carrot,https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png,Carrot Seed,10,...,Carrot Plant,Single,...,Carrot,20
-
-  /data/pets.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Pets data as CSV
-      description: |
-        Returns all pets as CSV with all stats and ability weights flattened.
-
-        **Google Sheets:**
-        ```
-        =IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
-        ```
-      responses:
-        '200':
-          description: CSV file with pets data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data/items.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Items data as CSV
-      description: |
-        Returns all items (tools and consumables) as CSV.
-      responses:
-        '200':
-          description: CSV file with items data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data/decors.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Decorations data as CSV
-      description: |
-        Returns all garden decorations as CSV.
-      responses:
-        '200':
-          description: CSV file with decorations data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data/eggs.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Eggs data as CSV
-      description: |
-        Returns all pet eggs as CSV.
-      responses:
-        '200':
-          description: CSV file with eggs data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data/abilities.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Abilities data as CSV
-      description: |
-        Returns all special abilities as CSV.
-      responses:
-        '200':
-          description: CSV file with abilities data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data/mutations.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Mutations data as CSV
-      description: |
-        Returns all plant mutations as CSV.
-      responses:
-        '200':
-          description: CSV file with mutations data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data/weathers.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Weathers data as CSV
-      description: |
-        Returns all weather definitions as CSV.
-      responses:
-        '200':
-          description: CSV file with weathers data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /live.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: All live data as CSV
-      description: |
-        Returns current weather and shop inventories as CSV.
-      responses:
-        '200':
-          description: CSV file with live data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /live/weather.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Current weather as CSV
-      description: |
-        Returns the current weather as CSV.
-      responses:
-        '200':
-          description: CSV file with weather data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /live/shops.csv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Shop inventory as CSV
-      description: |
-        Returns current shop inventories as CSV. Each shop (seed, tool, egg, decor) is a row with its restock timer and items list.
-
-        **Google Sheets:**
-        ```
-        =IMPORTDATA("https://mg-api.ariedam.fr/live/shops.csv")
-        ```
-      responses:
-        '200':
-          description: CSV file with shop data
-          content:
-            text/csv:
-              schema:
-                type: string
-
-  /data.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: All game data as TSV
-      description: |
-        Same as `/data.csv` but tab-separated. Ideal for Excel which handles TSV natively.
-
-        **Google Sheets:** `=IMPORTDATA("https://mg-api.ariedam.fr/data.tsv")`
-      responses:
-        '200':
-          description: TSV file with all game data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/plants.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Plants data as TSV
-      description: |
-        Same as `/data/plants.csv` but tab-separated.
-
-        **Google Sheets:** `=IMPORTDATA("https://mg-api.ariedam.fr/data/plants.tsv")`
-      responses:
-        '200':
-          description: TSV file with plants data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/pets.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Pets data as TSV
-      description: |
-        Same as `/data/pets.csv` but tab-separated.
-
-        **Google Sheets:** `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.tsv")`
-      responses:
-        '200':
-          description: TSV file with pets data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/items.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Items data as TSV
-      description: Same as `/data/items.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with items data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/decors.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Decorations data as TSV
-      description: Same as `/data/decors.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with decorations data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/eggs.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Eggs data as TSV
-      description: Same as `/data/eggs.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with eggs data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/abilities.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Abilities data as TSV
-      description: Same as `/data/abilities.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with abilities data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/mutations.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Mutations data as TSV
-      description: Same as `/data/mutations.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with mutations data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /data/weathers.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Weathers data as TSV
-      description: Same as `/data/weathers.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with weathers data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /live.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: All live data as TSV
-      description: Same as `/live.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with live data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /live/weather.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Current weather as TSV
-      description: Same as `/live/weather.csv` but tab-separated.
-      responses:
-        '200':
-          description: TSV file with weather data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
-
-  /live/shops.tsv:
-    get:
-      tags:
-        - CSV / TSV Export
-      summary: Shop inventory as TSV
-      description: |
-        Same as `/live/shops.csv` but tab-separated.
-
-        **Google Sheets:** `=IMPORTDATA("https://mg-api.ariedam.fr/live/shops.tsv")`
-      responses:
-        '200':
-          description: TSV file with shop data
-          content:
-            text/tab-separated-values:
-              schema:
-                type: string
+                id,seed.name,seed.coinPrice,plant.harvestType,crop.baseSellPrice
+                Carrot,Carrot Seed,10,Single,20
+                Wheat,Wheat Seed,5,Multi,8
 
   /assets/sprite-data:
     get:
@@ -1608,6 +1212,91 @@ paths:
                     error:
                       code: "NOT_FOUND"
                       message: "Sprite not found: seeds/NonExistent.png"
+
+  /assets/sprites/composed:
+    get:
+      tags:
+        - Assets
+      summary: Get pre-composed sprite with mutations
+      description: |
+        Returns a single PNG with all mutation layers pre-rendered on top of the base sprite.
+
+        The pipeline applies (bottom → top):
+        1. Color filters (tint/gradient per mutation)
+        2. Base sprite
+        3. Mutation icons
+        4. Tall-plant overlays (masked to base silhouette, tall plants only)
+        5. Floating icons (Dawnlit, Ambershine, Dawncharged, Ambercharged)
+
+        The output canvas expands to fit all layers — icons that extend past the base sprite
+        bounds will not be clipped.
+
+        **Mutations supported:** `Gold`, `Rainbow`, `Wet`, `Chilled`, `Frozen`, `Thunderstruck`,
+        `Dawnlit`, `Ambershine`, `Dawncharged`, `Ambercharged`
+
+        Unknown mutation ids are silently ignored.
+
+        **Examples:**
+        - `/assets/sprites/composed?key=sprite/tallplant/Cactus&mutations=Rainbow,Wet`
+        - `/assets/sprites/composed?key=sprite/plant/Carrot&mutations=Gold`
+        - `/assets/sprites/composed?key=sprite/pet/Bunny&mutations=Dawnlit,Ambershine`
+
+        **Caching:** `public, max-age=86400, stale-while-revalidate=3600`
+      parameters:
+        - name: key
+          in: query
+          required: true
+          description: Full atlas key of the base sprite (e.g. `sprite/tallplant/Cactus`, `sprite/plant/Carrot`, `sprite/pet/Bunny`)
+          schema:
+            type: string
+          example: "sprite/tallplant/Cactus"
+        - name: mutations
+          in: query
+          required: false
+          description: Comma-separated list of mutation ids (order-insensitive, deduplicated server-side)
+          schema:
+            type: string
+          example: "Rainbow,Wet"
+      responses:
+        '200':
+          description: Composed PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Missing or invalid `key` parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missingKey:
+                  summary: Missing key
+                  value:
+                    error:
+                      code: "BAD_REQUEST"
+                      message: "Missing required query param: key"
+                invalidKey:
+                  summary: Invalid key format
+                  value:
+                    error:
+                      code: "BAD_REQUEST"
+                      message: "Invalid key format"
+        '404':
+          description: Base sprite not found in atlas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  summary: Sprite not found
+                  value:
+                    error:
+                      code: "NOT_FOUND"
+                      message: "Sprite not found: sprite/plant/Unknown"
 
   /live:
     get:

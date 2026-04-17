@@ -217,6 +217,26 @@ export async function initSprites() {
 }
 
 /**
+ * Find a single frame entry by its atlas key.
+ */
+export function lookupSprite(key) {
+  if (!state.ready) return null;
+  return state.all.find((x) => x.type === "frame" && x.key === key) ?? null;
+}
+
+/**
+ * Try each alias in order; return the first frame found.
+ */
+export function lookupSpriteByAliases(aliases) {
+  if (!state.ready) return null;
+  for (const alias of aliases) {
+    const found = state.all.find((x) => x.type === "frame" && x.key === alias);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
  * ✅ Payload API "propre"
  * - grouped par catégorie
  * - ordre manifest conservé

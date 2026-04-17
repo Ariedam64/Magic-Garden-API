@@ -75,22 +75,7 @@ The server starts on `http://localhost:3000`
 
 ### CSV / TSV Export
 
-Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (`.tsv`) format by appending the extension to the URL. Ideal for Excel, Google Sheets, or any spreadsheet tool.
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /data.csv` or `.tsv` | All game data combined (with `category` column) |
-| `GET /data/plants.csv` or `.tsv` | Plants (seed/plant/crop flattened with dot notation) |
-| `GET /data/pets.csv` or `.tsv` | Pets with stats and ability weights |
-| `GET /data/items.csv` or `.tsv` | Items and equipment |
-| `GET /data/decors.csv` or `.tsv` | Decorations |
-| `GET /data/eggs.csv` or `.tsv` | Pet eggs |
-| `GET /data/abilities.csv` or `.tsv` | Special abilities |
-| `GET /data/mutations.csv` or `.tsv` | Plant mutations |
-| `GET /data/weathers.csv` or `.tsv` | Weather definitions |
-| `GET /live.csv` or `.tsv` | Current weather + shops combined |
-| `GET /live/weather.csv` or `.tsv` | Current weather |
-| `GET /live/shops.csv` or `.tsv` | Current shop inventories |
+Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (`.tsv`) format by appending the extension to the URL. For example: `/data/plants.csv`, `/data/pets.tsv`, `/live/shops.csv`. Ideal for Excel, Google Sheets (`=IMPORTDATA(...)`), or any spreadsheet tool.
 
 ### Assets
 
@@ -101,10 +86,13 @@ Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (
 | `GET /assets/audios` | Audio data |
 | `GET /assets/sprites` | List available sprite categories |
 | `GET /assets/sprites/:category/:name` | Download individual sprite PNG |
+| `GET /assets/sprites/composed?key=…&mutations=…` | Pre-composed PNG with mutations applied |
 
 **Available sprite categories**: `seeds`, `plants`, `tallPlants`, `mutations`, `pets`, `decor`, `items`, `objects`, `ui`, `animations`, `weather`, `tiles`, `winter`
 
 Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return URLs pointing to the game's versioned asset base. `/assets/sprites` serves PNGs from this API (controlled by `SPRITES_BASE_URL`).
+
+The composed endpoint accepts a full atlas key (e.g. `sprite/tallplant/Cactus`) and an optional comma-separated list of mutations. It returns a single PNG with all layers merged (color filters, icons, overlays). See `doc-sprite.md` for the full spec.
 
 ### Live data (Real-time via SSE)
 
@@ -230,22 +218,15 @@ liveStream.addEventListener('shops', (event) => {
 
 You can also subscribe to specific streams with `/live/weather/stream` or `/live/shops/stream`.
 
-### Export data as CSV
+### Export data as CSV / TSV
+
+Append `.csv` or `.tsv` to any data or live endpoint (e.g. `/data/plants.csv`, `/live/shops.tsv`).
 
 ```bash
-# Download pets data as CSV
 curl https://mg-api.ariedam.fr/data/pets.csv -o pets.csv
-
-# Open plants data directly in Excel (Windows)
-start https://mg-api.ariedam.fr/data/plants.csv
 ```
 
-In Excel, use **Data > From Web** and paste the URL (e.g. `https://mg-api.ariedam.fr/data/pets.csv`) to create an auto-refreshing data connection.
-
-In Google Sheets:
-```
-=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")
-```
+In Google Sheets: `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")`
 
 ## Technical Architecture
 

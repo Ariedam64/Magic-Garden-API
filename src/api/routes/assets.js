@@ -4,6 +4,7 @@ import express from "express";
 import { asyncHandler } from "../middleware/index.js";
 import { assetDataService } from "../../services/index.js";
 import { spritesRouter } from "./sprites.js";
+import { composedRouter } from "./composed.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 
 export const assetsRouter = express.Router();
@@ -73,6 +74,9 @@ assetsRouter.get(
 // Sprite files (static PNG serving)
 // =====================
 
-// Mount sprite file router under /assets/sprites
-// This makes sprites accessible at /assets/sprites/:category/:name.png
+// Composed sprites (must be before /sprites to avoid :category/:name capturing "composed")
+// GET /assets/sprites/composed?key=...&mutations=...
+assetsRouter.use("/sprites/composed", composedRouter);
+
+// Individual sprite PNGs: GET /assets/sprites/:category/:name.png
 assetsRouter.use("/sprites", spritesRouter);
