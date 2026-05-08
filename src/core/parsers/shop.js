@@ -17,6 +17,9 @@ function getShopItemName(item, shopType) {
       return item.eggId ?? null;
     case "decor":
       return item.decorId ?? null;
+    case "dawn":
+      if (item.itemType === "Egg") return item.eggId ?? null;
+      return item.species ?? null;
     default:
       return null;
   }
@@ -55,6 +58,7 @@ function simplifyShops(shops) {
     tool: simplifyShop(shops.tool, "tool"),
     egg: simplifyShop(shops.egg, "egg"),
     decor: simplifyShop(shops.decor, "decor"),
+    dawn: simplifyShop(shops.dawn, "dawn"),
   };
 }
 
