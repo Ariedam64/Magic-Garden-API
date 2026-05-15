@@ -6,7 +6,7 @@ import { config } from "./config/index.js";
 import { logger } from "./logger/index.js";
 import { startApiServer } from "./api/server.js";
 import { MagicGardenConnection } from "./core/websocket/connection.js";
-import { liveDataService } from "./services/index.js";
+import { liveDataService, startHistoryRecorder, stopHistoryRecorder } from "./services/index.js";
 import { registerSpriteSyncListener } from "./services/spriteSync.js";
 import { exportSpritesToDisk } from "./assets/sprites/exportSpritesToDisk.js";
 
@@ -30,6 +30,15 @@ const mg = new MagicGardenConnection({
 
 // Register sprite sync listener for version mismatch handling
 registerSpriteSyncListener(mg);
+
+// Start history recorder (SQLite persistence of shops/weather)
+if (config.history.enabled) {
+  try {
+    startHistoryRecorder();
+  } catch (err) {
+    logger.error({ error: err?.message }, "Failed to start history recorder");
+  }
+}
 
 mg.on("open", (status) => {
   logger.info({ roomId: status.roomId, version: status.version }, "Connected to Magic Garden");
@@ -61,6 +70,12 @@ await mg.connect();
 
 function shutdown() {
   logger.info("Shutting down...");
+
+  try {
+    stopHistoryRecorder();
+  } catch {
+    // Ignore
+  }
 
   try {
     mg.stop();

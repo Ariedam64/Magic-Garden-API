@@ -113,6 +113,27 @@ tags:
       - Snapshot: One-time GET request for current state
       - Stream: Server-Sent Events for real-time updates
 
+  - name: Stats
+    description: |
+      Aggregated statistics on shops and weather from persisted history (SQLite).
+
+      The API records every shop restock and weather transition since the recorder was enabled. These endpoints expose aggregated views (drop rates, distributions, time series) suitable for dashboards and charts.
+
+      **Data freshness:**
+      - Shop data accumulates as the game restocks each shop (each shop has its own cycle).
+      - Weather data accumulates on every weather change.
+      - There is no data before the recorder was first started — buckets prior to that will be empty.
+
+      **Date parameters:**
+      - All `from` / `to` parameters accept either epoch milliseconds (e.g. `1778800000000`) or ISO 8601 (e.g. `2026-05-01` or `2026-05-01T12:00:00Z`).
+      - Default range when omitted: last 30 days.
+
+      **Bucketing:**
+      - Buckets are aligned on UTC boundaries.
+      - Allowed values: `hour`, `day`, `week`.
+      - Buckets without data are returned with zeros / empty objects (no holes in time series).
+      - Hard cap of 10000 buckets per response.
+
   - name: CSV / TSV Export
     description: |
       Every `/data/*` and `/live/*` endpoint is available as CSV or TSV by appending `.csv` or `.tsv` to the URL.
@@ -1710,6 +1731,398 @@ paths:
               example: |
                 event: shops
                 data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10},{"name":"Wheat","stock":15}]},"tool":{"secondsUntilRestock":7200,"items":[{"name":"WateringCan","stock":3}]},"egg":{"secondsUntilRestock":10800,"items":[]},"decor":{"secondsUntilRestock":14400,"items":[]}}
+
+  /stats/items:
+    get:
+      tags:
+        - Stats
+      summary: Aggregated item stats for a shop
+      description: |
+        Returns aggregated statistics for every item that appeared in a given shop over the requested time window.
+
+        **For each item** the response includes:
+        - `appearances`: number of restocks where the item was present
+        - `drop_rate`: `appearances / total_restocks` (between 0 and 1)
+        - `avg_stock` / `min_stock` / `max_stock`: stock distribution across appearances
+        - `last_seen`: epoch ms of the latest restock that contained this item
+
+        **Use cases:**
+        - Sortable rarity table (rarest items first)
+        - Identify items that recently disappeared from rotation
+        - Compare average stock across items
+      parameters:
+        - name: shop
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [seed, tool, egg, decor, dawn]
+          description: Shop type
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Defaults to 30 days ago.
+          example: "2026-04-15"
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Defaults to now.
+          example: "2026-05-15"
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [appearances, drop_rate, avg_stock, last_seen, item_id]
+            default: drop_rate
+          description: Sort column
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort direction
+      responses:
+        '200':
+          description: Aggregated items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shop:
+                    type: string
+                    example: "seed"
+                  from:
+                    type: integer
+                    example: 1776210390293
+                  to:
+                    type: integer
+                    example: 1778802390293
+                  total_restocks:
+                    type: integer
+                    description: Total number of restocks observed in the window for this shop
+                    example: 720
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        item_id:
+                          type: string
+                          example: "Carrot"
+                        appearances:
+                          type: integer
+                          example: 412
+                        drop_rate:
+                          type: number
+                          format: float
+                          minimum: 0
+                          maximum: 1
+                          example: 0.572
+                        avg_stock:
+                          type: number
+                          format: float
+                          example: 7.4
+                        min_stock:
+                          type: integer
+                          example: 3
+                        max_stock:
+                          type: integer
+                          example: 12
+                        last_seen:
+                          type: integer
+                          description: Epoch ms of the latest restock containing this item
+                          example: 1778801479977
+        '400':
+          description: Invalid shop / range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/items/timeseries:
+    get:
+      tags:
+        - Stats
+      summary: Time series of item drop rates
+      description: |
+        Returns drop rate / appearances / average stock per time bucket for one or more items.
+
+        Useful for multi-line charts comparing items over time. Each requested item gets its own series with a point per bucket (empty buckets are filled with zeros).
+      parameters:
+        - name: shop
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [seed, tool, egg, decor, dawn]
+        - name: ids
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated item ids to include in the response.
+          example: "Carrot,Strawberry,Lily"
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Default 30 days ago.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Default now.
+        - name: bucket
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+      responses:
+        '200':
+          description: Time series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shop:
+                    type: string
+                  bucket:
+                    type: string
+                  from:
+                    type: integer
+                  to:
+                    type: integer
+                  series:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        item_id:
+                          type: string
+                        points:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              t:
+                                type: integer
+                                description: Bucket start (epoch ms, UTC-aligned)
+                              appearances:
+                                type: integer
+                              total_restocks:
+                                type: integer
+                                description: Total restocks of this shop in this bucket
+                              drop_rate:
+                                type: number
+                                format: float
+                              avg_stock:
+                                type: number
+                                format: float
+                                nullable: true
+                                description: Null when the item did not appear in this bucket
+              examples:
+                series:
+                  summary: Two items, 3 daily buckets
+                  value:
+                    shop: "seed"
+                    bucket: "day"
+                    from: 1778457600000
+                    to: 1778716800000
+                    series:
+                      - item_id: "Carrot"
+                        points:
+                          - t: 1778457600000
+                            appearances: 12
+                            total_restocks: 24
+                            drop_rate: 0.5
+                            avg_stock: 7.3
+                          - t: 1778544000000
+                            appearances: 0
+                            total_restocks: 24
+                            drop_rate: 0
+                            avg_stock: null
+                      - item_id: "Strawberry"
+                        points:
+                          - t: 1778457600000
+                            appearances: 3
+                            total_restocks: 24
+                            drop_rate: 0.125
+                            avg_stock: 2.0
+        '400':
+          description: Invalid shop / bucket / range / too many buckets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/weather:
+    get:
+      tags:
+        - Stats
+      summary: Aggregated weather distribution
+      description: |
+        Returns the distribution of every weather observed over the requested time window:
+        total duration (ms), share of the window (0..1), number of distinct occurrences, and average duration per occurrence.
+
+        Weather events still in progress at `to` are clamped to that boundary; events still open in DB (`ended_at = NULL`) are clamped to `now`.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Default 30 days ago.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Default now.
+      responses:
+        '200':
+          description: Weather distribution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from:
+                    type: integer
+                  to:
+                    type: integer
+                  total_duration:
+                    type: integer
+                    description: Sum of durations across all weathers in the window (ms). Can be less than `to - from` if recording started inside the window.
+                  weathers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        weather:
+                          type: string
+                          example: "Clear Skies"
+                        duration:
+                          type: integer
+                          description: Total time spent in this weather (ms)
+                        share:
+                          type: number
+                          format: float
+                          description: duration / total_duration (0..1)
+                        occurrences:
+                          type: integer
+                          description: Number of distinct events of this weather
+                        avg_duration:
+                          type: number
+                          format: float
+                          description: duration / occurrences (ms)
+              examples:
+                distribution:
+                  value:
+                    from: 1776210390000
+                    to: 1778802390000
+                    total_duration: 86400000
+                    weathers:
+                      - weather: "Clear Skies"
+                        duration: 50400000
+                        share: 0.583
+                        occurrences: 8
+                        avg_duration: 6300000
+                      - weather: "Rain"
+                        duration: 28800000
+                        share: 0.333
+                        occurrences: 4
+                        avg_duration: 7200000
+        '400':
+          description: Invalid range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/weather/timeseries:
+    get:
+      tags:
+        - Stats
+      summary: Time series of weather durations
+      description: |
+        Returns total duration (ms) spent in each weather per time bucket.
+
+        Each point has a `durations` object keyed by weather name. Weathers that did not occur in a bucket are simply absent from that bucket's object (interpret as 0). Weather events spanning multiple buckets are split proportionally.
+
+        Ideal for stacked area / bar charts showing the breakdown of weather over time.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Default 30 days ago.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Default now.
+        - name: bucket
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+      responses:
+        '200':
+          description: Weather time series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bucket:
+                    type: string
+                  from:
+                    type: integer
+                  to:
+                    type: integer
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        t:
+                          type: integer
+                          description: Bucket start (epoch ms, UTC-aligned)
+                        durations:
+                          type: object
+                          additionalProperties:
+                            type: integer
+                            description: Duration in ms spent in that weather during the bucket
+              examples:
+                series:
+                  value:
+                    bucket: "day"
+                    from: 1778457600000
+                    to: 1778716800000
+                    points:
+                      - t: 1778457600000
+                        durations:
+                          "Clear Skies": 50400000
+                          "Rain": 28800000
+                          "Snow": 7200000
+                      - t: 1778544000000
+                        durations:
+                          "Clear Skies": 86400000
+        '400':
+          description: Invalid bucket / range / too many buckets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   schemas:

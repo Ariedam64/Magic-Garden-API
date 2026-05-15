@@ -16,7 +16,7 @@ import {
 import {
   dataRouter, dataCsvRootHandler, dataTsvRootHandler,
   liveRouter, liveCsvRootHandler, liveTsvRootHandler,
-  healthRouter, docsRouter, assetsRouter,
+  healthRouter, docsRouter, assetsRouter, statsRouter,
 } from "./routes/index.js";
 
 /**
@@ -75,6 +75,9 @@ export function createApp() {
 
   // Assets routes (cosmetics, audios, etc.)
   app.use("/assets", assetsRouter);
+
+  // Stats routes (aggregated history)
+  app.use("/stats", statsRouter);
 
   // Root endpoint
   app.get("/", (_req, res) => {

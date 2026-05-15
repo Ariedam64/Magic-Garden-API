@@ -6,3 +6,4 @@ export { healthRouter } from "./health.js";
 export { docsRouter } from "./docs.js";
 export { spritesRouter } from "./sprites.js";
 export { assetsRouter } from "./assets.js";
+export { statsRouter } from "./stats.js";

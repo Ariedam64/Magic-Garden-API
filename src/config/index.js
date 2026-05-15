@@ -55,4 +55,10 @@ export const config = {
     exportDir: process.env.SPRITES_EXPORT_DIR || "./sprites_dump",
     baseUrl: process.env.SPRITES_BASE_URL || "http://localhost:3000",
   },
+
+  // History (SQLite persistence of shops/weather)
+  history: {
+    enabled: process.env.HISTORY_ENABLED !== "false",
+    dbPath: process.env.HISTORY_DB_PATH || "./data/history.sqlite",
+  },
 };

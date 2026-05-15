@@ -3,3 +3,4 @@
 export { gameDataService } from "./gameData.js";
 export { liveDataService } from "./liveData.js";
 export { assetDataService } from "./assetData.js";
+export { startHistoryRecorder, stopHistoryRecorder } from "./historyRecorder.js";
