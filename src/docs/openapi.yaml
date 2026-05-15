@@ -2124,6 +2124,160 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /stats/weather/events:
+    get:
+      tags:
+        - Stats
+      summary: Raw weather event timeline
+      description: |
+        Returns every weather event that overlaps the requested window.
+
+        **Clamping:** `started_at` and `ended_at` are clamped to `[from, to]`. For the active event (still in progress), `ended_at` is clamped to `min(now, to)`. The boolean `in_progress` flags the originally open event.
+
+        Useful for rendering an exact intra-bucket timeline instead of pre-aggregated durations.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Default 30 days ago.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Default now.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Weather events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from:
+                    type: integer
+                  to:
+                    type: integer
+                  count:
+                    type: integer
+                  limit:
+                    type: integer
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        weather:
+                          type: string
+                          example: "Snow"
+                        started_at:
+                          type: integer
+                          description: Clamped to >= window `from`
+                          example: 1778800000000
+                        ended_at:
+                          type: integer
+                          description: Clamped to <= window `to` (or `now` when the event is in progress)
+                          example: 1778803600000
+                        in_progress:
+                          type: boolean
+                          description: True if this event was still open in DB (originally `ended_at = NULL`)
+                          example: false
+
+  /stats/shops/restocks:
+    get:
+      tags:
+        - Stats
+      summary: Raw shop restock timeline
+      description: |
+        Returns every restock event for a given shop within the requested window. Each restock embeds its full item list (item_id + initial stock).
+
+        Useful for inspecting the exact composition of a specific past restock or rendering an intra-bucket timeline.
+      parameters:
+        - name: shop
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [seed, tool, egg, decor, dawn]
+        - name: from
+          in: query
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Default 30 days ago.
+        - name: to
+          in: query
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Default now.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Shop restocks with embedded items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shop:
+                    type: string
+                  from:
+                    type: integer
+                  to:
+                    type: integer
+                  count:
+                    type: integer
+                  limit:
+                    type: integer
+                  restocks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        restocked_at:
+                          type: integer
+                        restock_interval_seconds:
+                          type: integer
+                          nullable: true
+                          description: Seconds-until-next-restock observed at capture time
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              item_id:
+                                type: string
+                                example: "Carrot"
+                              stock:
+                                type: integer
+                                example: 8
+
 components:
   schemas:
     PlantData:

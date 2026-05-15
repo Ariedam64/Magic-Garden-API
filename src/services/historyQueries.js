@@ -13,6 +13,14 @@ const MS = {
 
 const DEFAULT_RANGE_MS = 30 * MS.day;
 const MAX_BUCKETS = 10_000;
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 1000;
+
+export function resolveLimit(raw) {
+  const n = raw == null || raw === "" ? DEFAULT_LIMIT : Number(raw);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_LIMIT;
+  return Math.min(Math.floor(n), MAX_LIMIT);
+}
 
 export function parseTimestamp(v) {
   if (v == null || v === "") return null;
@@ -251,4 +259,77 @@ export function queryWeatherTimeseries({ from, to, bucketMs }) {
   }
 
   return Array.from(buckets.entries()).map(([t, durations]) => ({ t, durations }));
+}
+
+// =====================
+// Weather: raw events
+// =====================
+
+export function queryWeatherEvents({ from, to, limit, order = "desc" }) {
+  const db = getDB();
+  if (!db) return [];
+
+  const dir = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+
+  const rows = db.prepare(`
+    SELECT weather, started_at, ended_at
+    FROM weather_events
+    WHERE started_at < ? AND (ended_at IS NULL OR ended_at > ?)
+    ORDER BY started_at ${dir}
+    LIMIT ?
+  `).all(to, from, limit);
+
+  const now = Date.now();
+  return rows.map((r) => {
+    const inProgress = r.ended_at == null;
+    const effectiveEnd = Math.min(r.ended_at ?? now, to);
+    return {
+      weather: r.weather,
+      started_at: Math.max(r.started_at, from),
+      ended_at: effectiveEnd,
+      in_progress: inProgress,
+    };
+  });
+}
+
+// =====================
+// Shops: raw restocks (with items)
+// =====================
+
+export function queryShopRestocks({ shop, from, to, limit, order = "desc" }) {
+  const db = getDB();
+  if (!db) return [];
+
+  const dir = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+
+  const restocks = db.prepare(`
+    SELECT id, restocked_at, restock_interval_seconds
+    FROM shop_restocks
+    WHERE shop_type = ? AND restocked_at >= ? AND restocked_at < ?
+    ORDER BY restocked_at ${dir}
+    LIMIT ?
+  `).all(shop, from, to, limit);
+
+  if (restocks.length === 0) return [];
+
+  const ids = restocks.map((r) => r.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const itemRows = db.prepare(`
+    SELECT restock_id, item_id, stock
+    FROM shop_restock_items
+    WHERE restock_id IN (${placeholders})
+  `).all(...ids);
+
+  const itemsByRestockId = new Map();
+  for (const r of itemRows) {
+    if (!itemsByRestockId.has(r.restock_id)) itemsByRestockId.set(r.restock_id, []);
+    itemsByRestockId.get(r.restock_id).push({ item_id: r.item_id, stock: r.stock });
+  }
+
+  return restocks.map((r) => ({
+    id: r.id,
+    restocked_at: r.restocked_at,
+    restock_interval_seconds: r.restock_interval_seconds,
+    items: itemsByRestockId.get(r.id) ?? [],
+  }));
 }

@@ -5,10 +5,13 @@ import {
   validateShop,
   resolveRange,
   resolveBucket,
+  resolveLimit,
   queryItemsTimeseries,
   queryItemsStats,
   queryWeatherStats,
   queryWeatherTimeseries,
+  queryWeatherEvents,
+  queryShopRestocks,
 } from "../../services/historyQueries.js";
 
 export const statsRouter = express.Router();
@@ -82,6 +85,37 @@ statsRouter.get("/weather", (req, res) => {
     const { total_duration, weathers } = queryWeatherStats({ from, to });
 
     res.json({ from, to, total_duration, weathers });
+  } catch (err) {
+    handleValidationError(err, res);
+  }
+});
+
+// GET /stats/weather/events?from=...&to=...&limit=100&order=desc
+statsRouter.get("/weather/events", (req, res) => {
+  try {
+    const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
+    const limit = resolveLimit(req.query.limit);
+    const order = req.query.order ? String(req.query.order) : "desc";
+
+    const events = queryWeatherEvents({ from, to, limit, order });
+
+    res.json({ from, to, count: events.length, limit, events });
+  } catch (err) {
+    handleValidationError(err, res);
+  }
+});
+
+// GET /stats/shops/restocks?shop=seed&from=...&to=...&limit=100&order=desc
+statsRouter.get("/shops/restocks", (req, res) => {
+  try {
+    const shop = validateShop(String(req.query.shop || ""));
+    const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
+    const limit = resolveLimit(req.query.limit);
+    const order = req.query.order ? String(req.query.order) : "desc";
+
+    const restocks = queryShopRestocks({ shop, from, to, limit, order });
+
+    res.json({ shop, from, to, count: restocks.length, limit, restocks });
   } catch (err) {
     handleValidationError(err, res);
   }
