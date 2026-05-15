@@ -20,7 +20,7 @@ function resolveSpriteField(value, spriteVersion) {
 /**
  * Transform a single data item: convert sprite paths to URLs.
  */
-function transformItem(itemKey, itemData, spriteVersion) {
+function transformItem(itemKey, itemData, spriteVersion, category) {
   if (!itemData || typeof itemData !== "object") {
     return itemData;
   }
@@ -29,6 +29,17 @@ function transformItem(itemKey, itemData, spriteVersion) {
 
   if (transformed.sprite !== undefined) {
     transformed.sprite = resolveSpriteField(transformed.sprite, spriteVersion);
+  }
+
+  // Fallback for mutations without an explicit sprite: use ui/Mutation{Key}.
+  if (
+    category === "mutations" &&
+    (transformed.sprite == null || transformed.sprite === undefined) &&
+    typeof itemKey === "string"
+  ) {
+    transformed.sprite = resolveSpritePath(`sprite/ui/Mutation${itemKey}`, {
+      version: spriteVersion,
+    });
   }
 
   return transformed;
@@ -69,7 +80,7 @@ export function transformDataWithSprites(data, category, options = {}) {
 
   for (const [key, value] of Object.entries(data)) {
     try {
-      transformed[key] = transformItem(key, value, spriteVersion);
+      transformed[key] = transformItem(key, value, spriteVersion, category);
     } catch (error) {
       logger.error(`Error transforming ${category} ${key}:`, error);
       transformed[key] = value;

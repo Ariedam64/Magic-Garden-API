@@ -375,7 +375,7 @@ async function buildOverlayLayer(baseBuf, baseW, baseH, baseAnchor, overlayKey, 
     ? await sharp(overlayBuf).extract({ left: cropLeft, top: cropTop, width: visibleW, height: visibleH }).png().toBuffer()
     : overlayBuf;
 
-  // Place overlay on a base-sized canvas, then mask to base silhouette
+  // Place overlay on a transparent canvas, then mask to base silhouette
   const onBase = await sharp({
     create: { width: baseW, height: baseH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
   }).composite([{ input: clippedOverlay, left: canvasX, top: canvasY }]).png().toBuffer();

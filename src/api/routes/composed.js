@@ -34,6 +34,7 @@ composedRouter.get(
     const etag = buildWeakEtag("composed", key, rawMutations.sort().join(","));
     if (isFresh(req, etag)) {
       applyCacheHeaders(res, { etag, cacheControl: COMPOSED_CACHE_CONTROL });
+      res.set("Cross-Origin-Resource-Policy", "cross-origin");
       return res.status(304).end();
     }
 
@@ -41,6 +42,7 @@ composedRouter.get(
     if (!pngBuffer) throw Errors.notFound(`Sprite not found: ${key}`);
 
     applyCacheHeaders(res, { etag, cacheControl: COMPOSED_CACHE_CONTROL });
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
     res.type("image/png").send(pngBuffer);
   })
 );
