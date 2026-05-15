@@ -31,7 +31,7 @@ function handleShops(slim) {
 
   for (const shopType of SHOP_TYPES) {
     const shop = slim[shopType];
-    if (!shop || !Array.isArray(shop.items) || shop.items.length === 0) continue;
+    if (!shop || !Array.isArray(shop.items)) continue;
 
     const hash = hashItems(shop.items);
     const prev = lastItemsHashByShop.get(shopType);
@@ -43,6 +43,13 @@ function handleShops(slim) {
 
     if (isBaseline) {
       logger.debug({ shopType, itemCount: shop.items.length }, "History: shop baseline captured (not persisted)");
+      continue;
+    }
+
+    // Track transition to empty in memory (so a later refill is detected as a real change),
+    // but don't persist empty restocks — nothing to record.
+    if (shop.items.length === 0) {
+      logger.debug({ shopType }, "History: shop transitioned to empty (not persisted)");
       continue;
     }
 
