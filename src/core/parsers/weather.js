@@ -19,11 +19,15 @@ function formatWeather(value) {
     case "rain":
       return "Rain";
     case "frost":
+    case "snow":
       return "Snow";
     case "amber moon":
+    case "ambermoon":
       return "Amber Moon";
     case "dawn":
       return "Dawn";
+    case "thunderstorm":
+      return "Thunderstorm";
     default:
       return raw;
   }
