@@ -70,13 +70,22 @@ function formatWeather(value) {
   }
 }
 
+// Old in-game seed names that were renamed by the devs. The Discord bot kept
+// the old names, so we normalize at import time to match the current game IDs.
+const ITEM_ID_ALIASES = {
+  Dawnbinder: "DawnCelestial",
+  Moonbinder: "MoonCelestial",
+};
+
 // "Carrot x18" -> { id: "Carrot", stock: 18 }
 // "Strawberry" -> { id: "Strawberry", stock: 1 }
 const ITEM_RE = /^(.+?)\s+x(\d+)$/;
 function parseItemString(s) {
   const m = ITEM_RE.exec(s);
-  if (m) return { id: m[1], stock: Number(m[2]) };
-  return { id: String(s).trim(), stock: 1 };
+  const rawId = m ? m[1] : String(s).trim();
+  const stock = m ? Number(m[2]) : 1;
+  const id = ITEM_ID_ALIASES[rawId] ?? rawId;
+  return { id, stock };
 }
 
 function fmtNum(n) {

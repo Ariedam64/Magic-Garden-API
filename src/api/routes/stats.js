@@ -47,13 +47,13 @@ statsRouter.get("/items/timeseries", (req, res) => {
   }
 });
 
-// GET /stats/items?shop=seed&from=...&to=...&sort=drop_rate&order=desc
+// GET /stats/items?shop=seed&from=...&to=...&sort=appearances&order=asc
 statsRouter.get("/items", (req, res) => {
   try {
     const shop = validateShop(String(req.query.shop || ""));
     const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
-    const sort = req.query.sort ? String(req.query.sort) : "drop_rate";
-    const order = req.query.order ? String(req.query.order) : "desc";
+    const sort = req.query.sort ? String(req.query.sort) : "appearances";
+    const order = req.query.order ? String(req.query.order) : "asc";
 
     const { total_restocks, items } = queryItemsStats({ shop, from, to, sort, order });
 

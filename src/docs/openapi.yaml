@@ -1738,18 +1738,13 @@ paths:
         - Stats
       summary: Aggregated item stats for a shop
       description: |
-        Returns aggregated statistics for every item that appeared in a given shop over the requested time window.
+        Returns minimal rarity stats per item for a given shop and time window.
 
         **For each item** the response includes:
         - `appearances`: number of restocks where the item was present
-        - `drop_rate`: `appearances / total_restocks` (between 0 and 1)
-        - `avg_stock` / `min_stock` / `max_stock`: stock distribution across appearances
-        - `last_seen`: epoch ms of the latest restock that contained this item
+        - `total_stock`: total units of this item distributed across all its appearances (`SUM(stock)`)
 
-        **Use cases:**
-        - Sortable rarity table (rarest items first)
-        - Identify items that recently disappeared from rotation
-        - Compare average stock across items
+        Default sort is `appearances ASC` so the rarest items show up first (e.g. Celestial seeds). Use `total_stock` to sort by total volume distributed.
       parameters:
         - name: shop
           in: query
@@ -1764,21 +1759,21 @@ paths:
           schema:
             type: string
           description: Window start (epoch ms or ISO 8601). Defaults to 30 days ago.
-          example: "2026-04-15"
+          example: "2025-11-17"
         - name: to
           in: query
           required: false
           schema:
             type: string
           description: Window end (epoch ms or ISO 8601). Defaults to now.
-          example: "2026-05-15"
+          example: "2026-05-17"
         - name: sort
           in: query
           required: false
           schema:
             type: string
-            enum: [appearances, drop_rate, avg_stock, last_seen, item_id]
-            default: drop_rate
+            enum: [appearances, total_stock, item_id]
+            default: appearances
           description: Sort column
         - name: order
           in: query
@@ -1786,7 +1781,7 @@ paths:
           schema:
             type: string
             enum: [asc, desc]
-            default: desc
+            default: asc
           description: Sort direction
       responses:
         '200':
@@ -1816,30 +1811,14 @@ paths:
                       properties:
                         item_id:
                           type: string
-                          example: "Carrot"
+                          example: "Starweaver"
                         appearances:
                           type: integer
-                          example: 412
-                        drop_rate:
-                          type: number
-                          format: float
-                          minimum: 0
-                          maximum: 1
-                          example: 0.572
-                        avg_stock:
-                          type: number
-                          format: float
-                          example: 7.4
-                        min_stock:
+                          example: 4
+                        total_stock:
                           type: integer
-                          example: 3
-                        max_stock:
-                          type: integer
-                          example: 12
-                        last_seen:
-                          type: integer
-                          description: Epoch ms of the latest restock containing this item
-                          example: 1778801479977
+                          description: Total units distributed (sum of stock across appearances)
+                          example: 6
         '400':
           description: Invalid shop / range
           content:

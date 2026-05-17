@@ -143,9 +143,9 @@ export function queryItemsTimeseries({ shop, ids, from, to, bucket, bucketMs }) 
 // Items: aggregated stats
 // =====================
 
-const ITEM_SORT_COLS = new Set(["appearances", "drop_rate", "avg_stock", "last_seen", "item_id"]);
+const ITEM_SORT_COLS = new Set(["appearances", "total_stock", "item_id"]);
 
-export function queryItemsStats({ shop, from, to, sort = "drop_rate", order = "desc" }) {
+export function queryItemsStats({ shop, from, to, sort = "appearances", order = "asc" }) {
   const db = getDB();
   if (!db) return { total_restocks: 0, items: [] };
 
@@ -154,19 +154,15 @@ export function queryItemsStats({ shop, from, to, sort = "drop_rate", order = "d
     WHERE shop_type = ? AND restocked_at >= ? AND restocked_at < ?
   `).get(shop, from, to).n;
 
-  const sortCol = ITEM_SORT_COLS.has(sort) ? sort : "drop_rate";
-  const sortDir = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+  const sortCol = ITEM_SORT_COLS.has(sort) ? sort : "appearances";
+  const sortDir = String(order).toLowerCase() === "desc" ? "DESC" : "ASC";
 
   if (total === 0) return { total_restocks: 0, items: [] };
 
   const rows = db.prepare(`
     SELECT i.item_id,
            COUNT(*) AS appearances,
-           CAST(COUNT(*) AS REAL) / ? AS drop_rate,
-           AVG(i.stock) AS avg_stock,
-           MIN(i.stock) AS min_stock,
-           MAX(i.stock) AS max_stock,
-           MAX(r.restocked_at) AS last_seen
+           SUM(i.stock) AS total_stock
     FROM shop_restock_items i
     JOIN shop_restocks r ON r.id = i.restock_id
     WHERE r.shop_type = ?
@@ -174,7 +170,7 @@ export function queryItemsStats({ shop, from, to, sort = "drop_rate", order = "d
       AND r.restocked_at < ?
     GROUP BY i.item_id
     ORDER BY ${sortCol} ${sortDir}
-  `).all(total, shop, from, to);
+  `).all(shop, from, to);
 
   return { total_restocks: total, items: rows };
 }
