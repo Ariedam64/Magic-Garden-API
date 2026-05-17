@@ -1742,10 +1742,12 @@ paths:
 
         **For each item** the response includes:
         - `appearances`: number of restocks where the item was present
-        - `total_stock`: total units of this item distributed across all its appearances (`SUM(stock)`)
+        - `drop_rate`: `appearances / total_restocks` (between 0 and 1)
+        - `total_stock`: total units distributed across all appearances (`SUM(stock)`)
+        - `avg_stock` / `min_stock` / `max_stock`: stock distribution per appearance
         - `last_seen`: epoch ms of the most recent restock containing this item
 
-        Default sort is `appearances ASC` so the rarest items show up first (e.g. Celestial seeds). Use `total_stock` to sort by total volume distributed, or `last_seen` to surface recent activity.
+        Default sort is `appearances ASC` so the rarest items show up first (e.g. Celestial seeds).
       parameters:
         - name: shop
           in: query
@@ -1773,7 +1775,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [appearances, total_stock, last_seen, item_id]
+            enum: [appearances, drop_rate, total_stock, avg_stock, min_stock, max_stock, last_seen, item_id]
             default: appearances
           description: Sort column
         - name: order
@@ -1816,10 +1818,26 @@ paths:
                         appearances:
                           type: integer
                           example: 4
+                        drop_rate:
+                          type: number
+                          format: float
+                          minimum: 0
+                          maximum: 1
+                          example: 0.012
                         total_stock:
                           type: integer
                           description: Total units distributed (sum of stock across appearances)
                           example: 6
+                        avg_stock:
+                          type: number
+                          format: float
+                          example: 1.5
+                        min_stock:
+                          type: integer
+                          example: 1
+                        max_stock:
+                          type: integer
+                          example: 3
                         last_seen:
                           type: integer
                           description: Epoch ms of the most recent restock containing this item
