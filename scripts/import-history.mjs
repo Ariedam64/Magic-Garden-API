@@ -31,6 +31,51 @@ const EXPORT_DIR = path.join(ROOT, "export");
 const WEATHER_PATH = path.join(EXPORT_DIR, "export-weather-events.json");
 const DB_PATH = path.join(ROOT, "data/history.sqlite");
 
+const VALIDATION_API = process.env.IMPORT_VALIDATION_API || "http://localhost:3002";
+
+// shop_type -> data API category endpoint(s) used to validate item membership.
+const SHOP_CATEGORIES = {
+  seed:  ["/data/plants"],
+  decor: ["/data/decors"],
+  egg:   ["/data/eggs"],
+  tool:  ["/data/items"],
+  dawn:  ["/data/plants", "/data/eggs", "/data/items"],
+};
+
+async function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = (url.startsWith("https") ? import("node:https") : import("node:http"));
+    req.then((mod) => {
+      mod.default.get(url, (r) => {
+        let body = "";
+        r.on("data", (c) => (body += c));
+        r.on("end", () => {
+          try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        });
+      }).on("error", reject);
+    });
+  });
+}
+
+// Returns { [shopType]: Set<itemId> } or null if API unreachable.
+async function loadAllowedItems() {
+  try {
+    const cache = {};
+    const allowed = {};
+    for (const [shop, paths] of Object.entries(SHOP_CATEGORIES)) {
+      const ids = new Set();
+      for (const p of paths) {
+        if (!cache[p]) cache[p] = await fetchJson(`${VALIDATION_API}${p}`);
+        for (const k of Object.keys(cache[p])) ids.add(k);
+      }
+      allowed[shop] = ids;
+    }
+    return allowed;
+  } catch (err) {
+    return null;
+  }
+}
+
 // Discover all restock files matching export-restock-*.json. Each must follow
 // the same shape: { [shopType]: [{ timestamp, weather, items: string[] }, ...] }.
 // Multiple files are merged together; idempotency is handled by INSERT OR IGNORE.
@@ -177,6 +222,19 @@ async function main() {
   }
   const weatherData = JSON.parse(fs.readFileSync(WEATHER_PATH, "utf8"));
 
+  // Fetch canonical item lists from the API to filter out cross-category pollution
+  // (e.g. decor items mistakenly recorded by the bot in the seed shop).
+  // If the API isn't reachable, validation is skipped and we log a warning.
+  console.log(`\nFetching validation lists from ${VALIDATION_API}...`);
+  const allowedItems = await loadAllowedItems();
+  if (!allowedItems) {
+    console.warn("  (API unreachable — item validation will be skipped)");
+  } else {
+    for (const [shop, ids] of Object.entries(allowedItems)) {
+      console.log(`  ${shop.padEnd(6)}: ${ids.size} valid item ids`);
+    }
+  }
+
   const db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
@@ -237,17 +295,23 @@ async function main() {
   console.log("\nImporting shop restocks...");
   const t0 = Date.now();
 
+  const polluted = {}; // shopType -> Map<itemId, count> of rejected items
+
   const importShops = db.transaction(() => {
     let totalRestocksInserted = 0;
     let totalRestocksSkipped = 0;
     let totalItemsInserted = 0;
     let totalItemsSkipped = 0;
+    let totalItemsRejected = 0;
 
     for (const [shopType, arr] of Object.entries(restocksData)) {
       let shopRestocksInserted = 0;
       let shopRestocksSkipped = 0;
       let shopItemsInserted = 0;
       let shopItemsSkipped = 0;
+      let shopItemsRejected = 0;
+
+      const allowed = allowedItems?.[shopType] ?? null;
 
       for (const restock of arr) {
         if (typeof restock?.timestamp !== "number") continue;
@@ -270,6 +334,13 @@ async function main() {
             shopItemsSkipped += 1;
             continue;
           }
+          // Cross-category pollution filter: skip items that don't belong to the shop.
+          if (allowed && !allowed.has(id)) {
+            shopItemsRejected += 1;
+            if (!polluted[shopType]) polluted[shopType] = new Map();
+            polluted[shopType].set(id, (polluted[shopType].get(id) ?? 0) + 1);
+            continue;
+          }
           const r = insertItem.run(restockId, id, stock);
           if (r.changes === 1) shopItemsInserted += 1;
           else shopItemsSkipped += 1;
@@ -281,12 +352,23 @@ async function main() {
         `inserted=${fmtNum(shopRestocksInserted).padStart(7)} restocks ` +
         `(${fmtNum(shopItemsInserted).padStart(8)} items)  ` +
         `skipped=${fmtNum(shopRestocksSkipped).padStart(7)} restocks ` +
-        `(${fmtNum(shopItemsSkipped).padStart(4)} items)`
+        `(${fmtNum(shopItemsSkipped).padStart(4)} items)  ` +
+        `rejected=${fmtNum(shopItemsRejected).padStart(4)} items`
       );
       totalRestocksInserted += shopRestocksInserted;
       totalRestocksSkipped += shopRestocksSkipped;
       totalItemsInserted += shopItemsInserted;
       totalItemsSkipped += shopItemsSkipped;
+      totalItemsRejected += shopItemsRejected;
+    }
+
+    if (totalItemsRejected > 0) {
+      console.log(`\n  Rejected items (cross-category pollution):`);
+      for (const [shop, m] of Object.entries(polluted)) {
+        for (const [id, n] of m) {
+          console.log(`    ${shop}.${id}: ${n}`);
+        }
+      }
     }
 
     console.log(
