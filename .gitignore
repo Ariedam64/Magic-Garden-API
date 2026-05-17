@@ -43,3 +43,7 @@ nul
 sprites_dump/
 data/
 data/version.json
+
+# Local history exports / one-shot dumps (large data, not for git)
+export/
+dump.json
