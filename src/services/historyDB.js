@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS shop_restocks (
 );
 CREATE INDEX IF NOT EXISTS idx_restocks_type_time
   ON shop_restocks(shop_type, restocked_at);
+-- Idempotency: same shop_type cannot have two restocks at the exact same timestamp.
+-- Enables INSERT OR IGNORE for safe re-imports and live recorder resumption.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_restocks_type_time
+  ON shop_restocks(shop_type, restocked_at);
 
 CREATE TABLE IF NOT EXISTS shop_restock_items (
   restock_id INTEGER NOT NULL REFERENCES shop_restocks(id) ON DELETE CASCADE,
@@ -36,6 +40,9 @@ CREATE INDEX IF NOT EXISTS idx_weather_started
   ON weather_events(started_at);
 CREATE INDEX IF NOT EXISTS idx_weather_type
   ON weather_events(weather, started_at);
+-- Idempotency: weather events are uniquely identified by their start timestamp.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_weather_started
+  ON weather_events(started_at);
 `;
 
 let db = null;
@@ -60,15 +67,15 @@ export function initHistoryDB() {
 
   statements = {
     insertRestock: db.prepare(`
-      INSERT INTO shop_restocks (shop_type, restocked_at, restock_interval_seconds)
+      INSERT OR IGNORE INTO shop_restocks (shop_type, restocked_at, restock_interval_seconds)
       VALUES (?, ?, ?)
     `),
     insertItem: db.prepare(`
-      INSERT INTO shop_restock_items (restock_id, item_id, stock)
+      INSERT OR IGNORE INTO shop_restock_items (restock_id, item_id, stock)
       VALUES (?, ?, ?)
     `),
     openWeather: db.prepare(`
-      INSERT INTO weather_events (weather, started_at) VALUES (?, ?)
+      INSERT OR IGNORE INTO weather_events (weather, started_at) VALUES (?, ?)
     `),
     closeOpenWeather: db.prepare(`
       UPDATE weather_events SET ended_at = ?
@@ -88,6 +95,8 @@ export function initHistoryDB() {
         restockedAt,
         intervalSeconds,
       );
+      // Duplicate (shop_type, restocked_at) — already recorded by import or previous run.
+      if (info.changes === 0) return null;
       const restockId = info.lastInsertRowid;
       for (const it of items) {
         statements.insertItem.run(restockId, it.id, it.stock);
