@@ -143,7 +143,7 @@ export function queryItemsTimeseries({ shop, ids, from, to, bucket, bucketMs }) 
 // Items: aggregated stats
 // =====================
 
-const ITEM_SORT_COLS = new Set(["appearances", "total_stock", "item_id"]);
+const ITEM_SORT_COLS = new Set(["appearances", "total_stock", "last_seen", "item_id"]);
 
 export function queryItemsStats({ shop, from, to, sort = "appearances", order = "asc" }) {
   const db = getDB();
@@ -162,7 +162,8 @@ export function queryItemsStats({ shop, from, to, sort = "appearances", order = 
   const rows = db.prepare(`
     SELECT i.item_id,
            COUNT(*) AS appearances,
-           SUM(i.stock) AS total_stock
+           SUM(i.stock) AS total_stock,
+           MAX(r.restocked_at) AS last_seen
     FROM shop_restock_items i
     JOIN shop_restocks r ON r.id = i.restock_id
     WHERE r.shop_type = ?

@@ -1743,8 +1743,9 @@ paths:
         **For each item** the response includes:
         - `appearances`: number of restocks where the item was present
         - `total_stock`: total units of this item distributed across all its appearances (`SUM(stock)`)
+        - `last_seen`: epoch ms of the most recent restock containing this item
 
-        Default sort is `appearances ASC` so the rarest items show up first (e.g. Celestial seeds). Use `total_stock` to sort by total volume distributed.
+        Default sort is `appearances ASC` so the rarest items show up first (e.g. Celestial seeds). Use `total_stock` to sort by total volume distributed, or `last_seen` to surface recent activity.
       parameters:
         - name: shop
           in: query
@@ -1772,7 +1773,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [appearances, total_stock, item_id]
+            enum: [appearances, total_stock, last_seen, item_id]
             default: appearances
           description: Sort column
         - name: order
@@ -1819,6 +1820,10 @@ paths:
                           type: integer
                           description: Total units distributed (sum of stock across appearances)
                           example: 6
+                        last_seen:
+                          type: integer
+                          description: Epoch ms of the most recent restock containing this item
+                          example: 1778801479977
         '400':
           description: Invalid shop / range
           content:
