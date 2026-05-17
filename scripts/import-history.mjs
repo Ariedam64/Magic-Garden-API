@@ -27,9 +27,20 @@ import Database from "better-sqlite3";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-const RESTOCKS_PATH = path.join(ROOT, "export/export-restock-full.json");
-const WEATHER_PATH = path.join(ROOT, "export/export-weather-events.json");
+const EXPORT_DIR = path.join(ROOT, "export");
+const WEATHER_PATH = path.join(EXPORT_DIR, "export-weather-events.json");
 const DB_PATH = path.join(ROOT, "data/history.sqlite");
+
+// Discover all restock files matching export-restock-*.json. Each must follow
+// the same shape: { [shopType]: [{ timestamp, weather, items: string[] }, ...] }.
+// Multiple files are merged together; idempotency is handled by INSERT OR IGNORE.
+function discoverRestockFiles() {
+  if (!fs.existsSync(EXPORT_DIR)) return [];
+  return fs.readdirSync(EXPORT_DIR)
+    .filter((name) => /^export-restock-.+\.json$/.test(name))
+    .map((name) => path.join(EXPORT_DIR, name))
+    .sort();
+}
 
 // Schema kept in sync with src/services/historyDB.js
 const SCHEMA = `
@@ -143,9 +154,27 @@ async function main() {
 
   console.log(`DB:      ${DB_PATH}`);
   console.log(`Mode:    ${opts.mode}${opts.force ? " (forced)" : ""}`);
-  console.log(`Loading: ${RESTOCKS_PATH}`);
-  console.log(`Loading: ${WEATHER_PATH}`);
-  const restocksData = JSON.parse(fs.readFileSync(RESTOCKS_PATH, "utf8"));
+
+  const restockFiles = discoverRestockFiles();
+  if (restockFiles.length === 0) {
+    console.error(`No export-restock-*.json files found in ${EXPORT_DIR}`);
+    process.exit(1);
+  }
+  console.log(`Restock files (${restockFiles.length}):`);
+  for (const f of restockFiles) console.log(`  - ${f}`);
+  console.log(`Weather:  ${WEATHER_PATH}`);
+
+  // Merge all restock files into a single { shopType: [...] } map.
+  // Files are concatenated; (shop_type, timestamp) collisions are handled at INSERT time.
+  const restocksData = {};
+  for (const file of restockFiles) {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const [shopType, arr] of Object.entries(data)) {
+      if (!Array.isArray(arr)) continue;
+      if (!restocksData[shopType]) restocksData[shopType] = [];
+      restocksData[shopType].push(...arr);
+    }
+  }
   const weatherData = JSON.parse(fs.readFileSync(WEATHER_PATH, "utf8"));
 
   const db = new Database(DB_PATH);
