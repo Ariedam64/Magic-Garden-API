@@ -317,10 +317,13 @@ export function queryShopRestocks({ shop, from, to, limit, order = "desc" }) {
 
   const ids = restocks.map((r) => r.id);
   const placeholders = ids.map(() => "?").join(",");
+  // Order by rowid to preserve insertion order = original game order
+  // (without this, SQLite returns rows in composite PK order = alphabetical by item_id).
   const itemRows = db.prepare(`
     SELECT restock_id, item_id, stock
     FROM shop_restock_items
     WHERE restock_id IN (${placeholders})
+    ORDER BY restock_id, rowid
   `).all(...ids);
 
   const itemsByRestockId = new Map();
