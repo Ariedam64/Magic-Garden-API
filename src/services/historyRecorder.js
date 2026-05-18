@@ -8,6 +8,7 @@ import {
   recordWeatherChange,
   closeHistoryDB,
 } from "./historyDB.js";
+import { logShopEvent, logWeatherEvent } from "./eventLogger.js";
 
 const SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn"];
 
@@ -39,7 +40,19 @@ function handleShops(slim) {
     if (hash === prev) continue;
 
     const isBaseline = prev === undefined;
+    const isEmpty = shop.items.length === 0;
     lastItemsHashByShop.set(shopType, hash);
+
+    // Always log the raw event for safety, regardless of whether it's persisted to DB.
+    const rawShops = liveDataService.getShopsRaw();
+    logShopEvent({
+      ts: now,
+      shop_type: shopType,
+      raw: rawShops?.[shopType] ?? null,
+      slim: shop,
+      baseline: isBaseline,
+      empty: isEmpty,
+    });
 
     if (isBaseline) {
       logger.debug({ shopType, itemCount: shop.items.length }, "History: shop baseline captured (not persisted)");
@@ -48,7 +61,7 @@ function handleShops(slim) {
 
     // Track transition to empty in memory (so a later refill is detected as a real change),
     // but don't persist empty restocks — nothing to record.
-    if (shop.items.length === 0) {
+    if (isEmpty) {
       logger.debug({ shopType }, "History: shop transitioned to empty (not persisted)");
       continue;
     }
@@ -66,18 +79,21 @@ function handleShops(slim) {
 
 function handleWeather(weather) {
   if (!weather || typeof weather !== "string") return;
+  const now = Date.now();
 
   if (lastWeatherObserved === null) {
     lastWeatherObserved = weather;
+    logWeatherEvent({ ts: now, weather, baseline: true });
     logger.debug({ weather }, "History: weather baseline captured (not persisted)");
     return;
   }
 
   if (lastWeatherObserved === weather) return;
   lastWeatherObserved = weather;
+  logWeatherEvent({ ts: now, weather, baseline: false });
 
   try {
-    recordWeatherChange(weather, Date.now());
+    recordWeatherChange(weather, now);
     logger.info({ weather }, "History: weather change recorded");
   } catch (err) {
     logger.error({ err: err?.message, weather }, "History: failed to record weather");

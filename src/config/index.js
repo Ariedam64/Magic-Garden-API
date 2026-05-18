@@ -60,5 +60,8 @@ export const config = {
   history: {
     enabled: process.env.HISTORY_ENABLED !== "false",
     dbPath: process.env.HISTORY_DB_PATH || "./data/history.sqlite",
+    // Append-only NDJSON safety-net logs (one file per UTC month).
+    eventsEnabled: process.env.HISTORY_EVENTS_ENABLED !== "false",
+    eventsDir: process.env.HISTORY_EVENTS_DIR || "./data/events",
   },
 };
