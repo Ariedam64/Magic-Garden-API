@@ -54,7 +54,7 @@ export function applyHarvestTypeEnum(mainJs, objLiteral, sandbox) {
  */
 export function applySpriteMapping(mainJs, objLiteral, sandbox) {
   const match = objLiteral.match(
-    /\b(?:sprite|immatureSprite|topmostLayerSprite|iconSpriteKey):([A-Za-z_$][\w$]*)\.(?:Seed|Plant|TallPlant|Pet|Decor|Item|Mutation|MutationOverlay|Animation|Ui)\./
+    /\b(?:sprite|immatureSprite|topmostLayerSprite|iconSpriteKey|activationSprite):([A-Za-z_$][\w$]*)\.(?:Seed|Plant|TallPlant|Pet|Decor|Item|Mutation|MutationOverlay|Animation|Ui)\./
   );
   if (!match) return;
 
@@ -65,8 +65,40 @@ export function applySpriteMapping(mainJs, objLiteral, sandbox) {
 }
 
 /**
+ * Résout les références à des constantes Date externes au literal.
+ *
+ * Le bundle définit `varName=new Date(`ISO`)` puis utilise `expiryDate:varName`
+ * dans les entrées d'items/eggs/decors/seeds. Sans pré-résolution, le proxy
+ * sandbox renvoie un enum proxy vide -> sérialisation en `{}`.
+ */
+export function applyDateConstants(mainJs, objLiteral, sandbox) {
+  const ids = new Set(
+    [...objLiteral.matchAll(/\bexpiryDate:([A-Za-z_$][\w$]*)\b/g)]
+      .map((m) => m[1])
+      .filter((id) => id !== "null" && id !== "undefined")
+  );
+
+  for (const id of ids) {
+    // Cherche `<id>=new Date(`...`)` ailleurs dans le bundle.
+    // L'identifiant peut commencer par _ ou $, donc on échappe.
+    const escaped = id.replace(/[$]/g, "\\$&");
+    const re = new RegExp(
+      `(?:^|[^A-Za-z0-9_$])${escaped}=new Date\\(\`([^\`]+)\`\\)`
+    );
+    const match = mainJs.match(re);
+    if (!match) continue;
+
+    const iso = match[1];
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) continue;
+
+    sandbox[id] = date;
+  }
+}
+
+/**
  * Sandbox de base partagé par toutes les catégories.
- * Résout automatiquement: rarity, weather, sprite mapping.
+ * Résout automatiquement: rarity, weather, sprite mapping, expiry dates.
  */
 export function buildBaseSandbox(mainJs, objLiteral) {
   const sandbox = makeGlobalSandboxProxy();
@@ -74,6 +106,7 @@ export function buildBaseSandbox(mainJs, objLiteral) {
   applyRarityEnum(mainJs, objLiteral, sandbox);
   applyWeatherEnums(mainJs, objLiteral, sandbox);
   applySpriteMapping(mainJs, objLiteral, sandbox);
+  applyDateConstants(mainJs, objLiteral, sandbox);
 
   return sandbox;
 }

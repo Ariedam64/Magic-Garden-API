@@ -9,6 +9,18 @@ import { logger } from "../../logger/index.js";
  */
 const SIGNATURES = ["baseProbability", "baseParameters:{", "trigger:`continuous`"];
 
+/**
+ * Signatures pour le bloc séparé des abilities célestes (MoonKisser, DawnKisser).
+ * Ce bloc n'a ni `baseProbability` ni `trigger:`continuous``, donc il échappe
+ * à l'extracteur principal — mais il est référencé par les plantes célestes
+ * (`abilities:[MoonKisser]` / `abilities:[DawnKisser]`).
+ */
+const CELESTIAL_SIGNATURES = [
+  "MoonKisser:{name:",
+  "DawnKisser:{name:",
+  "trigger:`weather`",
+];
+
 const DEFAULT_ABILITY_COLOR = "#969696";
 
 // Noms d'abilities stables utilisés pour confirmer qu'on a trouvé le bon switch.
@@ -97,10 +109,31 @@ function extractAbilityColors(mainJs) {
 }
 
 /**
+ * Extrait les abilities célestes (MoonKisser, DawnKisser) définies à part.
+ * Retourne {} si non trouvées — le manque doit pas casser l'extraction principale.
+ */
+function extractCelestialAbilities(mainJs) {
+  try {
+    return extractCategoryWithSandbox(
+      mainJs,
+      "celestial-abilities",
+      CELESTIAL_SIGNATURES,
+      buildBaseSandbox
+    ).data;
+  } catch (err) {
+    logger.warn({ err: err.message }, "Celestial abilities block not found");
+    return {};
+  }
+}
+
+/**
  * Extrait les données des abilities du bundle.
  */
 export function extractAbilities(mainJs) {
   const abilities = extractCategoryWithSandbox(mainJs, "abilities", SIGNATURES, buildBaseSandbox).data;
+  const celestial = extractCelestialAbilities(mainJs);
+  Object.assign(abilities, celestial);
+
   const colors = extractAbilityColors(mainJs);
 
   for (const [key, ability] of Object.entries(abilities)) {
