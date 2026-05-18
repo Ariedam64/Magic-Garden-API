@@ -292,6 +292,20 @@ dataRouter.get(
   })
 );
 
+dataRouter.get(
+  "/enums",
+  asyncHandler(async (req, res) => {
+    const spriteVersion = await getStoredVersionCached();
+    if (maybeNotModified(req, res, "enums", spriteVersion)) return;
+
+    const data = await getOrBuildCached("enums", spriteVersion, () =>
+      gameDataService.getEnums()
+    );
+    setDataCacheHeaders(res, "enums", spriteVersion);
+    res.json(data);
+  })
+);
+
 // =====================
 // CSV & TSV endpoints
 // =====================

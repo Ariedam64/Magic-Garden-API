@@ -10,6 +10,7 @@ import {
   extractAbilities,
   extractMutations,
   extractWeathers,
+  extractEnums,
   ExtractorRegistry,
 } from "../core/extractors/index.js";
 import { logger } from "../logger/index.js";
@@ -72,6 +73,14 @@ export const gameDataService = {
    */
   async getWeathers() {
     return getCategoryCached("weathers", extractWeathers);
+  },
+
+  /**
+   * Récupère les enums canoniques (rarity, currency, eligibleShops, itemType,
+   * weather, mutationTierOrder).
+   */
+  async getEnums() {
+    return getCategoryCached("enums", extractEnums);
   },
 
   /**
