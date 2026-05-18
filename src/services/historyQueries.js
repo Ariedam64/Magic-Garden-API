@@ -299,32 +299,64 @@ export function queryWeatherEvents({ from, to, limit, order = "desc" }) {
 // Shops: raw restocks (with items)
 // =====================
 
-export function queryShopRestocks({ shop, from, to, limit, order = "desc" }) {
+export function queryShopRestocks({ shop, from, to, limit, order = "desc", itemIds = null }) {
   const db = getDB();
   if (!db) return [];
 
   const dir = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+  const hasItemFilter = Array.isArray(itemIds) && itemIds.length > 0;
 
-  const restocks = db.prepare(`
-    SELECT id, restocked_at, restock_interval_seconds
-    FROM shop_restocks
-    WHERE shop_type = ? AND restocked_at >= ? AND restocked_at < ?
-    ORDER BY restocked_at ${dir}
-    LIMIT ?
-  `).all(shop, from, to, limit);
+  let restocks;
+  if (hasItemFilter) {
+    // Restrict to restocks that contain at least one of the requested items.
+    const ph = itemIds.map(() => "?").join(",");
+    restocks = db.prepare(`
+      SELECT r.id, r.restocked_at, r.restock_interval_seconds
+      FROM shop_restocks r
+      WHERE r.shop_type = ?
+        AND r.restocked_at >= ?
+        AND r.restocked_at < ?
+        AND EXISTS (
+          SELECT 1 FROM shop_restock_items i
+          WHERE i.restock_id = r.id AND i.item_id IN (${ph})
+        )
+      ORDER BY r.restocked_at ${dir}
+      LIMIT ?
+    `).all(shop, from, to, ...itemIds, limit);
+  } else {
+    restocks = db.prepare(`
+      SELECT id, restocked_at, restock_interval_seconds
+      FROM shop_restocks
+      WHERE shop_type = ? AND restocked_at >= ? AND restocked_at < ?
+      ORDER BY restocked_at ${dir}
+      LIMIT ?
+    `).all(shop, from, to, limit);
+  }
 
   if (restocks.length === 0) return [];
 
   const ids = restocks.map((r) => r.id);
-  const placeholders = ids.map(() => "?").join(",");
+  const idPh = ids.map(() => "?").join(",");
   // Order by rowid to preserve insertion order = original game order
   // (without this, SQLite returns rows in composite PK order = alphabetical by item_id).
-  const itemRows = db.prepare(`
-    SELECT restock_id, item_id, stock
-    FROM shop_restock_items
-    WHERE restock_id IN (${placeholders})
-    ORDER BY restock_id, rowid
-  `).all(...ids);
+  let itemRows;
+  if (hasItemFilter) {
+    const itemPh = itemIds.map(() => "?").join(",");
+    itemRows = db.prepare(`
+      SELECT restock_id, item_id, stock
+      FROM shop_restock_items
+      WHERE restock_id IN (${idPh})
+        AND item_id IN (${itemPh})
+      ORDER BY restock_id, rowid
+    `).all(...ids, ...itemIds);
+  } else {
+    itemRows = db.prepare(`
+      SELECT restock_id, item_id, stock
+      FROM shop_restock_items
+      WHERE restock_id IN (${idPh})
+      ORDER BY restock_id, rowid
+    `).all(...ids);
+  }
 
   const itemsByRestockId = new Map();
   for (const r of itemRows) {

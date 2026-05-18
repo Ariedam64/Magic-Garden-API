@@ -105,17 +105,25 @@ statsRouter.get("/weather/events", (req, res) => {
   }
 });
 
-// GET /stats/shops/restocks?shop=seed&from=...&to=...&limit=100&order=desc
+// GET /stats/shops/restocks?shop=seed&ids=A,B&from=...&to=...&limit=100&order=desc
 statsRouter.get("/shops/restocks", (req, res) => {
   try {
     const shop = validateShop(String(req.query.shop || ""));
     const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
     const limit = resolveLimit(req.query.limit);
     const order = req.query.order ? String(req.query.order) : "desc";
+    const itemIds = parseIds(req.query.ids);
 
-    const restocks = queryShopRestocks({ shop, from, to, limit, order });
+    const restocks = queryShopRestocks({
+      shop, from, to, limit, order,
+      itemIds: itemIds.length > 0 ? itemIds : null,
+    });
 
-    res.json({ shop, from, to, count: restocks.length, limit, restocks });
+    res.json({
+      shop, from, to, count: restocks.length, limit,
+      ...(itemIds.length > 0 ? { ids: itemIds } : {}),
+      restocks,
+    });
   } catch (err) {
     handleValidationError(err, res);
   }

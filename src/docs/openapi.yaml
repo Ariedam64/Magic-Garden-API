@@ -2207,6 +2207,8 @@ paths:
         Returns every restock event for a given shop within the requested window. Each restock embeds its full item list (item_id + initial stock).
 
         Useful for inspecting the exact composition of a specific past restock or rendering an intra-bucket timeline.
+
+        **Item filter (`ids`):** when provided, only restocks containing at least one of the requested item ids are returned, and each restock's `items[]` is restricted to those matching ids. Ideal for "when did item X appear today?" lookups without pulling the full payload.
       parameters:
         - name: shop
           in: query
@@ -2214,6 +2216,13 @@ paths:
           schema:
             type: string
             enum: [seed, tool, egg, decor, dawn]
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated item ids. When set, restricts both restocks returned and the items embedded in each.
+          example: "DawnCelestial,MoonCelestial"
         - name: from
           in: query
           schema:
@@ -2255,6 +2264,11 @@ paths:
                     type: integer
                   limit:
                     type: integer
+                  ids:
+                    type: array
+                    description: Echoed only when an `ids` filter was applied
+                    items:
+                      type: string
                   restocks:
                     type: array
                     items:
