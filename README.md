@@ -72,6 +72,7 @@ The server starts on `http://localhost:3000`
 | `GET /data/eggs` | Animal eggs with sprites |
 | `GET /data/abilities` | Special abilities |
 | `GET /data/weathers` | Weather definitions with sprites |
+| `GET /data/enums` | Canonical game enums (rarity, currency, eligibleShops, itemType, weather, mutationTierOrder) |
 
 ### CSV / TSV Export
 
@@ -105,6 +106,26 @@ The composed endpoint accepts a full atlas key (e.g. `sprite/tallplant/Cactus`) 
 | `GET /live/stream` | Weather + shops updates via Server-Sent Events |
 | `GET /live/weather/stream` | Weather updates via Server-Sent Events |
 | `GET /live/shops/stream` | Shop updates via Server-Sent Events |
+
+### Stats (Aggregated history)
+
+Backed by a local SQLite history of every shop restock and weather transition observed since the recorder was first enabled. Useful for drop-rate dashboards, weather distributions, and intra-bucket timelines.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /stats/items` | Per-item rarity stats for a shop (appearances, drop rate, stock distribution, last seen) |
+| `GET /stats/items/timeseries` | Drop rate / appearances / avg stock per time bucket for one or more items |
+| `GET /stats/weather` | Weather distribution over a window (total duration, share, occurrences, avg duration) |
+| `GET /stats/weather/timeseries` | Weather durations per time bucket (stacked-area-friendly) |
+| `GET /stats/weather/events` | Raw weather event timeline clamped to the window |
+| `GET /stats/shops/restocks` | Raw shop restock timeline with embedded items (supports `ids` filter) |
+
+**Common query parameters:**
+- `shop` (required for `/stats/items*` and `/stats/shops/restocks`): one of `seed`, `tool`, `egg`, `decor`, `dawn`
+- `from` / `to`: epoch ms or ISO 8601 (default: last 30 days)
+- `bucket` (timeseries only): `hour`, `day`, `week` (UTC-aligned, hard cap 10 000 buckets per response)
+- `ids` (optional, comma-separated): restrict `/stats/items/timeseries` and `/stats/shops/restocks` to specific item ids
+- `limit` / `order`: paging on raw event endpoints
 
 ### Health & Information
 
@@ -218,6 +239,40 @@ liveStream.addEventListener('shops', (event) => {
 
 You can also subscribe to specific streams with `/live/weather/stream` or `/live/shops/stream`.
 
+### Get canonical enums
+
+```bash
+curl http://localhost:3000/data/enums | jq
+```
+
+**Response:**
+```json
+{
+  "rarity": ["Common", "Uncommon", "Rare", "Legendary", "Mythical", "Divine", "Celestial"],
+  "currency": ["coins", "credits", "magicDust"],
+  "eligibleShops": ["seed", "egg", "tool", "decor", "dawn"],
+  "itemType": ["Seed", "Produce", "Plant", "Tool", "Pet", "Egg", "Decor"],
+  "weather": ["Rain", "Frost", "Thunderstorm", "Dawn", "AmberMoon"],
+  "mutationTierOrder": ["Wet", "Chilled", "Frozen", "Thunderstruck", "Dawnlit", "Ambershine", "Dawncharged", "Ambercharged"]
+}
+```
+
+### Query aggregated stats
+
+```bash
+# Top rare seeds over the last 30 days (sorted rarest first by default)
+curl "http://localhost:3000/stats/items?shop=seed" | jq
+
+# Daily drop rate of Carrot vs Strawberry over a custom window
+curl "http://localhost:3000/stats/items/timeseries?shop=seed&ids=Carrot,Strawberry&bucket=day&from=2026-04-01&to=2026-05-01" | jq
+
+# Weather distribution over the last week
+curl "http://localhost:3000/stats/weather?from=2026-05-12&to=2026-05-19" | jq
+
+# Find every restock containing a specific Celestial seed
+curl "http://localhost:3000/stats/shops/restocks?shop=seed&ids=Starweaver&limit=20" | jq
+```
+
 ### Export data as CSV / TSV
 
 Append `.csv` or `.tsv` to any data or live endpoint (e.g. `/data/plants.csv`, `/live/shops.tsv`).
@@ -266,6 +321,7 @@ In Google Sheets: `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")`
 │  │  • /data/*     (bundle data)        │   │
 │  │  • /assets/*   (sprites, cosmetics) │   │
 │  │  • /live       (real-time via SSE)  │   │
+│  │  • /stats/*    (history aggregates) │   │
 │  │  • /health     (monitoring)         │   │
 │  │  • /docs       (OpenAPI/Swagger)    │   │
 │  └─────────────────────────────────────┘   │

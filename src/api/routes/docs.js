@@ -219,11 +219,13 @@ const options = {
 
     .swagger-ui .info .description code {
       font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: rgba(79, 227, 193, 0.16);
-      color: ${THEME.primary};
-      padding: 2px 8px;
-      border-radius: 6px;
+      background: transparent;
+      color: #b68ae1;
+      padding: 0;
+      border: none;
+      border-radius: 0;
       font-size: 0.85em;
+      font-weight: 600;
     }
 
     .swagger-ui .info .description pre {
@@ -364,13 +366,17 @@ const options = {
       margin: 6px 0;
     }
 
-    .swagger-ui .opblock-tag-section .markdown code {
-      background: rgba(79, 227, 193, 0.14);
-      color: ${THEME.primary};
-      border: 1px solid rgba(79, 227, 193, 0.2);
-      padding: 2px 6px;
-      border-radius: 6px;
+    .swagger-ui .opblock-tag-section .markdown code,
+    .swagger-ui .opblock-tag-section .renderedMarkdown code,
+    .swagger-ui .markdown code,
+    .swagger-ui .renderedMarkdown code {
+      background: transparent;
+      color: #b68ae1;
+      border: none;
+      padding: 0;
+      border-radius: 0;
       font-size: 0.85em;
+      font-weight: 600;
     }
 
     .swagger-ui .opblock-tag-section .opblock {
@@ -490,6 +496,23 @@ const options = {
       color: ${THEME.textMuted};
       line-height: 1.7;
       font-size: 0.95rem;
+    }
+
+    .swagger-ui .opblock-description-wrapper code,
+    .swagger-ui .opblock-description-wrapper .renderedMarkdown code,
+    .swagger-ui .response-col_description code,
+    .swagger-ui .response-col_description .renderedMarkdown code,
+    .swagger-ui .parameter__name code,
+    .swagger-ui table.parameters .markdown code,
+    .swagger-ui table.parameters .renderedMarkdown code {
+      background: transparent;
+      color: #b68ae1;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: 0.9em;
+      font-weight: 600;
+      font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
     /* ============================================

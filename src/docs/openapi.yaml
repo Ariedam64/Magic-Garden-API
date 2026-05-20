@@ -788,6 +788,74 @@ paths:
                       name: "Sunny"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/SunnyIcon.png"
 
+  /data/enums:
+    get:
+      tags:
+        - Data
+      summary: Get canonical game enums
+      description: |
+        Returns the ordered, canonical list of values for the enums used throughout the game and the rest of the API.
+
+        Values are extracted directly from the minified bundle (signature-based detection on the enum IIFEs), so the
+        order matches the game's source and updates automatically when the bundle changes.
+
+        **Enums returned:**
+        - `rarity`: `Common` → `Celestial`
+        - `currency`: in-game currencies (`coins`, `credits`, `magicDust`)
+        - `eligibleShops`: shop identifiers accepted by `/stats/*` and `/live/shops`
+        - `itemType`: high-level item categories
+        - `weather`: primary weather types (excludes `Sunny` default)
+        - `mutationTierOrder`: ordered mutation tiers (lowest → highest)
+
+        **Resilience:** if an enum cannot be located in the current bundle, it is omitted from the response (and a
+        warning is logged) rather than crashing the request. Consumers should treat each key as optional.
+
+        Same caching behaviour as the other `/data/*` endpoints (ETag + `Cache-Control: public, max-age=300`).
+      responses:
+        '200':
+          description: Canonical enums
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rarity:
+                    type: array
+                    items:
+                      type: string
+                  currency:
+                    type: array
+                    items:
+                      type: string
+                  eligibleShops:
+                    type: array
+                    items:
+                      type: string
+                  itemType:
+                    type: array
+                    items:
+                      type: string
+                  weather:
+                    type: array
+                    items:
+                      type: string
+                  mutationTierOrder:
+                    type: array
+                    items:
+                      type: string
+              examples:
+                enums:
+                  summary: Example enums payload
+                  value:
+                    rarity: ["Common", "Uncommon", "Rare", "Legendary", "Mythical", "Divine", "Celestial"]
+                    currency: ["coins", "credits", "magicDust"]
+                    eligibleShops: ["seed", "egg", "tool", "decor", "dawn"]
+                    itemType: ["Seed", "Produce", "Plant", "Tool", "Pet", "Egg", "Decor"]
+                    weather: ["Rain", "Frost", "Thunderstorm", "Dawn", "AmberMoon"]
+                    mutationTierOrder: ["Wet", "Chilled", "Frozen", "Thunderstruck", "Dawnlit", "Ambershine", "Dawncharged", "Ambercharged"]
+        '304':
+          description: Not modified (matched If-None-Match)
+
   /data/plants.csv:
     get:
       tags:
@@ -1962,6 +2030,140 @@ paths:
                             avg_stock: 2.0
         '400':
           description: Invalid shop / bucket / range / too many buckets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stats/items/events:
+    get:
+      tags:
+        - Stats
+      summary: Raw item appearance events for a shop
+      description: |
+        Returns one row per item appearance (= one row per `(restock, item)` pair).
+
+        Use this endpoint when you need exact `restocked_at` timestamps — for example
+        a chart zoomed in tight enough that day/hour buckets hide individual drops.
+
+        The response includes `restock_interval_seconds` from the parent restock,
+        so callers can derive the in-shop presence window
+        (`[restocked_at, restocked_at + restock_interval_seconds * 1000)`) without
+        knowing shop cadences out-of-band.
+
+        Capped at 20 000 events per call (default 5 000). For wider windows,
+        prefer `/stats/items/timeseries` with `bucket=day` or `bucket=hour`.
+      parameters:
+        - name: shop
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [seed, tool, egg, decor, dawn]
+          description: Shop type
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated item IDs. When omitted, returns events for every item in the shop.
+          example: "MoonCelestial,Dawnbreaker"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Window start (epoch ms or ISO 8601). Defaults to 30 days ago.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Window end (epoch ms or ISO 8601). Defaults to now.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20000
+            default: 5000
+          description: Max number of events to return.
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+          description: Sort order by `restocked_at`. Default `asc` (chronological).
+      responses:
+        '200':
+          description: Item events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shop:
+                    type: string
+                    example: "seed"
+                  from:
+                    type: integer
+                    example: 1779115619918
+                  to:
+                    type: integer
+                    example: 1779288419943
+                  count:
+                    type: integer
+                    description: Number of events returned (may be capped by `limit`).
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 5000
+                  ids:
+                    type: array
+                    description: Echoes the filter when `ids` was supplied.
+                    items:
+                      type: string
+                    example: ["MoonCelestial", "Dawnbreaker"]
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        item_id:
+                          type: string
+                          example: "MoonCelestial"
+                        restocked_at:
+                          type: integer
+                          description: Epoch ms of the parent restock.
+                          example: 1779225300679
+                        stock:
+                          type: integer
+                          description: Quantity of this item in the restock.
+                          example: 1
+                        restock_interval_seconds:
+                          type: integer
+                          description: Cadence of the parent restock at the time it happened. Add this (× 1000) to `restocked_at` to get the moment the item left the shop.
+                          example: 300
+              examples:
+                seed_two_celestials:
+                  summary: Two celestial seeds over the last 2 days
+                  value:
+                    shop: "seed"
+                    from: 1779115619918
+                    to: 1779288419943
+                    count: 1
+                    limit: 5000
+                    ids: ["MoonCelestial", "Dawnbreaker"]
+                    events:
+                      - item_id: "MoonCelestial"
+                        restocked_at: 1779225300679
+                        stock: 1
+                        restock_interval_seconds: 300
+        '400':
+          description: Invalid shop / range
           content:
             application/json:
               schema:

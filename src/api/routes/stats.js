@@ -6,8 +6,10 @@ import {
   resolveRange,
   resolveBucket,
   resolveLimit,
+  resolveEventsLimit,
   queryItemsTimeseries,
   queryItemsStats,
+  queryItemsEvents,
   queryWeatherStats,
   queryWeatherTimeseries,
   queryWeatherEvents,
@@ -42,6 +44,29 @@ statsRouter.get("/items/timeseries", (req, res) => {
     const series = queryItemsTimeseries({ shop, ids, from, to, bucket, bucketMs: ms });
 
     res.json({ shop, bucket, from, to, series });
+  } catch (err) {
+    handleValidationError(err, res);
+  }
+});
+
+// GET /stats/items/events?shop=seed&ids=A,B&from=...&to=...&limit=5000&order=asc
+// Raw per-appearance events (one row per item in each restock). Used by the
+// shop history chart when zoomed in tight enough that aggregation hides detail.
+statsRouter.get("/items/events", (req, res) => {
+  try {
+    const shop = validateShop(String(req.query.shop || ""));
+    const ids = parseIds(req.query.ids);
+    const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
+    const limit = resolveEventsLimit(req.query.limit);
+    const order = req.query.order ? String(req.query.order) : "asc";
+
+    const events = queryItemsEvents({ shop, ids, from, to, limit, order });
+
+    res.json({
+      shop, from, to, count: events.length, limit,
+      ...(ids.length > 0 ? { ids } : {}),
+      events,
+    });
   } catch (err) {
     handleValidationError(err, res);
   }

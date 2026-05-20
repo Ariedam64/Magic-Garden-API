@@ -183,6 +183,59 @@ export function queryItemsStats({ shop, from, to, sort = "appearances", order = 
 }
 
 // =====================
+// Items: raw events
+// =====================
+
+const EVENTS_DEFAULT_LIMIT = 5000;
+const EVENTS_MAX_LIMIT = 20000;
+
+export function resolveEventsLimit(raw) {
+  const n = raw == null || raw === "" ? EVENTS_DEFAULT_LIMIT : Number(raw);
+  if (!Number.isFinite(n) || n < 1) return EVENTS_DEFAULT_LIMIT;
+  return Math.min(Math.floor(n), EVENTS_MAX_LIMIT);
+}
+
+export function queryItemsEvents({ shop, ids, from, to, limit, order = "asc" }) {
+  const db = getDB();
+  if (!db) return [];
+
+  const dir = String(order).toLowerCase() === "desc" ? "DESC" : "ASC";
+  const hasItemFilter = Array.isArray(ids) && ids.length > 0;
+
+  if (hasItemFilter) {
+    const ph = ids.map(() => "?").join(",");
+    return db.prepare(`
+      SELECT i.item_id,
+             r.restocked_at,
+             i.stock,
+             r.restock_interval_seconds
+      FROM shop_restock_items i
+      JOIN shop_restocks r ON r.id = i.restock_id
+      WHERE r.shop_type = ?
+        AND r.restocked_at >= ?
+        AND r.restocked_at < ?
+        AND i.item_id IN (${ph})
+      ORDER BY r.restocked_at ${dir}
+      LIMIT ?
+    `).all(shop, from, to, ...ids, limit);
+  }
+
+  return db.prepare(`
+    SELECT i.item_id,
+           r.restocked_at,
+           i.stock,
+           r.restock_interval_seconds
+    FROM shop_restock_items i
+    JOIN shop_restocks r ON r.id = i.restock_id
+    WHERE r.shop_type = ?
+      AND r.restocked_at >= ?
+      AND r.restocked_at < ?
+    ORDER BY r.restocked_at ${dir}
+    LIMIT ?
+  `).all(shop, from, to, limit);
+}
+
+// =====================
 // Weather: aggregated stats
 // =====================
 
