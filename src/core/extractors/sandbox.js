@@ -1,5 +1,7 @@
 // src/core/extractors/sandbox.js
 
+import vm from "node:vm";
+
 import {
   makeEnumProxy,
   makeGlobalSandboxProxy,
@@ -97,8 +99,61 @@ export function applyDateConstants(mainJs, objLiteral, sandbox) {
 }
 
 /**
+ * Résout les références à des constantes numériques externes au literal.
+ *
+ * Le bundle peut déclarer `varName = 1320 * 60` puis utiliser `secondsToMature: varName`
+ * dans les entrées de plantes. Sans pré-résolution, le proxy sandbox renvoie un enum
+ * proxy vide -> sérialisation en `{}` au lieu du nombre attendu.
+ *
+ * Scanne le literal pour tous les identifiants utilisés comme valeurs nues
+ * (`key: ident,`) puis recherche dans le bundle une assignation `ident = <expr>`
+ * dont l'évaluation produit un nombre fini.
+ */
+export function applyNumericConstants(mainJs, objLiteral, sandbox) {
+  const RESERVED = new Set([
+    "true",
+    "false",
+    "null",
+    "undefined",
+    "NaN",
+    "Infinity",
+  ]);
+
+  const ids = new Set(
+    [...objLiteral.matchAll(/[:,]\s*([A-Za-z_$][\w$]*)\s*(?=[,;}\]])/g)]
+      .map((m) => m[1])
+      .filter((id) => !RESERVED.has(id))
+  );
+
+  for (const id of ids) {
+    const escaped = id.replace(/[$]/g, "\\$&");
+    const re = new RegExp(
+      `(?:^|[^A-Za-z0-9_$.])${escaped}\\s*=\\s*([^,;\\n}]+)`
+    );
+    const match = mainJs.match(re);
+    if (!match) continue;
+
+    const expr = match[1].trim();
+    // Garde-fou: l'expression doit ressembler à un calcul numérique pur
+    // (chiffres, opérateurs, parenthèses, points, espaces).
+    if (!/^[0-9.\s+\-*/()]+$/.test(expr)) continue;
+
+    let value;
+    try {
+      value = vm.runInNewContext(expr, {}, { timeout: 100 });
+    } catch {
+      continue;
+    }
+
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    sandbox[id] = value;
+  }
+}
+
+/**
  * Sandbox de base partagé par toutes les catégories.
- * Résout automatiquement: rarity, weather, sprite mapping, expiry dates.
+ * Résout automatiquement: rarity, weather, sprite mapping, expiry dates,
+ * constantes numériques.
  */
 export function buildBaseSandbox(mainJs, objLiteral) {
   const sandbox = makeGlobalSandboxProxy();
@@ -107,6 +162,7 @@ export function buildBaseSandbox(mainJs, objLiteral) {
   applyWeatherEnums(mainJs, objLiteral, sandbox);
   applySpriteMapping(mainJs, objLiteral, sandbox);
   applyDateConstants(mainJs, objLiteral, sandbox);
+  applyNumericConstants(mainJs, objLiteral, sandbox);
 
   return sandbox;
 }
