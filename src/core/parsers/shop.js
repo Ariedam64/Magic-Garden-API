@@ -2,33 +2,45 @@
 
 import { BaseParser, applyPatch } from "./base.js";
 
+// Champs d'identifiant connus, testés dans l'ordre. Chaque item ne renseigne
+// que le champ correspondant à son type (un seed n'a que `species`, un egg que
+// `eggId`, etc.), donc un item mixte (shop dawn/snow) est résolu correctement.
+const ITEM_ID_FIELDS = [
+  "species",
+  "eggId",
+  "toolId",
+  "decorId",
+  "potionId",
+  "seedId",
+  "itemId",
+];
+
 /**
- * Extrait le nom d'un item de shop selon son type.
+ * Extrait le nom canonique d'un item de shop, quel que soit son type.
+ *
+ * Générique par conception : gère les shops mono-type (seed, tool, egg, decor)
+ * comme les shops mixtes (dawn, snow) qui contiennent œufs, graines, potions et
+ * décor côte à côte — et reste robuste si le jeu ajoute de nouveaux types.
  */
-function getShopItemName(item, shopType) {
+function getShopItemName(item) {
   if (!item) return null;
 
-  switch (shopType) {
-    case "seed":
-      return item.species ?? null;
-    case "tool":
-      return item.toolId ?? null;
-    case "egg":
-      return item.eggId ?? null;
-    case "decor":
-      return item.decorId ?? null;
-    case "dawn":
-      if (item.itemType === "Egg") return item.eggId ?? null;
-      return item.species ?? null;
-    default:
-      return null;
+  for (const field of ITEM_ID_FIELDS) {
+    if (item[field]) return item[field];
   }
+
+  // Filet de sécurité : tout champ se terminant par `Id` (nouveau type inconnu).
+  for (const [key, value] of Object.entries(item)) {
+    if (/Id$/.test(key) && typeof value === "string" && value) return value;
+  }
+
+  return item.name ?? null;
 }
 
 /**
  * Simplifie les données d'un shop.
  */
-function simplifyShop(shop, type) {
+function simplifyShop(shop) {
   if (!shop) return null;
 
   const inv = Array.isArray(shop.inventory) ? shop.inventory : [];
@@ -36,7 +48,7 @@ function simplifyShop(shop, type) {
   const items = inv
     .filter((it) => Number(it?.initialStock ?? 0) > 0)
     .map((it) => ({
-      name: getShopItemName(it, type),
+      name: getShopItemName(it),
       stock: Number(it.initialStock ?? 0),
     }))
     .filter((it) => it.name);
@@ -49,17 +61,18 @@ function simplifyShop(shop, type) {
 
 /**
  * Simplifie les données de tous les shops.
+ *
+ * Itère dynamiquement sur tous les shops présents : aucun type codé en dur, donc
+ * un nouveau shop envoyé par le jeu (ex. `snow`) apparaît automatiquement.
  */
 function simplifyShops(shops) {
   if (!shops || typeof shops !== "object") return null;
 
-  return {
-    seed: simplifyShop(shops.seed, "seed"),
-    tool: simplifyShop(shops.tool, "tool"),
-    egg: simplifyShop(shops.egg, "egg"),
-    decor: simplifyShop(shops.decor, "decor"),
-    dawn: simplifyShop(shops.dawn, "dawn"),
-  };
+  const result = {};
+  for (const [type, shop] of Object.entries(shops)) {
+    result[type] = simplifyShop(shop);
+  }
+  return result;
 }
 
 /**

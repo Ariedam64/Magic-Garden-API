@@ -10,8 +10,6 @@ import {
 } from "./historyDB.js";
 import { logShopEvent, logWeatherEvent } from "./eventLogger.js";
 
-const SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn"];
-
 const lastItemsHashByShop = new Map();
 let lastWeatherObserved = null;
 let unsubShops = null;
@@ -30,8 +28,9 @@ function handleShops(slim) {
   if (!slim || typeof slim !== "object") return;
   const now = Date.now();
 
-  for (const shopType of SHOP_TYPES) {
-    const shop = slim[shopType];
+  // Itère sur tous les shops présents (pas de liste codée en dur) : un nouveau
+  // shop comme `snow` est enregistré automatiquement.
+  for (const [shopType, shop] of Object.entries(slim)) {
     if (!shop || !Array.isArray(shop.items)) continue;
 
     const hash = hashItems(shop.items);

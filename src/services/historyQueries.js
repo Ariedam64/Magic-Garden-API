@@ -2,7 +2,7 @@
 
 import { getDB } from "./historyDB.js";
 
-export const SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn"];
+export const SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn", "snow"];
 export const BUCKETS = ["hour", "day", "week"];
 
 const MS = {
