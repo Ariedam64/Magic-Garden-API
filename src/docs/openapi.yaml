@@ -107,7 +107,7 @@ tags:
 
       **Data sources:**
       - Weather: Current in-game weather condition
-      - Shops: Current inventory and restock timers for all shops (seed, tool, egg, decor)
+      - Shops: Current inventory and restock timers for all shops (seed, tool, egg, decor, dawn, snow, thunder)
 
       **Update methods:**
       - Snapshot: One-time GET request for current state
@@ -849,7 +849,7 @@ paths:
                   value:
                     rarity: ["Common", "Uncommon", "Rare", "Legendary", "Mythical", "Divine", "Celestial"]
                     currency: ["coins", "credits", "magicDust"]
-                    eligibleShops: ["seed", "egg", "tool", "decor", "dawn"]
+                    eligibleShops: ["seed", "egg", "tool", "decor", "dawn", "snow", "thunder"]
                     itemType: ["Seed", "Produce", "Plant", "Tool", "Pet", "Egg", "Decor"]
                     weather: ["Rain", "Frost", "Thunderstorm", "Dawn", "AmberMoon"]
                     mutationTierOrder: ["Wet", "Chilled", "Frozen", "Thunderstruck", "Dawnlit", "Ambershine", "Dawncharged", "Ambercharged"]
@@ -1397,7 +1397,7 @@ paths:
 
         **Includes:**
         - Current weather condition
-        - All shop inventories (seed, tool, egg, decor)
+        - All shop inventories (seed, tool, egg, decor, dawn, snow, thunder)
         - Restock timers for each shop
 
         **Use cases:**
@@ -1822,7 +1822,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [seed, tool, egg, decor, dawn]
+            enum: [seed, tool, egg, decor, dawn, snow, thunder]
           description: Shop type
         - name: from
           in: query
@@ -1932,7 +1932,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [seed, tool, egg, decor, dawn]
+            enum: [seed, tool, egg, decor, dawn, snow, thunder]
         - name: ids
           in: query
           required: true
@@ -2059,7 +2059,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [seed, tool, egg, decor, dawn]
+            enum: [seed, tool, egg, decor, dawn, snow, thunder]
           description: Shop type
         - name: ids
           in: query
@@ -2417,7 +2417,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [seed, tool, egg, decor, dawn]
+            enum: [seed, tool, egg, decor, dawn, snow, thunder]
         - name: ids
           in: query
           required: false

@@ -46,7 +46,7 @@ function append(file, obj) {
  * Log a shop change event.
  * @param {object} ev
  * @param {number} ev.ts             Epoch ms at detection time.
- * @param {string} ev.shop_type      'seed'|'tool'|'egg'|'decor'|'dawn'.
+ * @param {string} ev.shop_type      'seed'|'tool'|'egg'|'decor'|'dawn'|'snow'|'thunder'.
  * @param {object|null} ev.raw       The raw shop object from the WS parser (full inventory).
  * @param {object} ev.slim           The simplified version we feed to the DB recorder.
  * @param {boolean} ev.baseline      True for the boot-time baseline (not persisted to DB).
