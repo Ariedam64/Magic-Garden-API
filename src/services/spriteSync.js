@@ -149,12 +149,30 @@ async function fetchAllAtlases(baseUrl) {
   logger.debug({ atlasFiles: Array.from(atlasJsonFiles) }, "Atlas files to fetch");
 
   const atlasMap = {};
-  for (const jsonFile of atlasJsonFiles) {
+  const queue = Array.from(atlasJsonFiles);
+
+  while (queue.length) {
+    const jsonFile = queue.shift();
+    if (atlasMap[jsonFile]) continue;
+
     try {
       const url = joinUrl(baseUrl, jsonFile);
       const atlasJson = await fetchJson(url);
       atlasMap[jsonFile] = atlasJson;
       logger.debug({ jsonFile, frameCount: Object.keys(atlasJson?.frames || {}).length }, "Atlas loaded");
+
+      // TexturePacker multi-pack : les atlases supplémentaires (sprites-1/2/3)
+      // ne sont listés que dans meta.related_multi_packs du premier atlas.
+      // Sans ça, on rate des centaines de frames (ex. Cardoon).
+      const related = atlasJson?.meta?.related_multi_packs;
+      if (Array.isArray(related)) {
+        const dir = jsonFile.includes("/") ? jsonFile.replace(/[^/]+$/, "") : "";
+        for (const rel of related) {
+          if (typeof rel !== "string") continue;
+          const relPath = dir + rel;
+          if (!atlasMap[relPath] && !queue.includes(relPath)) queue.push(relPath);
+        }
+      }
     } catch (err) {
       logger.warn({ jsonFile, error: err.message }, "Failed to fetch atlas, skipping");
     }
