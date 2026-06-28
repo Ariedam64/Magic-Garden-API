@@ -23,8 +23,11 @@ composedRouter.get(
     const key = String(req.query.key || "").trim();
     if (!key) throw Errors.badRequest("Missing required query param: key");
 
-    // Sanitize key: must look like sprite/<category>/<name> or weather/<name>
-    if (!/^[\w/\-.]+$/.test(key)) throw Errors.badRequest("Invalid key format");
+    // Sanitize key: must look like sprite/<category>/<name>, weather/<name> or
+    // tile/<name>. Upstream asset names occasionally contain spaces (e.g.
+    // "Rectangle 81"), so the allow-list includes a literal space. Lookup is
+    // dict-based (no filesystem), so path-traversal isn't a concern.
+    if (!/^[\w/\-. ]+$/.test(key)) throw Errors.badRequest("Invalid key format");
 
     const rawMutations = String(req.query.mutations || "")
       .split(",")

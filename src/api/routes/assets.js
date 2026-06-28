@@ -1,7 +1,7 @@
 // src/api/routes/assets.js
 
 import express from "express";
-import { asyncHandler } from "../middleware/index.js";
+import { asyncHandler, Errors } from "../middleware/index.js";
 import { assetDataService } from "../../services/index.js";
 import { spritesRouter } from "./sprites.js";
 import { composedRouter } from "./composed.js";
@@ -67,6 +67,31 @@ assetsRouter.get(
     }
     applyCacheHeaders(res, { etag, cacheControl: ASSETS_CACHE_CONTROL });
     res.json(data);
+  })
+);
+
+// GET /assets/proxy?url=<https-magicgarden.gg-url>
+// Streams an upstream asset (cosmetic PNGs, audio mp3s, …) through this API so
+// clients can fetch + download them cross-origin. Upstream magicgarden.gg
+// doesn't set CORS, so the browser blocks direct fetch from third-party
+// origins like the explorer page; this proxy adds the headers we need.
+// Whitelisted to magicgarden.gg only - not a general open proxy.
+assetsRouter.get(
+  "/proxy",
+  asyncHandler(async (req, res) => {
+    const url = String(req.query.url || "");
+    if (!url) throw Errors.badRequest("Missing required query param: url");
+    if (!/^https:\/\/magicgarden\.gg\/[\w./%-]+$/i.test(url)) {
+      throw Errors.badRequest("URL must be a https://magicgarden.gg/ asset");
+    }
+    const upstream = await fetch(url);
+    if (!upstream.ok) throw Errors.notFound(`Upstream HTTP ${upstream.status}`);
+    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
+    res.set("Cache-Control", "public, max-age=86400, immutable");
+    res.type(contentType).send(buf);
   })
 );
 

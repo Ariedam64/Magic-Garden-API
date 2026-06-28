@@ -254,31 +254,38 @@ export async function getSpritesPayload({ full = false, search = "", cat = "", f
   const q = String(search || "").toLowerCase().trim();
   const filterCat = String(cat || "").trim();
 
+  // Build the slim payload AND the (cat, slim) pairs in one pass — the slim
+  // shape drops `cat` to keep the response compact, so we have to remember
+  // each item's true category here rather than recovering it later by id.
+  // (Several distinct sprites can share the same id across atlases — e.g.
+  // a decor frame and an animation both keyed `sprite/decor/PetHutch` —
+  // so id-lookup would silently miscategorize one of them.)
   const list = [];
+  const pairs = []; // [{ cat, item }]
 
   for (const x of state.all) {
     if (filterCat && x.cat !== filterCat) continue;
     if (q && !String(x.id || "").toLowerCase().includes(q)) continue;
 
-    list.push(
-      full
-        ? x
-        : x.type === "animation"
-          ? {
-              type: "animation",
-              id: x.id,
-              name: x.name,
-              url: x.url,
-              frames: x.frames,
-            }
-          : {
-              type: "frame",
-              id: x.id,
-              name: x.name,
-              url: x.url,
-              frame: x.frame,
-            },
-    );
+    const slim = full
+      ? x
+      : x.type === "animation"
+        ? {
+            type: "animation",
+            id: x.id,
+            name: x.name,
+            url: x.url,
+            frames: x.frames,
+          }
+        : {
+            type: "frame",
+            id: x.id,
+            name: x.name,
+            url: x.url,
+            frame: x.frame,
+          };
+    list.push(slim);
+    pairs.push({ cat: x.cat, item: slim });
   }
 
   if (flat) {
@@ -291,10 +298,10 @@ export async function getSpritesPayload({ full = false, search = "", cat = "", f
 
   const groups = new Map(); // ✅ garde l'ordre d'apparition
 
-  for (const x of list) {
-    const c = full ? x.cat : (state.all.find((z) => z.id === x.id)?.cat || "misc");
-    if (!groups.has(c)) groups.set(c, []);
-    groups.get(c).push(x);
+  for (const { cat: c, item } of pairs) {
+    const k = c || "misc";
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(item);
   }
 
   return {
