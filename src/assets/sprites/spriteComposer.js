@@ -7,7 +7,7 @@ import { gameDataService } from "../../services/gameData.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MUTATION_ORDER = [
-  "Gold", "Rainbow", "Wet", "Chilled", "Frozen", "Thunderstruck",
+  "Gold", "Rainbow", "Wet", "Chilled", "Frozen", "Thunderstruck", "Thundercharged",
   "Ambershine", "Dawnlit", "Dawncharged", "Ambercharged",
 ];
 
@@ -17,6 +17,7 @@ const MUTATION_COLORS = {
   Chilled:      { r: 100, g: 160, b: 210, a: 0.45 },
   Frozen:       { r: 100, g: 130, b: 220, a: 0.50 },
   Thunderstruck:{ r:  16, g: 141, b: 163, a: 0.40 },
+  Thundercharged:{ r:  60, g: 200, b: 165, a: 0.45 },
   Dawnlit:      { r: 209, g:  70, b: 231, a: 0.50 },
   Ambershine:   { r: 190, g: 100, b:  40, a: 0.50 },
   Dawncharged:  { r: 140, g:  80, b: 200, a: 0.50 },
@@ -33,6 +34,7 @@ const MUTATION_CONFIG = {
   Chilled:      { iconKey: "sprite/mutation/Chilled",                                                          overlayKey: "sprite/mutation-overlay/ChilledTallPlant" },
   Frozen:       { iconKey: "sprite/mutation/Frozen",                                                           overlayKey: "sprite/mutation-overlay/FrozenTallPlant" },
   Thunderstruck:{ iconKey: "sprite/mutation/Thunderstruck", tallIconKey: "sprite/mutation/ThunderstruckGround", overlayKey: "sprite/mutation-overlay/ThunderstruckTallPlant", overlayFromBottom: true },
+  Thundercharged:{ iconKey: "sprite/mutation/Thundercharged", tallIconKey: "sprite/mutation/ThunderchargedGround", overlayKey: "sprite/mutation-overlay/ThunderchargedTallPlant", overlayFromBottom: true },
   Dawnlit:      { iconKey: "sprite/mutation/Dawnlit" },
   Ambershine:   { iconKey: "sprite/mutation/Amberlit" },
   Dawncharged:  { iconKey: "sprite/mutation/Dawncharged" },
@@ -42,7 +44,7 @@ const MUTATION_CONFIG = {
 // Floating mutations drawn in front of plant (z=10) — matches game's Qd set
 const FLOATING_MUTATIONS = new Set(["Dawnlit", "Ambershine", "Dawncharged", "Ambercharged"]);
 const WARM_MUTATIONS      = new Set(["Ambershine", "Dawnlit", "Dawncharged", "Ambercharged"]);
-const WATER_ICE_MUTATIONS = new Set(["Wet", "Chilled", "Frozen", "Thunderstruck"]);
+const WATER_ICE_MUTATIONS = new Set(["Wet", "Chilled", "Frozen", "Thunderstruck", "Thundercharged"]);
 
 // Exact values from game bundle ($d and ef)
 const MUT_ICON_Y_EXCEPT = {
