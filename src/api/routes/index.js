@@ -7,3 +7,5 @@ export { docsRouter } from "./docs.js";
 export { spritesRouter } from "./sprites.js";
 export { assetsRouter } from "./assets.js";
 export { statsRouter } from "./stats.js";
+// Hidden, unlinked weather explorer (not advertised in root/docs/openapi).
+export { weatherPredictionRouter } from "./weatherPrediction.js";
