@@ -17,7 +17,6 @@ import {
   dataRouter, dataCsvRootHandler, dataTsvRootHandler,
   liveRouter, liveCsvRootHandler, liveTsvRootHandler,
   healthRouter, docsRouter, assetsRouter, statsRouter,
-  weatherPredictionRouter,
 } from "./routes/index.js";
 
 /**
@@ -79,10 +78,6 @@ export function createApp() {
 
   // Stats routes (aggregated history)
   app.use("/stats", statsRouter);
-
-  // Hidden weather explorer — intentionally NOT listed in the root endpoints
-  // response, the docs, or the OpenAPI spec. Reachable only by direct URL.
-  app.use("/weather-prediction", weatherPredictionRouter);
 
   // Root endpoint
   app.get("/", (_req, res) => {
