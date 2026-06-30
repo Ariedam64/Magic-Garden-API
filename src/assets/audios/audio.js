@@ -94,26 +94,32 @@ export async function initAudio() {
     state.sfxAtlas = null;
 
     for (const asset of bundle.assets || []) {
-      for (const src of asset.src || []) {
-        if (typeof src !== "string") continue;
+      const aliases = Array.isArray(asset.alias) ? asset.alias : [];
+      const srcs = Array.isArray(asset.src) ? asset.src : [];
 
-        // ✅ ambience/music
-        const m = /^audio\/(ambience|music)\/(.+)\.mp3$/i.exec(src);
-        if (m) {
-          const cat = m[1].toLowerCase();
-          const name = m[2];
-          const url = joinUrl(baseUrl, src);
-
+      // ✅ ambience/music — match on alias (src paths are now hashed)
+      const aliasMatch = aliases
+        .map(a => /^audio\/(ambience|music)\/(.+?)(?:\.wav)?$/i.exec(a))
+        .find(Boolean);
+      if (aliasMatch) {
+        const cat = aliasMatch[1].toLowerCase();
+        const name = aliasMatch[2];
+        const rawSrc = srcs.find(s => typeof s === "string" && s.endsWith(".mp3"));
+        if (rawSrc) {
+          const url = joinUrl(baseUrl, rawSrc);
           rememberTheme(name);
-
           if (cat === "ambience") state.ambience.set(name, url);
           else state.music.set(name, url);
-
-          continue;
         }
+        continue;
+      }
+
+      for (const src of srcs) {
+        if (typeof src !== "string") continue;
 
         // ✅ sfx audio + atlas
-        if (/^audio\/sfx\/sfx\.mp3$/i.test(src)) {
+        // Path changed from `audio/sfx/sfx.mp3` to `/runtime-assets/sfx.<hash>.mp3`
+        if (/^audio\/sfx\/sfx\.mp3$|^\/runtime-assets\/sfx\.[a-f0-9]+\.mp3$/i.test(src)) {
           state.sfxAudioUrl = joinUrl(baseUrl, src);
           continue;
         }
