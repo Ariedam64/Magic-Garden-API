@@ -1345,6 +1345,7 @@
     respBox.appendChild(meta);
 
     var bodyEl = el('<div class="resp-body"></div>');
+    var truncated = false;
 
     if (r.isImage) {
       var imgUrl = URL.createObjectURL(r.payload);
@@ -1358,7 +1359,6 @@
       fullText = String(r.payload);
       sizeInfo = fmtSize(fullText.length);
       var display = fullText;
-      var truncated = false;
       if (display.length > MAX_RENDER) {
         display = display.slice(0, MAX_RENDER);
         truncated = true;
@@ -1376,15 +1376,15 @@
       } else {
         bodyEl.textContent = display;
       }
-      if (truncated) {
-        respBox.appendChild(bodyEl);
-        respBox.appendChild(el(
-          '<p class="trunc-note">Showing the first part only (' + fmtSize(fullText.length) +
-          " in total). Use Copy or cURL to grab the whole response.</p>"
-        ));
-      }
     }
-    if (!bodyEl.parentNode) respBox.appendChild(bodyEl);
+
+    respBox.appendChild(bodyEl);
+    if (truncated) {
+      respBox.appendChild(el(
+        '<p class="trunc-note">Showing the first part only (' + fmtSize(fullText.length) +
+        " in total). Use Copy or cURL to grab the whole response.</p>"
+      ));
+    }
     meta.querySelector(".resp-size").textContent = sizeInfo;
 
     var copyBtn = meta.querySelector(".copy-resp");
