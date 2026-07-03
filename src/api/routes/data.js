@@ -113,7 +113,7 @@ dataRouter.get(
     const spriteVersion = await getStoredVersionCached();
 
     const data = await getOrBuildCached("all", spriteVersion, async () => {
-      const [plants, pets, items, decor, eggs, mutations, abilities, weathers] = await Promise.all([
+      const [plants, pets, items, decor, eggs, mutations, abilities, weathers, enums] = await Promise.all([
         getOrBuildCached("plants", spriteVersion, () =>
           getTransformedPlants({ spriteVersion })
         ),
@@ -148,6 +148,7 @@ dataRouter.get(
             transformWeathersWithSprites(data, { spriteVersion })
           )
         ),
+        getOrBuildCached("enums", spriteVersion, () => gameDataService.getEnums()),
       ]);
 
       return {
@@ -159,6 +160,7 @@ dataRouter.get(
         mutations,
         abilities,
         weathers,
+        enums,
       };
     });
 
@@ -325,6 +327,7 @@ const CATEGORY_DEFS = [
   ["abilities", "abilities", () => gameDataService.getAbilities()],
   ["mutations", "mutations", (sv) => gameDataService.getMutations().then((d) => transformDataWithSprites(d, "mutations", { spriteVersion: sv }))],
   ["weathers", "weathers", (sv) => gameDataService.getWeathers().then((d) => transformWeathersWithSprites(d, { spriteVersion: sv }))],
+  ["enums", "enums", () => gameDataService.getEnums()],
 ];
 
 // Build all data (shared by root .csv/.tsv handlers)
