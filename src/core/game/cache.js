@@ -13,6 +13,7 @@ import { fetchGameVersion } from "./version.js";
 const cache = {
   mainUrl: null,
   mainJs: null,
+  indexJs: null,
   fetchedAt: 0,
   categories: new Map(),
   pending: null,
@@ -26,7 +27,7 @@ export async function getMainBundle() {
   const expired = !cache.mainJs || now - cache.fetchedAt > config.cache.bundleTTL;
 
   if (!expired) {
-    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs };
+    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, indexJs: cache.indexJs };
   }
 
   // Évite les requêtes concurrentes
@@ -38,7 +39,7 @@ export async function getMainBundle() {
     try {
       const version = await fetchGameVersion();
       const pageUrl = `${config.game.origin}/version/${version}/index.html`;
-      const { mainUrl, mainJs } = await fetchMainBundle(pageUrl);
+      const { mainUrl, mainJs, indexJs } = await fetchMainBundle(pageUrl);
 
       // Si la version a changé, flush les caches
       if (cache.mainUrl && cache.mainUrl !== mainUrl) {
@@ -50,9 +51,10 @@ export async function getMainBundle() {
 
       cache.mainUrl = mainUrl;
       cache.mainJs = mainJs;
+      cache.indexJs = indexJs;
       cache.fetchedAt = Date.now();
 
-      return { mainUrl, mainJs };
+      return { mainUrl, mainJs, indexJs };
     } finally {
       cache.pending = null;
     }
@@ -65,7 +67,7 @@ export async function getMainBundle() {
  * Récupère les données d'une catégorie avec cache.
  */
 export async function getCategoryCached(categoryName, extractorFn) {
-  const { mainUrl, mainJs } = await getMainBundle();
+  const { mainUrl, mainJs, indexJs } = await getMainBundle();
 
   const existing = cache.categories.get(categoryName);
   if (existing && existing.mainUrl === mainUrl) {
@@ -75,7 +77,7 @@ export async function getCategoryCached(categoryName, extractorFn) {
 
   logger.debug({ category: categoryName }, "Category cache miss, extracting");
 
-  const data = extractorFn(mainJs);
+  const data = extractorFn(mainJs, indexJs);
 
   cache.categories.set(categoryName, {
     mainUrl,
@@ -92,6 +94,7 @@ export async function getCategoryCached(categoryName, extractorFn) {
 export function invalidateAllCaches() {
   cache.mainUrl = null;
   cache.mainJs = null;
+  cache.indexJs = null;
   cache.fetchedAt = 0;
   cache.categories.clear();
   clearEnumCaches();

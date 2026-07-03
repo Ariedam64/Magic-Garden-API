@@ -57,7 +57,7 @@ export async function resolveMainFromPage(pageUrl = config.game.pageUrl) {
 
   logger.debug({ indexUrl, mainUrl }, "Bundle URLs resolved");
 
-  return { indexUrl, mainUrl };
+  return { indexUrl, mainUrl, indexJs };
 }
 
 // Signature stable présente dans le chunk de données du jeu
@@ -109,7 +109,7 @@ async function findDataChunk(mainJs, baseUrl) {
  * cherche le chunk contenant les données dans __vite__mapDeps.
  */
 export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
-  const { indexUrl, mainUrl } = await resolveMainFromPage(pageUrl);
+  const { indexUrl, mainUrl, indexJs } = await resolveMainFromPage(pageUrl);
 
   logger.debug({ mainUrl }, "Fetching main bundle");
 
@@ -118,7 +118,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   logger.info({ mainUrl, size: mainJs.length }, "Main bundle fetched");
 
   if (mainJs.includes(DATA_SIGNATURE)) {
-    return { indexUrl, mainUrl, mainJs };
+    return { indexUrl, mainUrl, mainJs, indexJs };
   }
 
   // v125+ : les données sont dans un chunk séparé
@@ -127,9 +127,9 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   const chunk = await findDataChunk(mainJs, baseUrl);
 
   if (chunk) {
-    return { indexUrl, mainUrl: chunk.dataUrl, mainJs: chunk.dataJs };
+    return { indexUrl, mainUrl: chunk.dataUrl, mainJs: chunk.dataJs, indexJs };
   }
 
   logger.warn({ mainUrl }, "Data chunk not found, falling back to main bundle");
-  return { indexUrl, mainUrl, mainJs };
+  return { indexUrl, mainUrl, mainJs, indexJs };
 }

@@ -36,48 +36,57 @@ const COLOR_SWITCH_SIGNATURES = [
 const MIN_SIGNATURE_HITS = 3;
 
 /**
- * Extrait la map ability -> color depuis le switch statement du bundle.
+ * Cherche le switch statement contenant les case`...`:return`#...` dans une
+ * source donnée. Retourne null si non trouvé (permet d'essayer plusieurs sources).
  *
  * Stratégie de recherche robuste :
  * - On cherche tous les switch contenant des case`...`:return`#...`
  * - On valide avec des noms d'abilities connus (signatures)
  * - Pas de dépendance sur le nom de variable ou la couleur default
  */
-function extractAbilityColors(mainJs) {
-  const colors = {};
-
-  // Cherche tous les switch statements contenant des case avec template literals
+function findAbilityColorSwitch(source) {
   const switchRegex = /\bswitch\s*\([^)]+\)\s*\{/g;
   let switchMatch;
-  let switchBody = null;
 
-  while ((switchMatch = switchRegex.exec(mainJs))) {
+  while ((switchMatch = switchRegex.exec(source))) {
     // Extraire le corps du switch avec les braces équilibrées
     const braceStart = switchMatch.index + switchMatch[0].length - 1;
     let depth = 1;
     let end = braceStart + 1;
-    while (end < mainJs.length && depth > 0) {
-      if (mainJs[end] === "{") depth++;
-      else if (mainJs[end] === "}") depth--;
+    while (end < source.length && depth > 0) {
+      if (source[end] === "{") depth++;
+      else if (source[end] === "}") depth--;
       end++;
     }
-    const candidate = mainJs.slice(braceStart + 1, end - 1);
+    const candidate = source.slice(braceStart + 1, end - 1);
 
     // Valider avec les signatures
     const hits = COLOR_SWITCH_SIGNATURES.filter((s) => candidate.includes(`\`${s}\``));
     if (hits.length >= MIN_SIGNATURE_HITS) {
-      switchBody = candidate;
-      break;
+      return candidate;
     }
   }
 
+  return null;
+}
+
+/**
+ * Extrait la map ability -> color depuis le switch statement du bundle.
+ * Depuis la maj qui a introduit le code-splitting Vite, ce switch vit dans
+ * index-*.js plutôt que dans main-*.js — on essaie donc indexJs en premier,
+ * puis mainJs en repli si jamais il revient dans le bundle principal.
+ */
+function extractAbilityColors(mainJs, indexJs) {
+  const switchBody = (indexJs && findAbilityColorSwitch(indexJs)) || findAbilityColorSwitch(mainJs);
+
   if (!switchBody) {
     logger.warn("Ability color switch not found in bundle");
-    return colors;
+    return {};
   }
 
   // Parse chaque case`Name`: ... return`color`
   // Gère les cas groupés (plusieurs case avant un return)
+  const colors = {};
   const tokens = [];
   const caseRegex = /case\s*`([A-Za-z_]+)`/g;
   const returnRegex = /return\s*`([^`]+)`/g;
@@ -129,12 +138,12 @@ function extractCelestialAbilities(mainJs) {
 /**
  * Extrait les données des abilities du bundle.
  */
-export function extractAbilities(mainJs) {
+export function extractAbilities(mainJs, indexJs) {
   const abilities = extractCategoryWithSandbox(mainJs, "abilities", SIGNATURES, buildBaseSandbox).data;
   const celestial = extractCelestialAbilities(mainJs);
   Object.assign(abilities, celestial);
 
-  const colors = extractAbilityColors(mainJs);
+  const colors = extractAbilityColors(mainJs, indexJs);
 
   for (const [key, ability] of Object.entries(abilities)) {
     ability.color = colors[key] || DEFAULT_ABILITY_COLOR;
