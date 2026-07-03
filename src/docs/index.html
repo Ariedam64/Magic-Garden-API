@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magic Garden API Documentation</title>
+<meta name="description" content="Unofficial Magic Garden API with game data, live weather and shops, sprites and stats. Interactive documentation where you can try every endpoint.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d14;
+    --bg2: #0f1220;
+    --surface: #151a2b;
+    --surface2: #1c2340;
+    --border: #2a3452;
+    --border2: #3a4568;
+    --text: #f4f6ff;
+    --muted: #a3acc7;
+    --teal: #4fe3c1;
+    --amber: #f2b464;
+    --red: #f87171;
+    --green: #34d399;
+    --purple: #b68ae1;
+    --font-sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text);
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+    background-attachment: fixed;
+  }
+
+  ::selection { background: var(--teal); color: var(--bg); }
+
+  a { color: var(--teal); text-decoration: none; }
+  a:hover { color: var(--amber); }
+
+  button { font-family: var(--font-sans); cursor: pointer; }
+
+  :focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  svg { flex-shrink: 0; }
+
+  /* ============ TOPBAR ============ */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 24px;
+    height: 62px;
+    background: rgba(11,13,20,.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .brand:hover { color: var(--text); }
+  .brand .logo {
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(79,227,193,.25), rgba(242,180,100,.18));
+    border: 1px solid rgba(79,227,193,.35);
+    color: var(--teal);
+  }
+  .brand .ver {
+    font-size: .68rem;
+    font-weight: 600;
+    color: var(--teal);
+    background: rgba(79,227,193,.14);
+    border: 1px solid rgba(79,227,193,.3);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    max-width: 420px;
+    margin-left: auto;
+  }
+  .search-wrap svg {
+    position: absolute;
+    left: 12px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .search-wrap input {
+    width: 100%;
+    height: 38px;
+    padding: 0 64px 0 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: .9rem;
+    transition: border-color .2s ease;
+  }
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-wrap input:focus { outline: none; border-color: var(--teal); }
+  .search-wrap kbd {
+    position: absolute;
+    right: 10px; top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 6px;
+    pointer-events: none;
+  }
+
+  .topbar .spec-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .82rem;
+    font-weight: 500;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: color .2s ease, border-color .2s ease;
+    white-space: nowrap;
+  }
+  .topbar .spec-link:hover { color: var(--teal); border-color: var(--border); }
+
+  /* ============ HERO ============ */
+  .hero {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 132px 28px 30px;
+  }
+
+  .hero-card {
+    position: relative;
+    border-radius: 22px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 24px 70px rgba(9,12,22,.55);
+    padding: 44px 48px;
+    overflow: hidden;
+  }
+
+  .hero h1 {
+    margin: 0 0 8px;
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(100deg, var(--teal), #8be6d0 40%, var(--amber));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero .tagline {
+    margin: 0;
+    max-width: 640px;
+    color: var(--muted);
+    font-size: 1.05rem;
+  }
+
+  .hero-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 26px 0 0;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--text);
+    background: rgba(15,18,32,.65);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 14px;
+  }
+  .chip svg { color: var(--teal); }
+  .chip.amber svg { color: var(--amber); }
+
+  .quickstart {
+    margin-top: 26px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(11,13,20,.72);
+    overflow: hidden;
+  }
+  .quickstart .qs-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .quickstart .qs-head .dots { display: flex; gap: 5px; margin-right: 4px; }
+  .quickstart .qs-head .dots i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+  .quickstart pre {
+    margin: 0;
+    padding: 16px 18px;
+    font-family: var(--font-mono);
+    font-size: .85rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    color: var(--text);
+  }
+  .quickstart .cmt { color: var(--muted); }
+  .quickstart .cmd { color: var(--teal); }
+  .quickstart .url { color: var(--amber); }
+  .quickstart .copy-btn { margin-left: auto; }
+
+  /* ============ LAYOUT ============ */
+  .layout {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 28px 90px;
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    gap: 36px;
+    align-items: start;
+  }
+
+  /* ============ SIDEBAR ============ */
+  .sidebar {
+    position: sticky;
+    top: 86px;
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+  .sidebar .group { margin-bottom: 20px; }
+  .sidebar .group-title {
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar .group-title .count {
+    font-weight: 600;
+    color: var(--teal);
+    background: rgba(79,227,193,.12);
+    border-radius: 999px;
+    padding: 0 7px;
+    font-size: .65rem;
+  }
+  .sidebar a.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: .76rem;
+    color: var(--muted);
+    transition: color .15s ease, background .15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sidebar a.nav-item:hover { color: var(--text); background: rgba(79,227,193,.07); }
+  .sidebar a.nav-item.active { color: var(--teal); background: rgba(79,227,193,.1); }
+  .sidebar a.nav-item .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+  .sidebar a.nav-item .dot.sse { background: var(--amber); }
+  .sidebar a.nav-item span { overflow: hidden; text-overflow: ellipsis; }
+
+  /* ============ SECTIONS ============ */
+  .tag-section { margin-bottom: 44px; scroll-margin-top: 84px; }
+  .tag-section > h2 {
+    margin: 0 0 4px;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .tag-section > h2 .count {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .tag-section .tag-underline {
+    height: 2px;
+    width: 130px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--teal), rgba(242,180,100,.55), transparent);
+    margin: 8px 0 12px;
+  }
+  .tag-section .tag-desc {
+    color: var(--muted);
+    font-size: .9rem;
+    max-width: 760px;
+    margin-bottom: 18px;
+  }
+  .tag-section .tag-desc p { margin: 0 0 8px; }
+  .tag-section .tag-desc ul { margin: 6px 0 8px 20px; padding: 0; }
+  .tag-section .tag-desc li { margin: 3px 0; }
+  .tag-section .tag-desc strong { color: var(--text); font-weight: 600; }
+  .tag-section .tag-desc code {
+    font-family: var(--font-mono);
+    font-size: .84em;
+    color: var(--purple);
+    font-weight: 500;
+  }
+
+  /* ============ ENDPOINT CARDS ============ */
+  .op-card {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    margin-bottom: 12px;
+    overflow: hidden;
+    scroll-margin-top: 84px;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  .op-card:hover { border-color: var(--border2); }
+  .op-card.open {
+    border-color: rgba(79,227,193,.5);
+    box-shadow: 0 14px 34px rgba(9,12,22,.45);
+  }
+
+  .op-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 14px 18px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .op-head:hover .op-path { color: var(--teal); }
+
+  .method {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .07em;
+    padding: 5px 11px;
+    border-radius: 999px;
+    min-width: 52px;
+    text-align: center;
+    background: rgba(52,211,153,.16);
+    color: var(--green);
+    border: 1px solid rgba(52,211,153,.35);
+  }
+  .method.sse {
+    background: rgba(242,180,100,.14);
+    color: var(--amber);
+    border-color: rgba(242,180,100,.35);
+  }
+
+  .op-path {
+    font-family: var(--font-mono);
+    font-size: .88rem;
+    font-weight: 500;
+    transition: color .15s ease;
+    word-break: break-all;
+  }
+
+  .op-summary {
+    margin-left: auto;
+    font-size: .8rem;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .op-chevron {
+    color: var(--muted);
+    transition: transform .2s ease;
+  }
+  .op-card.open .op-chevron { transform: rotate(180deg); }
+
+  .op-body {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 20px 22px 24px;
+    background: rgba(15,18,32,.5);
+  }
+  .op-card.open .op-body { display: block; }
+
+  /* markdown in descriptions */
+  .md { color: var(--muted); font-size: .9rem; }
+  .md p { margin: 0 0 10px; }
+  .md h2, .md h3, .md h4 {
+    color: var(--text);
+    font-size: .92rem;
+    font-weight: 600;
+    margin: 16px 0 6px;
+  }
+  .md h2 { color: var(--teal); }
+  .md ul, .md ol { margin: 4px 0 10px 20px; padding: 0; }
+  .md li { margin: 3px 0; }
+  .md strong { color: var(--text); font-weight: 600; }
+  .md code {
+    font-family: var(--font-mono);
+    font-size: .84em;
+    color: var(--purple);
+    font-weight: 500;
+  }
+  .md pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 15px;
+    overflow-x: auto;
+    margin: 8px 0 14px;
+  }
+  .md pre code { color: var(--text); font-size: .8rem; font-weight: 400; line-height: 1.65; }
+  .md a { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ============ PARAMS ============ */
+  .params-title, .try-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 20px 0 10px;
+  }
+  .params-title svg, .try-title svg { color: var(--teal); }
+
+  .param-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  .param {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .param label {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .param label .req { color: var(--red); font-size: .9em; }
+  .param label .loc { font-size: .64rem; font-weight: 500; color: var(--muted); font-family: var(--font-sans); }
+  .param input, .param select {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    transition: border-color .2s ease;
+  }
+  .param input:focus, .param select:focus { outline: none; border-color: var(--teal); }
+  .param input::placeholder { color: rgba(163,172,199,.55); }
+  .param .p-desc {
+    font-size: .7rem;
+    color: var(--muted);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  .param .p-desc code { font-family: var(--font-mono); color: var(--purple); font-size: .95em; }
+
+  /* ============ TRY IT ============ */
+  .try-box {
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .try-url-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .try-url {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    color: var(--amber);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+    padding: 4px 2px;
+  }
+  .try-url::-webkit-scrollbar { display: none; }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: .72rem;
+    font-weight: 500;
+    transition: color .2s ease, border-color .2s ease;
+  }
+  .icon-btn:hover { color: var(--teal); border-color: rgba(79,227,193,.4); }
+  .icon-btn.copied { color: var(--green); border-color: rgba(52,211,153,.4); }
+
+  .try-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+  }
+  .btn-send {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(79,227,193,.55);
+    background: linear-gradient(120deg, rgba(79,227,193,.18), rgba(79,227,193,.32));
+    color: var(--teal);
+    font-size: .85rem;
+    font-weight: 600;
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  .btn-send:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(79,227,193,.18); }
+  .btn-send:disabled { opacity: .55; cursor: wait; }
+  .btn-send.stop {
+    border-color: rgba(248,113,113,.5);
+    background: rgba(248,113,113,.14);
+    color: var(--red);
+  }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(79,227,193,.3);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--amber);
+    animation: pulse 1.4s ease infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(242,180,100,.4); }
+    50% { opacity: .6; box-shadow: 0 0 0 5px rgba(242,180,100,0); }
+  }
+
+  /* ============ RESPONSE ============ */
+  .resp { display: none; border-top: 1px solid var(--border); }
+  .resp.visible { display: block; }
+  .resp-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: .74rem;
+    color: var(--muted);
+  }
+  .status-pill {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: .72rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .status-pill.ok { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.35); }
+  .status-pill.warn { background: rgba(242,180,100,.14); color: var(--amber); border: 1px solid rgba(242,180,100,.35); }
+  .status-pill.err { background: rgba(248,113,113,.14); color: var(--red); border: 1px solid rgba(248,113,113,.35); }
+  .resp-meta .copy-resp { margin-left: auto; }
+
+  .resp-body {
+    max-height: 430px;
+    overflow: auto;
+    padding: 14px 16px;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    line-height: 1.6;
+    white-space: pre;
+    color: var(--text);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+  .resp-body img { max-width: 100%; image-rendering: pixelated; background: repeating-conic-gradient(#1c2340 0% 25%, #151a2b 0% 50%) 0 0 / 20px 20px; border-radius: 8px; padding: 8px; }
+  .resp-body.event-log { white-space: pre-wrap; word-break: break-word; }
+  .resp-body .ev-name { color: var(--amber); font-weight: 600; }
+  .resp-body .ev-time { color: var(--muted); }
+
+  .j-key { color: #7dd3fc; }
+  .j-str { color: #a7e8b4; }
+  .j-num { color: var(--amber); }
+  .j-bool { color: var(--purple); }
+  .j-null { color: var(--red); }
+
+  .trunc-note {
+    padding: 8px 16px;
+    font-size: .72rem;
+    color: var(--amber);
+    border-top: 1px dashed var(--border);
+  }
+
+  /* ============ FOOTER ============ */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px;
+    text-align: center;
+    color: var(--muted);
+    font-size: .82rem;
+  }
+  footer .heart { color: var(--red); }
+
+  /* ============ STATES ============ */
+  .loading-state, .error-state {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 60px 28px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .error-state { color: var(--red); }
+
+  .no-results {
+    display: none;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+  }
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    .sidebar { display: none; }
+    .hero-card { padding: 32px 26px; }
+    .op-summary { display: none; }
+    .topbar .spec-link span { display: none; }
+  }
+  @media (max-width: 640px) {
+    .topbar { padding: 0 14px; gap: 10px; }
+    .search-wrap kbd { display: none; }
+    .hero { padding: 96px 16px 20px; }
+    .layout { padding: 8px 16px 60px; }
+    .hero-card { padding: 26px 20px; }
+    .op-head { flex-wrap: wrap; gap: 10px; padding: 13px 14px; }
+    .op-body { padding: 16px 14px 18px; }
+    .param-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+    }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#top" aria-label="Magic Garden API, back to top">
+    <span class="logo" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M12 20v-9"/><path d="M12 11C12 6 8 4 4 4c0 4 2 7 8 7z"/><path d="M12 11c0-3 2.5-6 8-6 0 5-3 7-8 7z"/></svg>
+    </span>
+    Magic Garden API
+    <span class="ver" id="api-version">v2</span>
+  </a>
+
+  <div class="search-wrap">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input id="search" type="search" placeholder="Search endpoints…" aria-label="Search endpoints" autocomplete="off">
+    <kbd>/</kbd>
+  </div>
+
+  <a class="spec-link" href="/docs/openapi.json" target="_blank" rel="noopener">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+    <span>openapi.json</span>
+  </a>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero-card">
+      <h1>Grow your app with<br><span class="grad">Magic Garden data</span></h1>
+      <p class="tagline">
+        The unofficial REST API for Magic Garden. Grab plants, pets, items and sprites,
+        follow the weather and shops as they change, and dig into the stats history.
+        No key, no signup, just call it.
+      </p>
+
+      <div class="hero-chips" id="hero-chips">
+        <span class="chip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+          <span id="chip-endpoints">endpoints</span>
+        </span>
+        <span class="chip amber">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Real-time SSE streams
+        </span>
+        <span class="chip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          Historical stats
+        </span>
+        <span class="chip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg>
+          CSV / TSV export
+        </span>
+      </div>
+
+      <div class="quickstart">
+        <div class="qs-head">
+          <span class="dots" aria-hidden="true">
+            <i style="background:#f87171"></i><i style="background:#f2b464"></i><i style="background:#34d399"></i>
+          </span>
+          Quick start
+          <button class="icon-btn copy-btn" id="qs-copy" aria-label="Copy quick start commands">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            Copy
+          </button>
+        </div>
+<pre id="qs-code"><span class="cmt"># All game data (plants, pets, items…)</span>
+<span class="cmd">curl</span> <span class="url" data-base>/data</span>
+
+<span class="cmt"># Real-time stream (SSE)</span>
+<span class="cmd">curl</span> -N <span class="url" data-base>/live/stream</span>
+
+<span class="cmt"># Sprite catalog, ready-to-use PNG urls</span>
+<span class="cmd">curl</span> <span class="url" data-base>/assets/sprites?cat=seeds</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <div class="loading-state" id="loading">Loading the docs, one second…</div>
+  <div class="error-state" id="load-error" style="display:none">
+    The API spec didn't load, sorry about that. <a href="/docs/openapi.json">Try opening it directly</a>
+  </div>
+
+  <div class="layout" id="layout" style="display:none">
+    <nav class="sidebar" id="sidebar" aria-label="Endpoints"></nav>
+    <div id="content">
+      <div class="no-results" id="no-results">Nothing matches your search. Maybe try another word?</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Unofficial API, not affiliated with the game. Built with <span class="heart">♥</span> by Ariedam
+  &nbsp;·&nbsp; <a href="/docs/openapi.json">OpenAPI 3.0 spec</a>
+  &nbsp;·&nbsp; <a href="/health" target="_blank" rel="noopener">API status</a>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var BASE = location.origin;
+  var state = { spec: null, ops: [] };
+
+  /* ---------- utils ---------- */
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function el(html) {
+    var t = document.createElement("template");
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+
+  function slug(s) {
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(function () {
+      if (!btn) return;
+      btn.classList.add("copied");
+      var label = btn.querySelector(".copy-label");
+      var prev = label ? label.textContent : null;
+      if (label) label.textContent = "Copied!";
+      setTimeout(function () {
+        btn.classList.remove("copied");
+        if (label && prev !== null) label.textContent = prev;
+      }, 1400);
+    });
+  }
+
+  /* ---------- tiny markdown renderer (for OpenAPI descriptions) ---------- */
+
+  function md(src) {
+    if (!src) return "";
+    var out = [];
+    var lines = String(src).split("\n");
+    var i = 0, inCode = false, codeBuf = [], listBuf = [], paraBuf = [];
+
+    function flushPara() {
+      if (paraBuf.length) {
+        out.push("<p>" + inline(paraBuf.join(" ")) + "</p>");
+        paraBuf = [];
+      }
+    }
+    function flushList() {
+      if (listBuf.length) {
+        out.push("<ul>" + listBuf.map(function (li) {
+          return "<li>" + inline(li) + "</li>";
+        }).join("") + "</ul>");
+        listBuf = [];
+      }
+    }
+    function inline(s) {
+      s = esc(s);
+      s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|\/[^)]*)\)/g,
+        '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return s;
+    }
+
+    for (i = 0; i < lines.length; i++) {
+      var line = lines[i];
+
+      if (/^```/.test(line.trim())) {
+        if (inCode) {
+          out.push("<pre><code>" + esc(codeBuf.join("\n")) + "</code></pre>");
+          codeBuf = [];
+          inCode = false;
+        } else {
+          flushPara(); flushList();
+          inCode = true;
+        }
+        continue;
+      }
+      if (inCode) { codeBuf.push(line); continue; }
+
+      var h = line.match(/^(#{2,4})\s+(.*)/);
+      if (h) {
+        flushPara(); flushList();
+        var lvl = Math.min(h[1].length, 4);
+        out.push("<h" + lvl + ">" + inline(h[2]) + "</h" + lvl + ">");
+        continue;
+      }
+
+      var li = line.match(/^\s*[-*]\s+(.*)/);
+      if (li) { flushPara(); listBuf.push(li[1]); continue; }
+
+      if (!line.trim()) { flushPara(); flushList(); continue; }
+
+      flushList();
+      paraBuf.push(line.trim());
+    }
+    if (inCode) out.push("<pre><code>" + esc(codeBuf.join("\n")) + "</code></pre>");
+    flushPara(); flushList();
+    return out.join("");
+  }
+
+  /* ---------- JSON syntax highlight ---------- */
+
+  function hlJson(text) {
+    // esc() turns quotes into &quot; so the string pattern matches the escaped form
+    return esc(text).replace(
+      /(&quot;(?:\\u[a-fA-F0-9]{4}|\\[^u]|(?!&quot;)[^\\])*&quot;)(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
+      function (m, str, colon) {
+        if (str) return colon
+          ? '<span class="j-key">' + str + "</span>" + colon
+          : '<span class="j-str">' + str + "</span>";
+        if (m === "true" || m === "false") return '<span class="j-bool">' + m + "</span>";
+        if (m === "null") return '<span class="j-null">null</span>';
+        return '<span class="j-num">' + m + "</span>";
+      }
+    );
+  }
+
+  /* ---------- spec loading & grouping ---------- */
+
+  fetch("/docs/openapi.json")
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(init)
+    .catch(function () {
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("load-error").style.display = "block";
+    });
+
+  function init(spec) {
+    state.spec = spec;
+
+    document.getElementById("api-version").textContent = "v" + (spec.info && spec.info.version || "?");
+    document.querySelectorAll("[data-base]").forEach(function (n) {
+      n.textContent = BASE + n.textContent;
+    });
+
+    // collect operations preserving spec order
+    var ops = [];
+    Object.keys(spec.paths || {}).forEach(function (path) {
+      var item = spec.paths[path];
+      ["get", "post", "put", "delete", "patch"].forEach(function (m) {
+        if (!item[m]) return;
+        var op = item[m];
+        ops.push({
+          id: "op-" + m + "-" + (slug(path) || "root"),
+          method: m,
+          path: path,
+          summary: op.summary || "",
+          description: op.description || "",
+          params: (op.parameters || []).filter(function (p) { return p && p.name; }),
+          tag: (op.tags && op.tags[0]) || "General",
+          sse: /\/stream$/.test(path)
+        });
+      });
+    });
+    state.ops = ops;
+
+    // tag order: spec-declared tags first, then any extras, General first if present
+    var tagOrder = (spec.tags || []).map(function (t) { return t.name; });
+    var extra = [];
+    ops.forEach(function (o) {
+      if (tagOrder.indexOf(o.tag) === -1 && extra.indexOf(o.tag) === -1) extra.push(o.tag);
+    });
+    var tags = extra.concat(tagOrder).filter(function (t) {
+      return ops.some(function (o) { return o.tag === t; });
+    });
+
+    var tagDescs = {};
+    (spec.tags || []).forEach(function (t) { tagDescs[t.name] = t.description || ""; });
+
+    document.getElementById("chip-endpoints").textContent = ops.length + " endpoints";
+
+    renderSidebar(tags, tagDescs);
+    renderContent(tags, tagDescs);
+
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("layout").style.display = "";
+
+    setupSearch();
+    setupScrollSpy();
+    openFromHash();
+  }
+
+  /* ---------- rendering ---------- */
+
+  function renderSidebar(tags, _descs) {
+    var sb = document.getElementById("sidebar");
+    tags.forEach(function (tag) {
+      var ops = state.ops.filter(function (o) { return o.tag === tag; });
+      var group = el('<div class="group" data-tag="' + esc(tag) + '"></div>');
+      group.appendChild(el(
+        '<p class="group-title">' + esc(tag) +
+        ' <span class="count">' + ops.length + "</span></p>"
+      ));
+      ops.forEach(function (o) {
+        group.appendChild(el(
+          '<a class="nav-item" href="#' + o.id + '" data-op="' + o.id + '">' +
+          '<span class="dot' + (o.sse ? " sse" : "") + '" aria-hidden="true"></span>' +
+          "<span>" + esc(o.path) + "</span></a>"
+        ));
+      });
+      sb.appendChild(group);
+    });
+
+    sb.addEventListener("click", function (e) {
+      var a = e.target.closest("a.nav-item");
+      if (!a) return;
+      var card = document.getElementById(a.dataset.op);
+      if (card && !card.classList.contains("open")) toggleCard(card, true);
+    });
+  }
+
+  function renderContent(tags, tagDescs) {
+    var content = document.getElementById("content");
+    tags.forEach(function (tag) {
+      var ops = state.ops.filter(function (o) { return o.tag === tag; });
+      var section = el(
+        '<section class="tag-section" id="tag-' + slug(tag) + '" data-tag="' + esc(tag) + '">' +
+        "<h2>" + esc(tag) + ' <span class="count">' + ops.length +
+        (ops.length > 1 ? " endpoints" : " endpoint") + "</span></h2>" +
+        '<div class="tag-underline" aria-hidden="true"></div>' +
+        (tagDescs[tag] ? '<div class="tag-desc md">' + md(firstBlock(tagDescs[tag])) + "</div>" : "") +
+        "</section>"
+      );
+      ops.forEach(function (o) { section.appendChild(buildCard(o)); });
+      content.appendChild(section);
+    });
+  }
+
+  // keep tag intros short: first 2 paragraphs max (details live on each endpoint)
+  function firstBlock(desc) {
+    var parts = String(desc).split(/\n\s*\n/);
+    return parts.slice(0, 2).join("\n\n");
+  }
+
+  function buildCard(o) {
+    var card = el(
+      '<article class="op-card" id="' + o.id + '" data-search="' +
+      esc((o.method + " " + o.path + " " + o.summary + " " + o.tag).toLowerCase()) + '">' +
+      '<button class="op-head" aria-expanded="false" aria-controls="' + o.id + '-body">' +
+      '<span class="method' + (o.sse ? " sse" : "") + '">' + (o.sse ? "SSE" : o.method.toUpperCase()) + "</span>" +
+      '<span class="op-path">' + esc(o.path) + "</span>" +
+      '<span class="op-summary">' + esc(o.summary) + "</span>" +
+      '<svg class="op-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
+      "</button>" +
+      '<div class="op-body" id="' + o.id + '-body"></div>' +
+      "</article>"
+    );
+    card.querySelector(".op-head").addEventListener("click", function () {
+      toggleCard(card);
+    });
+    return card;
+  }
+
+  function toggleCard(card, forceOpen) {
+    var open = forceOpen === true ? true : !card.classList.contains("open");
+    card.classList.toggle("open", open);
+    card.querySelector(".op-head").setAttribute("aria-expanded", String(open));
+    if (open) {
+      var body = card.querySelector(".op-body");
+      if (!body.dataset.rendered) {
+        renderBody(card.id, body);
+        body.dataset.rendered = "1";
+      }
+      history.replaceState(null, "", "#" + card.id);
+    }
+  }
+
+  function findOp(id) {
+    return state.ops.filter(function (o) { return o.id === id; })[0];
+  }
+
+  /* ---------- card body: description + params + try-it ---------- */
+
+  function renderBody(opId, body) {
+    var o = findOp(opId);
+    if (!o) return;
+
+    if (o.description) {
+      body.appendChild(el('<div class="md">' + md(o.description) + "</div>"));
+    }
+
+    // params form
+    var inputs = {};
+    if (o.params.length) {
+      body.appendChild(el(
+        '<p class="params-title">' +
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg>' +
+        "Parameters</p>"
+      ));
+      var grid = el('<div class="param-grid"></div>');
+      o.params.forEach(function (p) {
+        var sch = p.schema || {};
+        var fieldId = opId + "-p-" + p.name;
+        var wrap = el(
+          '<div class="param"><label for="' + fieldId + '">' + esc(p.name) +
+          (p.required ? ' <span class="req" title="required">*</span>' : "") +
+          ' <span class="loc">' + esc(p.in) + "</span></label></div>"
+        );
+        var input;
+        if (sch.enum) {
+          input = document.createElement("select");
+          if (!p.required) {
+            var none = document.createElement("option");
+            none.value = ""; none.textContent = "(none)";
+            input.appendChild(none);
+          }
+          sch.enum.forEach(function (v) {
+            var opt = document.createElement("option");
+            opt.value = v; opt.textContent = v;
+            if (sch.default === v && p.required) opt.selected = true;
+            input.appendChild(opt);
+          });
+        } else if (sch.type === "boolean") {
+          input = document.createElement("select");
+          ["", "true", "false"].forEach(function (v) {
+            var opt = document.createElement("option");
+            opt.value = v; opt.textContent = v === "" ? "(none)" : v;
+            input.appendChild(opt);
+          });
+        } else {
+          input = document.createElement("input");
+          input.type = "text";
+          input.placeholder = p.example !== undefined ? String(p.example)
+            : sch.default !== undefined ? String(sch.default)
+            : sch.type || "";
+          input.autocomplete = "off";
+          input.spellcheck = false;
+        }
+        input.id = fieldId;
+        inputs[p.name] = { input: input, def: p };
+        wrap.appendChild(input);
+        if (p.description) {
+          wrap.appendChild(el('<p class="p-desc">' + mdInlineOnly(p.description) + "</p>"));
+        }
+        grid.appendChild(wrap);
+      });
+      body.appendChild(grid);
+    }
+
+    // try-it
+    body.appendChild(el(
+      '<p class="try-title">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>' +
+      (o.sse ? "Live stream" : "Try it") + "</p>"
+    ));
+
+    var tryBox = el(
+      '<div class="try-box">' +
+      '<div class="try-url-row">' +
+      '<div class="try-url" aria-live="polite"></div>' +
+      '<button class="icon-btn act-copy-url" aria-label="Copy URL" title="Copy URL">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>' +
+      '<span class="copy-label">URL</span></button>' +
+      '<button class="icon-btn act-copy-curl" aria-label="Copy as cURL command" title="Copy as cURL">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>' +
+      '<span class="copy-label">cURL</span></button>' +
+      '<a class="icon-btn act-open" target="_blank" rel="noopener" aria-label="Open in new tab" title="Open in new tab">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>' +
+      "</a></div>" +
+      '<div class="try-actions"></div>' +
+      '<div class="resp"></div>' +
+      "</div>"
+    );
+
+    var urlView = tryBox.querySelector(".try-url");
+    var openLink = tryBox.querySelector(".act-open");
+
+    function currentUrl() {
+      var path = o.path;
+      var query = [];
+      Object.keys(inputs).forEach(function (name) {
+        var v = inputs[name].input.value.trim();
+        var def = inputs[name].def;
+        if (def.in === "path") {
+          path = path.replace("{" + name + "}", v ? encodeURIComponent(v) : "{" + name + "}");
+        } else if (def.in === "query" && v !== "") {
+          query.push(encodeURIComponent(name) + "=" + encodeURIComponent(v));
+        }
+      });
+      return BASE + path + (query.length ? "?" + query.join("&") : "");
+    }
+
+    function refreshUrl() {
+      var u = currentUrl();
+      urlView.textContent = u;
+      openLink.href = u;
+    }
+    Object.keys(inputs).forEach(function (name) {
+      inputs[name].input.addEventListener("input", refreshUrl);
+    });
+    refreshUrl();
+
+    tryBox.querySelector(".act-copy-url").addEventListener("click", function () {
+      copyText(currentUrl(), this);
+    });
+    tryBox.querySelector(".act-copy-curl").addEventListener("click", function () {
+      var flag = o.sse ? "-N " : "-s ";
+      copyText("curl " + flag + '"' + currentUrl() + '"', this);
+    });
+
+    var actions = tryBox.querySelector(".try-actions");
+    var respBox = tryBox.querySelector(".resp");
+
+    if (o.sse) {
+      buildSseTester(o, actions, respBox, currentUrl);
+    } else {
+      buildFetchTester(o, actions, respBox, currentUrl, inputs);
+    }
+
+    body.appendChild(tryBox);
+  }
+
+  function mdInlineOnly(s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+
+  /* ---------- regular fetch tester ---------- */
+
+  function buildFetchTester(o, actions, respBox, currentUrl, inputs) {
+    var btn = el(
+      '<button class="btn-send">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>' +
+      "<span>Send request</span></button>"
+    );
+    var hint = el('<span style="font-size:.74rem;color:var(--muted)"></span>');
+    actions.appendChild(btn);
+    actions.appendChild(hint);
+
+    btn.addEventListener("click", function () {
+      // required params check
+      var missing = o.params.filter(function (p) {
+        return p.required && !inputs[p.name].input.value.trim();
+      });
+      if (missing.length) {
+        hint.textContent = "You still need to fill in: " + missing.map(function (p) { return p.name; }).join(", ");
+        hint.style.color = "var(--red)";
+        missing[0].name && inputs[missing[0].name].input.focus();
+        return;
+      }
+      hint.textContent = "";
+      hint.style.color = "";
+
+      var url = currentUrl();
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>Sending…</span>';
+
+      var t0 = performance.now();
+      var ctrl = new AbortController();
+      var timer = setTimeout(function () { ctrl.abort(); }, 30000);
+
+      fetch(url, { signal: ctrl.signal })
+        .then(function (res) {
+          var ct = (res.headers.get("content-type") || "").toLowerCase();
+          var isImg = ct.indexOf("image/") === 0;
+          return (isImg ? res.blob() : res.text()).then(function (payload) {
+            showResponse(respBox, {
+              status: res.status,
+              statusText: res.statusText,
+              contentType: ct,
+              ms: Math.round(performance.now() - t0),
+              payload: payload,
+              isImage: isImg
+            });
+          });
+        })
+        .catch(function (err) {
+          showResponse(respBox, {
+            status: 0,
+            statusText: err.name === "AbortError" ? "Timeout (30s)" : "Network error",
+            contentType: "",
+            ms: Math.round(performance.now() - t0),
+            payload: String(err.message || err),
+            isImage: false
+          });
+        })
+        .finally(function () {
+          clearTimeout(timer);
+          btn.disabled = false;
+          btn.innerHTML =
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>' +
+            "<span>Send request</span>";
+        });
+    });
+  }
+
+  var MAX_RENDER = 300000; // chars displayed
+
+  function showResponse(respBox, r) {
+    respBox.innerHTML = "";
+    respBox.classList.add("visible");
+
+    var cls = r.status >= 200 && r.status < 300 ? "ok" : r.status >= 400 || r.status === 0 ? "err" : "warn";
+    var sizeInfo = "";
+    var fullText = null;
+
+    var meta = el(
+      '<div class="resp-meta">' +
+      '<span class="status-pill ' + cls + '">' + (r.status || "ERR") + " " + esc(r.statusText || "") + "</span>" +
+      '<span>' + r.ms + " ms</span>" +
+      '<span class="resp-size"></span>' +
+      '<button class="icon-btn copy-resp" aria-label="Copy response body">' +
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>' +
+      '<span class="copy-label">Copy</span></button>' +
+      "</div>"
+    );
+    respBox.appendChild(meta);
+
+    var bodyEl = el('<div class="resp-body"></div>');
+
+    if (r.isImage) {
+      var imgUrl = URL.createObjectURL(r.payload);
+      var img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = "Sprite response";
+      bodyEl.appendChild(img);
+      sizeInfo = fmtSize(r.payload.size);
+      meta.querySelector(".copy-resp").style.display = "none";
+    } else {
+      fullText = String(r.payload);
+      sizeInfo = fmtSize(fullText.length);
+      var display = fullText;
+      var truncated = false;
+      if (display.length > MAX_RENDER) {
+        display = display.slice(0, MAX_RENDER);
+        truncated = true;
+      }
+      if (r.contentType.indexOf("json") !== -1) {
+        try {
+          var pretty = JSON.stringify(JSON.parse(fullText), null, 2);
+          fullText = pretty;
+          display = pretty.length > MAX_RENDER ? pretty.slice(0, MAX_RENDER) : pretty;
+          truncated = pretty.length > MAX_RENDER;
+          bodyEl.innerHTML = truncated ? esc(display) : hlJson(display);
+        } catch (e) {
+          bodyEl.textContent = display;
+        }
+      } else {
+        bodyEl.textContent = display;
+      }
+      if (truncated) {
+        respBox.appendChild(bodyEl);
+        respBox.appendChild(el(
+          '<p class="trunc-note">Showing the first part only (' + fmtSize(fullText.length) +
+          " in total). Use Copy or cURL to grab the whole response.</p>"
+        ));
+      }
+    }
+    if (!bodyEl.parentNode) respBox.appendChild(bodyEl);
+    meta.querySelector(".resp-size").textContent = sizeInfo;
+
+    var copyBtn = meta.querySelector(".copy-resp");
+    copyBtn.addEventListener("click", function () {
+      if (fullText !== null) copyText(fullText, copyBtn);
+    });
+  }
+
+  function fmtSize(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1048576).toFixed(2) + " MB";
+  }
+
+  /* ---------- SSE tester ---------- */
+
+  function buildSseTester(o, actions, respBox, currentUrl) {
+    var es = null;
+    var btn = el(
+      '<button class="btn-send">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>' +
+      "<span>Connect</span></button>"
+    );
+    var status = el('<span style="display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--muted)">Streams weather & shop updates in real time.</span>');
+    actions.appendChild(btn);
+    actions.appendChild(status);
+
+    var log = null;
+    var count = 0;
+
+    function disconnect() {
+      if (es) { es.close(); es = null; }
+      btn.classList.remove("stop");
+      btn.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>' +
+        "<span>Connect</span>";
+      status.textContent = count ? "Disconnected after " + count + " events." : "Disconnected.";
+    }
+
+    function logEvent(name, data) {
+      count++;
+      var time = new Date().toLocaleTimeString();
+      var line = el(
+        "<div>" +
+        '<span class="ev-time">' + time + "</span> " +
+        '<span class="ev-name">' + esc(name) + "</span>\n" +
+        prettyMaybeJson(data) +
+        "\n</div>"
+      );
+      log.appendChild(line);
+      while (log.children.length > 60) log.removeChild(log.firstChild);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function prettyMaybeJson(data) {
+      try {
+        return hlJson(JSON.stringify(JSON.parse(data), null, 2));
+      } catch (e) {
+        return esc(data);
+      }
+    }
+
+    btn.addEventListener("click", function () {
+      if (es) { disconnect(); return; }
+
+      respBox.innerHTML = "";
+      respBox.classList.add("visible");
+      log = el('<div class="resp-body event-log" aria-live="polite"></div>');
+      respBox.appendChild(log);
+      count = 0;
+
+      es = new EventSource(currentUrl());
+      btn.classList.add("stop");
+      btn.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>' +
+        "<span>Disconnect</span>";
+      status.innerHTML = '<span class="live-dot" aria-hidden="true"></span> Connected, waiting for events…';
+
+      ["weather", "shops"].forEach(function (name) {
+        es.addEventListener(name, function (ev) {
+          status.innerHTML = '<span class="live-dot" aria-hidden="true"></span> Live, ' + (count + 1) + " events received";
+          logEvent(name, ev.data);
+        });
+      });
+      es.onmessage = function (ev) { logEvent("message", ev.data); };
+      es.onerror = function () {
+        if (es && es.readyState === EventSource.CLOSED) {
+          disconnect();
+          status.textContent = "Connection closed by server.";
+        }
+      };
+    });
+
+    // close stream when card is collapsed or page hidden
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden && es) disconnect();
+    });
+  }
+
+  /* ---------- search ---------- */
+
+  function setupSearch() {
+    var input = document.getElementById("search");
+    var noRes = document.getElementById("no-results");
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "/" && document.activeElement !== input &&
+          !/^(input|select|textarea)$/i.test(document.activeElement.tagName)) {
+        e.preventDefault();
+        input.focus();
+      }
+      if (e.key === "Escape" && document.activeElement === input) {
+        input.value = "";
+        applyFilter("");
+        input.blur();
+      }
+    });
+
+    var deb = null;
+    input.addEventListener("input", function () {
+      clearTimeout(deb);
+      deb = setTimeout(function () { applyFilter(input.value); }, 120);
+    });
+
+    function applyFilter(q) {
+      q = q.trim().toLowerCase();
+      var any = false;
+      document.querySelectorAll(".op-card").forEach(function (card) {
+        var match = !q || card.dataset.search.indexOf(q) !== -1;
+        card.style.display = match ? "" : "none";
+        if (match) any = true;
+        var nav = document.querySelector('.nav-item[data-op="' + card.id + '"]');
+        if (nav) nav.style.display = match ? "" : "none";
+      });
+      document.querySelectorAll(".tag-section").forEach(function (sec) {
+        var visible = sec.querySelectorAll('.op-card:not([style*="none"])').length;
+        sec.style.display = visible ? "" : "none";
+      });
+      document.querySelectorAll(".sidebar .group").forEach(function (g) {
+        var visible = g.querySelectorAll('.nav-item:not([style*="none"])').length;
+        g.style.display = visible ? "" : "none";
+      });
+      noRes.style.display = any ? "none" : "block";
+    }
+  }
+
+  /* ---------- scroll spy ---------- */
+
+  function setupScrollSpy() {
+    if (!("IntersectionObserver" in window)) return;
+    var links = {};
+    document.querySelectorAll(".nav-item").forEach(function (a) {
+      links[a.dataset.op] = a;
+    });
+    var current = null;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          if (current) current.classList.remove("active");
+          current = links[en.target.id];
+          if (current) current.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-80px 0px -70% 0px" });
+    document.querySelectorAll(".op-card").forEach(function (c) { io.observe(c); });
+  }
+
+  /* ---------- deep link ---------- */
+
+  function openFromHash() {
+    var id = location.hash.slice(1);
+    if (!id) return;
+    var card = document.getElementById(id);
+    if (card && card.classList.contains("op-card")) {
+      toggleCard(card, true);
+      setTimeout(function () { card.scrollIntoView({ block: "start" }); }, 60);
+    }
+  }
+})();
+</script>
+</body>
+</html>
