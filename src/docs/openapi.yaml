@@ -122,7 +122,7 @@ tags:
       **Data freshness:**
       - Shop data accumulates as the game restocks each shop (each shop has its own cycle).
       - Weather data accumulates on every weather change.
-      - There is no data before the recorder was first started — buckets prior to that will be empty.
+      - There is no data from before the recorder was first started, so earlier buckets will simply come back empty.
 
       **Date parameters:**
       - All `from` / `to` parameters accept either epoch milliseconds (e.g. `1778800000000`) or ISO 8601 (e.g. `2026-05-01` or `2026-05-01T12:00:00Z`).
@@ -241,7 +241,7 @@ paths:
                     uptime: 3600
                     cache:
                       hasBundleCached: true
-                      bundleUrl: "https://magicgarden.gg/assets/main-DvXv24E7.js"
+                      bundleUrl: "https://magicgarden.gg/version/642/assets/main-D3Z0cIc_.js"
                       bundleFetchedAt: "2024-01-20T10:00:00.000Z"
                       bundleAge: 180000
                       categoriesCached: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
@@ -469,19 +469,19 @@ paths:
                         name: "Carrot"
                         baseSellPrice: 20
                         sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/Carrot.png"
-                    Wheat:
+                    Cabbage:
                       seed:
-                        name: "Wheat Seed"
-                        coinPrice: 5
-                        sprite: "https://mg-api.ariedam.fr/assets/sprites/seeds/Wheat.png"
+                        name: "Cabbage Seed"
+                        coinPrice: 30
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/seeds/Cabbage.png"
                       plant:
-                        name: "Wheat Plant"
-                        harvestType: "Multi"
-                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/BabyWheat.png"
+                        name: "Cabbage Plant"
+                        harvestType: "Multiple"
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/CabbagePlant.png"
                       crop:
-                        name: "Wheat"
-                        baseSellPrice: 8
-                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/Wheat.png"
+                        name: "Cabbage"
+                        baseSellPrice: 42
+                        sprite: "https://mg-api.ariedam.fr/assets/sprites/plants/Cabbage.png"
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -738,16 +738,18 @@ paths:
                 mutationData:
                   summary: Example mutations
                   value:
-                    GoldenCarrot:
-                      name: "Golden Carrot"
-                      basePlant: "Carrot"
-                      rarity: "rare"
-                      sprite: "https://mg-api.ariedam.fr/assets/sprites/mutations/GoldenCarrot.png"
-                    GiantWheat:
-                      name: "Giant Wheat"
-                      basePlant: "Wheat"
-                      rarity: "epic"
-                      sprite: "https://mg-api.ariedam.fr/assets/sprites/mutations/GiantWheat.png"
+                    Gold:
+                      name: "Gold"
+                      baseChance: 0.01
+                      coinMultiplier: 25
+                      color: "rgb(235, 200, 0)"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/MutationGold.png"
+                    Wet:
+                      name: "Wet"
+                      baseChance: 0
+                      coinMultiplier: 2
+                      color: "rgba(95, 255, 255, 1)"
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/mutations/Wet.png"
 
   /data/weathers:
     get:
@@ -860,7 +862,7 @@ paths:
     get:
       tags:
         - CSV / TSV Export
-      summary: "CSV / TSV export — pattern: append .csv or .tsv to any data or live URL"
+      summary: "CSV / TSV export: just append .csv or .tsv to any data or live URL"
       description: |
         Every `/data/*` and `/live/*` endpoint is also available as **CSV** (`text/csv`) or **TSV**
         (`text/tab-separated-values`) by appending `.csv` or `.tsv` to the URL.
@@ -898,7 +900,7 @@ paths:
               example: |
                 id,seed.name,seed.coinPrice,plant.harvestType,crop.baseSellPrice
                 Carrot,Carrot Seed,10,Single,20
-                Wheat,Wheat Seed,5,Multi,8
+                Cabbage,Cabbage Seed,30,Multiple,42
 
   /assets/sprite-data:
     get:
@@ -975,7 +977,7 @@ paths:
                         items:
                           - id: "Carrot"
                             url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
-                          - id: "Wheat"
+                          - id: "Cabbage"
                             url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                       - cat: "plants"
                         items:
@@ -990,7 +992,7 @@ paths:
                       - id: "Carrot"
                         cat: "seeds"
                         url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
-                      - id: "Wheat"
+                      - id: "Cabbage"
                         cat: "seeds"
                         url: "https://magicgarden.gg/version/<version>/assets/sprites-0.png"
                       - id: "Carrot"
@@ -1136,9 +1138,13 @@ paths:
     get:
       tags:
         - Assets
-      summary: List sprite categories
+      summary: Full sprite catalog with ready-to-use PNG URLs
       description: |
-        Returns available sprite categories and download instructions.
+        Returns the complete catalog of exported sprites, grouped by category,
+        with a ready-to-use PNG URL for each one. Around 600 sprites in total.
+
+        Want a subset? Filter with `cat` (one category) and/or `search`
+        (case-insensitive match on the sprite name).
 
         **Available categories:**
         - `seeds` - Seed sprites
@@ -1156,55 +1162,92 @@ paths:
         - `winter` - Winter seasonal sprites
 
         **Use cases:**
-        - Discover available sprite categories
-        - Get download URLs for specific sprites
-        - Browse sprite collections
+        - Discover every sprite the game currently ships
+        - Build sprite pickers or galleries without hardcoding names
+        - Find a sprite's exact filename before calling `/assets/sprites/{category}/{name}`
+
+        **Examples:**
+        - `/assets/sprites` - everything
+        - `/assets/sprites?cat=pets` - all pet sprites
+        - `/assets/sprites?search=carrot` - anything named like "carrot", across categories
 
         **Response notes:**
         - `baseUrl` reflects the public API base used for sprite URLs (`SPRITES_BASE_URL`).
+        - URLs include a `?v=<gameVersion>` cache-busting parameter.
+        - `categories` always lists every valid category, even when you filter.
+      parameters:
+        - name: cat
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [seeds, plants, tallPlants, mutations, pets, decor, items, objects, ui, animations, weather, tiles, winter]
+          description: Only return sprites from this category
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive substring match on sprite names
+          example: "carrot"
       responses:
         '200':
-          description: Sprite categories
+          description: Sprite catalog
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  categories:
-                    type: array
-                    items:
-                      type: string
-                    description: List of available sprite categories
-                    example: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items"]
+                  count:
+                    type: integer
+                    description: Number of sprites in the response (after filters)
+                    example: 600
                   baseUrl:
                     type: string
                     description: Base URL for the API
                     example: "https://mg-api.ariedam.fr"
-                  exportDir:
-                    type: string
-                    description: Local export directory path
-                    example: "./sprites_dump"
-                  usage:
+                  categories:
+                    type: array
+                    items:
+                      type: string
+                    description: Every valid category (not affected by filters)
+                    example: ["animations", "decor", "items", "mutations", "objects", "pets", "plants", "seeds", "tallPlants", "tiles", "ui", "weather", "winter"]
+                  sprites:
                     type: object
-                    description: Usage instructions and examples
-                    properties:
-                      endpoint:
-                        type: string
-                        example: "/assets/sprites/:category/:name"
-                      example:
-                        type: string
-                        example: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
+                    description: Sprites grouped by category, each with a ready-to-use PNG URL
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                            example: "Carrot"
+                          url:
+                            type: string
+                            example: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png?v=642"
               examples:
-                categoriesList:
-                  summary: Sprite categories response
+                filtered:
+                  summary: Filtered catalog (?search=carrot)
                   value:
-                    categories: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+                    count: 3
                     baseUrl: "https://mg-api.ariedam.fr"
-                    exportDir: "./sprites_dump"
-                    usage:
-                      endpoint: "/assets/sprites/:category/:name"
-                      example: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png"
-                      description: "Download individual sprites as PNG files"
+                    categories: ["animations", "decor", "items", "mutations", "objects", "pets", "plants", "seeds", "tallPlants", "tiles", "ui", "weather", "winter"]
+                    sprites:
+                      plants:
+                        - name: "BabyCarrot"
+                          url: "https://mg-api.ariedam.fr/assets/sprites/plants/BabyCarrot.png?v=642"
+                        - name: "Carrot"
+                          url: "https://mg-api.ariedam.fr/assets/sprites/plants/Carrot.png?v=642"
+                      seeds:
+                        - name: "Carrot"
+                          url: "https://mg-api.ariedam.fr/assets/sprites/seeds/Carrot.png?v=642"
+        '400':
+          description: Unknown category in `cat`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /assets/sprites/{category}/{name}:
     get:
@@ -1222,7 +1265,7 @@ paths:
         **Examples:**
         - `/assets/sprites/seeds/Carrot.png` - Carrot seed sprite
         - `/assets/sprites/pets/Bunny.png` - Bunny pet sprite
-        - `/assets/sprites/plants/Wheat.png` - Wheat plant sprite
+        - `/assets/sprites/plants/Cabbage.png` - Cabbage crop sprite
 
         **Integration examples:**
 
@@ -1317,8 +1360,8 @@ paths:
         4. Tall-plant overlays (masked to base silhouette, tall plants only)
         5. Floating icons (Dawnlit, Ambershine, Dawncharged, Ambercharged)
 
-        The output canvas expands to fit all layers — icons that extend past the base sprite
-        bounds will not be clipped.
+        The output canvas expands to fit all layers, so icons that extend past the base sprite
+        bounds are never clipped.
 
         **Mutations supported:** `Gold`, `Rainbow`, `Wet`, `Chilled`, `Frozen`, `Thunderstruck`,
         `Dawnlit`, `Ambershine`, `Dawncharged`, `Ambercharged`
@@ -1326,7 +1369,7 @@ paths:
         Unknown mutation ids are silently ignored.
 
         **Examples:**
-        - `/assets/sprites/composed?key=sprite/tallplant/Cactus&mutations=Rainbow,Wet`
+        - `/assets/sprites/composed?key=sprite/plant/Cactus&mutations=Rainbow,Wet`
         - `/assets/sprites/composed?key=sprite/plant/Carrot&mutations=Gold`
         - `/assets/sprites/composed?key=sprite/pet/Bunny&mutations=Dawnlit,Ambershine`
 
@@ -1335,10 +1378,10 @@ paths:
         - name: key
           in: query
           required: true
-          description: Full atlas key of the base sprite (e.g. `sprite/tallplant/Cactus`, `sprite/plant/Carrot`, `sprite/pet/Bunny`)
+          description: Full atlas key of the base sprite (e.g. `sprite/plant/Cactus`, `sprite/plant/Carrot`, `sprite/pet/Bunny`)
           schema:
             type: string
-          example: "sprite/tallplant/Cactus"
+          example: "sprite/plant/Cactus"
         - name: mutations
           in: query
           required: false
@@ -1433,7 +1476,7 @@ paths:
                         items:
                           - name: "Carrot"
                             stock: 10
-                          - name: "Wheat"
+                          - name: "Cabbage"
                             stock: 15
                       tool:
                         secondsUntilRestock: 7200
@@ -1594,7 +1637,7 @@ paths:
                       items:
                         - name: "Carrot"
                           stock: 10
-                        - name: "Wheat"
+                        - name: "Cabbage"
                           stock: 15
                         - name: "Tomato"
                           stock: 5
@@ -1798,7 +1841,7 @@ paths:
                 type: string
               example: |
                 event: shops
-                data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10},{"name":"Wheat","stock":15}]},"tool":{"secondsUntilRestock":7200,"items":[{"name":"WateringCan","stock":3}]},"egg":{"secondsUntilRestock":10800,"items":[]},"decor":{"secondsUntilRestock":14400,"items":[]}}
+                data: {"seed":{"secondsUntilRestock":3600,"items":[{"name":"Carrot","stock":10},{"name":"Cabbage","stock":15}]},"tool":{"secondsUntilRestock":7200,"items":[{"name":"WateringCan","stock":3}]},"egg":{"secondsUntilRestock":10800,"items":[]},"decor":{"secondsUntilRestock":14400,"items":[]}}
 
   /stats/items:
     get:
@@ -2043,8 +2086,8 @@ paths:
       description: |
         Returns one row per item appearance (= one row per `(restock, item)` pair).
 
-        Use this endpoint when you need exact `restocked_at` timestamps — for example
-        a chart zoomed in tight enough that day/hour buckets hide individual drops.
+        Use this endpoint when you need exact `restocked_at` timestamps, for example
+        a chart zoomed in tight enough that day/hour buckets would hide individual drops.
 
         The response includes `restock_interval_seconds` from the parent restock,
         so callers can derive the in-shop presence window
@@ -2623,7 +2666,7 @@ components:
             bundleUrl:
               type: string
               description: URL of the cached bundle
-              example: "https://magicgarden.gg/assets/main-DvXv24E7.js"
+              example: "https://magicgarden.gg/version/642/assets/main-D3Z0cIc_.js"
             bundleFetchedAt:
               type: string
               format: date-time
@@ -2645,7 +2688,7 @@ components:
         uptime: 3600
         cache:
           hasBundleCached: true
-          bundleUrl: "https://magicgarden.gg/assets/main-DvXv24E7.js"
+          bundleUrl: "https://magicgarden.gg/version/642/assets/main-D3Z0cIc_.js"
           bundleFetchedAt: "2024-01-20T10:00:00.000Z"
           bundleAge: 180000
           categoriesCached: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
@@ -2672,7 +2715,7 @@ components:
           items:
             - name: "Carrot"
               stock: 10
-            - name: "Wheat"
+            - name: "Cabbage"
               stock: 15
         tool:
           secondsUntilRestock: 7200
@@ -2717,7 +2760,7 @@ components:
         items:
           - name: "Carrot"
             stock: 10
-          - name: "Wheat"
+          - name: "Cabbage"
             stock: 15
 
     SpritesResponse:

@@ -7,6 +7,8 @@ import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import { asyncHandler, Errors } from "../middleware/index.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
+import { buildSpriteUrl } from "../../utils/spriteUrlBuilder.js";
+import { getStoredVersionCached } from "../../core/game/versionStorage.js";
 
 export const spritesRouter = express.Router();
 
@@ -136,35 +138,105 @@ spritesRouter.get(
   })
 );
 
-/**
- * GET /assets/sprites
- * List available sprite categories.
- */
-spritesRouter.get("/", (req, res) => {
-  const categories = Array.from(ALLOWED_CATEGORIES).sort();
-  const payload = {
-    categories,
-    baseUrl: config.sprites.baseUrl,
-    exportDir: config.sprites.exportDir,
-    usage: {
-      endpoint: "GET /assets/sprites/:category/:name",
-      example: `${config.sprites.baseUrl}/assets/sprites/seeds/Carrot.png`,
-    },
-  };
+// In-memory catalog of exported PNG files, rebuilt at most once per minute.
+const catalogCache = {
+  builtAt: 0,
+  byCategory: new Map(),
+};
+const CATALOG_TTL_MS = 60_000;
 
-  const etag = buildWeakEtag(
-    "assets:sprites",
-    config.sprites.baseUrl,
-    config.sprites.exportDir,
-    categories.join(",")
-  );
-
-  if (isFresh(req, etag)) {
-    applyCacheHeaders(res, { etag, cacheControl: SPRITES_LIST_CACHE_CONTROL });
-    res.status(304).end();
-    return;
+async function getSpriteCatalog() {
+  const now = Date.now();
+  if (now - catalogCache.builtAt < CATALOG_TTL_MS && catalogCache.byCategory.size) {
+    return catalogCache.byCategory;
   }
 
-  applyCacheHeaders(res, { etag, cacheControl: SPRITES_LIST_CACHE_CONTROL });
-  res.json(payload);
-});
+  const byCategory = new Map();
+  const spriteRoot = path.join(config.sprites.exportDir, "sprite");
+
+  await Promise.all(
+    Array.from(ALLOWED_CATEGORIES).map(async (category) => {
+      try {
+        const files = await fs.readdir(path.join(spriteRoot, category));
+        const names = files
+          .filter((f) => f.endsWith(".png"))
+          .map((f) => f.slice(0, -4))
+          .sort();
+        if (names.length) {
+          byCategory.set(category, names);
+        }
+      } catch {
+        // Category directory missing on disk: skip it.
+      }
+    })
+  );
+
+  catalogCache.byCategory = byCategory;
+  catalogCache.builtAt = now;
+  return byCategory;
+}
+
+/**
+ * GET /assets/sprites
+ * Full catalog of exported sprites with ready-to-use PNG URLs.
+ * Optional filters: ?cat=<category> and ?search=<substring>.
+ */
+spritesRouter.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const { cat, search } = req.query;
+
+    if (cat !== undefined && !isValidCategory(cat)) {
+      throw Errors.badRequest(
+        `Invalid category '${cat}'. Allowed: ${Array.from(ALLOWED_CATEGORIES).sort().join(", ")}`
+      );
+    }
+
+    const catalog = await getSpriteCatalog();
+    const version = await getStoredVersionCached().catch(() => null);
+    const categories = Array.from(ALLOWED_CATEGORIES).sort();
+    const needle = search ? String(search).toLowerCase() : null;
+
+    const sprites = {};
+    let count = 0;
+    for (const category of categories) {
+      if (cat && category !== cat) continue;
+      const names = catalog.get(category) || [];
+      const matching = needle
+        ? names.filter((n) => n.toLowerCase().includes(needle))
+        : names;
+      if (!matching.length) continue;
+      sprites[category] = matching.map((name) => ({
+        name,
+        url: buildSpriteUrl(category, name, { version }),
+      }));
+      count += matching.length;
+    }
+
+    const payload = {
+      count,
+      baseUrl: config.sprites.baseUrl,
+      categories,
+      sprites,
+    };
+
+    const etag = buildWeakEtag(
+      "assets:sprites",
+      config.sprites.baseUrl,
+      String(version),
+      cat || "",
+      needle || "",
+      String(count),
+      categories.map((c) => (catalog.get(c) || []).length).join(",")
+    );
+
+    if (isFresh(req, etag)) {
+      applyCacheHeaders(res, { etag, cacheControl: SPRITES_LIST_CACHE_CONTROL });
+      res.status(304).end();
+      return;
+    }
+
+    applyCacheHeaders(res, { etag, cacheControl: SPRITES_LIST_CACHE_CONTROL });
+    res.json(payload);
+  })
+);
