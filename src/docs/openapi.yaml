@@ -355,6 +355,7 @@ paths:
         - Mutations (special plant variations)
         - Abilities (special pet abilities)
         - Weathers (weather definitions and icons)
+        - Weather groups (scheduling engine: duration, timing, drop odds)
 
         **Note:** All sprite URLs are absolute and ready to use.
       responses:
@@ -389,6 +390,9 @@ paths:
                   weathers:
                     type: object
                     description: All weathers data (keyed by weather ID)
+                  weatherGroups:
+                    type: object
+                    description: Weather scheduling engine data (keyed by group ID)
               examples:
                 complete:
                   summary: Complete data response
@@ -424,6 +428,7 @@ paths:
                     decor: {}
                     abilities: {}
                     weathers: {}
+                    weatherGroups: {}
 
   /data/plants:
     get:
@@ -760,11 +765,15 @@ paths:
         Returns all weather definitions extracted from the bundle.
 
         Each weather entry includes:
-        - Name and type (when available)
-        - Mutator effects (if any)
-        - Sprite URL (from iconSpriteKey)
+        - `name`: display name
+        - `groupId`: the scheduling group it belongs to (see `/data/weather-groups` for
+          duration, timing and drop odds within that group)
+        - `mutator`: the crop mutation it applies while active (`mutation` name +
+          `chancePerMinutePerCrop`), when the weather has one
+        - `sprite`: icon URL (resolved from `iconSpriteKey`)
 
-        **Note:** A default `Sunny` weather is included (no special effects).
+        **Note:** A default `Sunny` weather is included (no group/mutator — it's the
+        fallback state when no other weather is scheduled).
       responses:
         '200':
           description: Weathers data
@@ -779,9 +788,8 @@ paths:
                   summary: Example weathers
                   value:
                     Rain:
+                      groupId: "Hydro"
                       name: "Rain"
-                      type: "primary"
-                      durationMinutes: 5
                       mutator:
                         mutation: "Wet"
                         chancePerMinutePerCrop: 7
@@ -789,6 +797,65 @@ paths:
                     Sunny:
                       name: "Sunny"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/SunnyIcon.png"
+
+  /data/weather-groups:
+    get:
+      tags:
+        - Data
+      summary: Get the weather scheduling engine (groups, timing, drop odds)
+      description: |
+        Returns the deterministic weather scheduling data extracted from the bundle,
+        grouped by weather family (`Hydro`, `Lunar`). This is the engine that decides
+        *when* a weather event can start and *which* weather is picked, independently
+        of the per-weather definitions returned by `/data/weathers`.
+
+        Each group entry includes:
+        - `durationMinutes`: how long a picked weather event lasts once triggered
+        - `randomTimeSlots` (Hydro): the event fires at a random interval, uniformly
+          between `minFrequencyMinutes` and `maxFrequencyMinutes` after the previous one
+        - `fixedTimeSlots` (Lunar): fixed slot indices within the day where the event
+          always fires (5-minute ticks since midnight UTC, e.g. `48` = 04:00, `240` = 20:00)
+        - `dropTable`: candidate weather IDs with their relative `weight` — the actual
+          probability of a given weather is `weight / sum(weights in the same group)`
+          (e.g. Rain = 50/100 = 50% chance whenever the Hydro group triggers)
+
+        Cross-reference `weatherId` in `dropTable` with the keys of `/data/weathers`
+        to get each candidate's mutator/sprite.
+      responses:
+        '200':
+          description: Weather groups data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              examples:
+                weatherGroups:
+                  summary: Example weather groups
+                  value:
+                    Hydro:
+                      durationMinutes: 10
+                      randomTimeSlots:
+                        minFrequencyMinutes: 40
+                        maxFrequencyMinutes: 60
+                      dropTable:
+                        - weatherId: "Rain"
+                          weight: 50
+                        - weatherId: "Frost"
+                          weight: 30
+                        - weatherId: "Thunderstorm"
+                          weight: 20
+                    Lunar:
+                      durationMinutes: 10
+                      fixedTimeSlots: [0, 48, 96, 144, 192, 240]
+                      dropTable:
+                        - weatherId: "Dawn"
+                          weight: 67
+                        - weatherId: "AmberMoon"
+                          weight: 33
+        '304':
+          description: Not modified (matched If-None-Match)
 
   /data/enums:
     get:
@@ -878,6 +945,7 @@ paths:
         /data/mutations.csv   /data/mutations.tsv
         /data/abilities.csv   /data/abilities.tsv
         /data/weathers.csv    /data/weathers.tsv
+        /data/weather-groups.csv  /data/weather-groups.tsv
         /live.csv             /live.tsv
         /live/weather.csv     /live/weather.tsv
         /live/shops.csv       /live/shops.tsv

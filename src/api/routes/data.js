@@ -113,7 +113,7 @@ dataRouter.get(
     const spriteVersion = await getStoredVersionCached();
 
     const data = await getOrBuildCached("all", spriteVersion, async () => {
-      const [plants, pets, items, decor, eggs, mutations, abilities, weathers, enums] = await Promise.all([
+      const [plants, pets, items, decor, eggs, mutations, abilities, weathers, weatherGroups, enums] = await Promise.all([
         getOrBuildCached("plants", spriteVersion, () =>
           getTransformedPlants({ spriteVersion })
         ),
@@ -148,6 +148,9 @@ dataRouter.get(
             transformWeathersWithSprites(data, { spriteVersion })
           )
         ),
+        getOrBuildCached("weatherGroups", spriteVersion, () =>
+          gameDataService.getWeatherGroups()
+        ),
         getOrBuildCached("enums", spriteVersion, () => gameDataService.getEnums()),
       ]);
 
@@ -160,6 +163,7 @@ dataRouter.get(
         mutations,
         abilities,
         weathers,
+        weatherGroups,
         enums,
       };
     });
@@ -295,6 +299,20 @@ dataRouter.get(
 );
 
 dataRouter.get(
+  "/weather-groups",
+  asyncHandler(async (req, res) => {
+    const spriteVersion = await getStoredVersionCached();
+    if (maybeNotModified(req, res, "weatherGroups", spriteVersion)) return;
+
+    const data = await getOrBuildCached("weatherGroups", spriteVersion, () =>
+      gameDataService.getWeatherGroups()
+    );
+    setDataCacheHeaders(res, "weatherGroups", spriteVersion);
+    res.json(data);
+  })
+);
+
+dataRouter.get(
   "/enums",
   asyncHandler(async (req, res) => {
     const spriteVersion = await getStoredVersionCached();
@@ -327,6 +345,7 @@ const CATEGORY_DEFS = [
   ["abilities", "abilities", () => gameDataService.getAbilities()],
   ["mutations", "mutations", (sv) => gameDataService.getMutations().then((d) => transformDataWithSprites(d, "mutations", { spriteVersion: sv }))],
   ["weathers", "weathers", (sv) => gameDataService.getWeathers().then((d) => transformWeathersWithSprites(d, { spriteVersion: sv }))],
+  ["weather-groups", "weatherGroups", () => gameDataService.getWeatherGroups()],
   ["enums", "enums", () => gameDataService.getEnums()],
 ];
 

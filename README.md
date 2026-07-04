@@ -72,6 +72,7 @@ The server starts on `http://localhost:3000`
 | `GET /data/eggs` | Animal eggs with sprites |
 | `GET /data/abilities` | Special abilities |
 | `GET /data/weathers` | Weather definitions with sprites |
+| `GET /data/weather-groups` | Weather scheduling engine: duration, time slots and weighted drop table per group (Hydro, Lunar) |
 | `GET /data/enums` | Canonical game enums (rarity, currency, eligibleShops, itemType, weather, mutationTierOrder) |
 
 ### CSV / TSV Export
@@ -155,7 +156,9 @@ curl http://localhost:3000/data | jq
   "eggs": { ... },
   "mutations": { ... },
   "abilities": { ... },
-  "weathers": { ... }
+  "weathers": { ... },
+  "weatherGroups": { ... },
+  "enums": { ... }
 }
 ```
 

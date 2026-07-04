@@ -8,6 +8,7 @@ import { extractEggs } from "./eggs.js";
 import { extractAbilities } from "./abilities.js";
 import { extractMutations } from "./mutations.js";
 import { extractWeathers } from "./weathers.js";
+import { extractWeatherGroups } from "./weatherGroups.js";
 import { extractEnums } from "./enums.js";
 import {
   buildBaseSandbox,
@@ -26,6 +27,7 @@ export {
   extractAbilities,
   extractMutations,
   extractWeathers,
+  extractWeatherGroups,
   extractEnums,
   buildBaseSandbox,
   applyRarityEnum,
@@ -46,6 +48,7 @@ export const ExtractorRegistry = {
   abilities: extractAbilities,
   mutations: extractMutations,
   weathers: extractWeathers,
+  weatherGroups: extractWeatherGroups,
   enums: extractEnums,
 };
 

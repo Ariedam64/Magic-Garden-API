@@ -10,6 +10,7 @@ import {
   extractAbilities,
   extractMutations,
   extractWeathers,
+  extractWeatherGroups,
   extractEnums,
   ExtractorRegistry,
 } from "../core/extractors/index.js";
@@ -73,6 +74,14 @@ export const gameDataService = {
    */
   async getWeathers() {
     return getCategoryCached("weathers", extractWeathers);
+  },
+
+  /**
+   * Récupère le moteur de scheduling météo par groupe (Hydro, Lunar):
+   * durée d'un événement, fréquence/slots fixes, et drop table pondérée.
+   */
+  async getWeatherGroups() {
+    return getCategoryCached("weatherGroups", extractWeatherGroups);
   },
 
   /**
