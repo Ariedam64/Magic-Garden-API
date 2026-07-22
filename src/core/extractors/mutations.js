@@ -21,13 +21,18 @@ const MUTATION_COLOR_SIGNATURES = ["Thunderstruck:`rgb(", "Ambershine:`rgb(", "D
 const DEFAULT_MUTATION_COLOR = "#969696";
 
 /**
- * Extrait la map mutation -> color, définie comme un simple object literal
- * dans index-*.js (contrairement aux abilities, pas de switch statement ici).
+ * Extrait la map mutation -> color, définie comme un simple object literal.
+ * Ce bloc a changé d'emplacement plusieurs fois au fil des refontes de build
+ * du jeu (index.js -> un chunk dédié partagé avec les couleurs d'abilities).
+ * `uiColorsJs` est ce chunk, localisé dynamiquement par `fetchMainBundle` via
+ * une recherche dans le graphe de chunks — c'est la source la plus fiable.
+ * On garde indexJs en repli si jamais le jeu réintègre ce code ailleurs.
  */
-function extractMutationColors(indexJs) {
-  if (!indexJs) return {};
+function extractMutationColors(indexJs, uiColorsJs) {
+  const hit =
+    (uiColorsJs && findObjectLiteralBySignatures(uiColorsJs, MUTATION_COLOR_SIGNATURES)) ||
+    (indexJs && findObjectLiteralBySignatures(indexJs, MUTATION_COLOR_SIGNATURES));
 
-  const hit = findObjectLiteralBySignatures(indexJs, MUTATION_COLOR_SIGNATURES);
   if (!hit) {
     logger.warn("Mutation color map not found in bundle");
     return {};
@@ -46,9 +51,9 @@ function extractMutationColors(indexJs) {
 /**
  * Extrait les données des mutations du bundle.
  */
-export function extractMutations(mainJs, indexJs) {
+export function extractMutations(mainJs, indexJs, uiColorsJs) {
   const mutations = extractCategoryWithSandbox(mainJs, "mutations", SIGNATURES, buildBaseSandbox).data;
-  const colors = extractMutationColors(indexJs);
+  const colors = extractMutationColors(indexJs, uiColorsJs);
 
   for (const [key, mutation] of Object.entries(mutations)) {
     mutation.color = colors[key] || DEFAULT_MUTATION_COLOR;

@@ -72,12 +72,18 @@ function findAbilityColorSwitch(source) {
 
 /**
  * Extrait la map ability -> color depuis le switch statement du bundle.
- * Depuis la maj qui a introduit le code-splitting Vite, ce switch vit dans
- * index-*.js plutôt que dans main-*.js — on essaie donc indexJs en premier,
- * puis mainJs en repli si jamais il revient dans le bundle principal.
+ * Ce switch a changé d'emplacement plusieurs fois au fil des refontes de
+ * build du jeu (main.js -> index.js -> un chunk dédié partagé avec les
+ * couleurs de mutations). `uiColorsJs` est ce chunk, localisé dynamiquement
+ * par `fetchMainBundle` via une recherche dans le graphe de chunks — c'est
+ * la source la plus fiable. On garde indexJs/mainJs en repli si jamais le
+ * jeu réintègre ce code ailleurs.
  */
-function extractAbilityColors(mainJs, indexJs) {
-  const switchBody = (indexJs && findAbilityColorSwitch(indexJs)) || findAbilityColorSwitch(mainJs);
+function extractAbilityColors(mainJs, indexJs, uiColorsJs) {
+  const switchBody =
+    (uiColorsJs && findAbilityColorSwitch(uiColorsJs)) ||
+    (indexJs && findAbilityColorSwitch(indexJs)) ||
+    findAbilityColorSwitch(mainJs);
 
   if (!switchBody) {
     logger.warn("Ability color switch not found in bundle");
@@ -138,12 +144,12 @@ function extractCelestialAbilities(mainJs) {
 /**
  * Extrait les données des abilities du bundle.
  */
-export function extractAbilities(mainJs, indexJs) {
+export function extractAbilities(mainJs, indexJs, uiColorsJs) {
   const abilities = extractCategoryWithSandbox(mainJs, "abilities", SIGNATURES, buildBaseSandbox).data;
   const celestial = extractCelestialAbilities(mainJs);
   Object.assign(abilities, celestial);
 
-  const colors = extractAbilityColors(mainJs, indexJs);
+  const colors = extractAbilityColors(mainJs, indexJs, uiColorsJs);
 
   for (const [key, ability] of Object.entries(abilities)) {
     ability.color = colors[key] || DEFAULT_ABILITY_COLOR;
