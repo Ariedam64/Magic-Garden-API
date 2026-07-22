@@ -1,6 +1,6 @@
 // src/core/parsers/weather.js
 
-import { BaseParser } from "./base.js";
+import { BaseParser, extractPatches } from "./base.js";
 
 /**
  * Formate la météo dans un format lisible.
@@ -73,10 +73,11 @@ export class WeatherParser extends BaseParser {
       return;
     }
 
-    // PartialState = patches
-    if (msg.type !== "PartialState" || !Array.isArray(msg.patches)) return;
+    // PartialState (legacy) ou RoomFrame (nouveau netcode) = patches
+    const patches = extractPatches(msg);
+    if (!patches) return;
 
-    for (const p of msg.patches) {
+    for (const p of patches) {
       if (!p || typeof p.path !== "string") continue;
 
       if (p.path === "/child/data/weather") {

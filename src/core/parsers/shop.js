@@ -1,6 +1,6 @@
 // src/core/parsers/shop.js
 
-import { BaseParser, applyPatch } from "./base.js";
+import { BaseParser, applyPatch, extractPatches } from "./base.js";
 
 // Champs d'identifiant connus, testés dans l'ordre. Chaque item ne renseigne
 // que le champ correspondant à son type (un seed n'a que `species`, un egg que
@@ -136,12 +136,13 @@ export class ShopParser extends BaseParser {
       return;
     }
 
-    // PartialState = patches
-    if (msg.type !== "PartialState" || !Array.isArray(msg.patches)) return;
+    // PartialState (legacy) ou RoomFrame (nouveau netcode) = patches
+    const patches = extractPatches(msg);
+    if (!patches) return;
 
     let dirty = false;
 
-    for (const p of msg.patches) {
+    for (const p of patches) {
       if (!p || typeof p.path !== "string") continue;
 
       // Remplacement complet des shops

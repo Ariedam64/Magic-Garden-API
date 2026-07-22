@@ -4,7 +4,7 @@ import EventEmitter from "node:events";
 
 /**
  * Classe de base pour les parsers de données live.
- * Gère le parsing des messages WebSocket (Welcome + PartialState).
+ * Gère le parsing des messages WebSocket (Welcome + patches incrémentaux).
  */
 export class BaseParser extends EventEmitter {
   constructor() {
@@ -31,6 +31,30 @@ export class BaseParser extends EventEmitter {
   handleMessage(_msg) {
     throw new Error("handleMessage must be implemented");
   }
+}
+
+/**
+ * Extrait le tableau de patches d'un message d'update incrémental, quel que
+ * soit son emballage.
+ *
+ * Le jeu a annoncé un changement de netcode : `PartialState` (patches au
+ * niveau racine du message) devient `RoomFrame` (patches sous `state.patches`)
+ * — même contenu, juste un nouveau nom/emballage. On supporte les deux formes
+ * ici pour rester compatible pendant ET après la bascule, sans dépendre du
+ * moment exact du déploiement côté jeu.
+ */
+export function extractPatches(msg) {
+  if (!msg || typeof msg !== "object") return null;
+
+  if (msg.type === "PartialState" && Array.isArray(msg.patches)) {
+    return msg.patches;
+  }
+
+  if (msg.type === "RoomFrame" && Array.isArray(msg.state?.patches)) {
+    return msg.state.patches;
+  }
+
+  return null;
 }
 
 /**
