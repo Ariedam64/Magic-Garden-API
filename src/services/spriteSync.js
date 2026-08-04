@@ -24,7 +24,14 @@ import { joinUrl } from "../utils/url.js";
 const VERSION_MISMATCH_CODES = new Set([CloseCodes.VERSION_MISMATCH, CloseCodes.VERSION_EXPIRED]);
 
 let isSyncing = false;
-const SYNC_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+// Marge large : une resync complète forcée (30 artboards Rive rasterisés +
+// ~575 sprites redécoupés des atlas) tourne autour de 2 min, et le rendu Rive
+// grandit avec le nombre de pets que le jeu ajoute. Ce timeout est un
+// garde-fou contre une sync bloquée (il tue le process), pas une cible de
+// perf : le fixer trop juste transformerait une grosse maj du jeu en
+// redémarrage en boucle.
+const SYNC_TIMEOUT = 15 * 60 * 1000; // 15 minutes
 
 /**
  * Check if sprites directory exists and has content.
