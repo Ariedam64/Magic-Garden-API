@@ -22,7 +22,30 @@ import { PET_METADATA_FILE } from "./exportPetsFromRive.js";
 // Répertoires où sont exportés les sprites issus de Rive, par catégorie.
 const RIVE_CATEGORIES = { pets: PET_METADATA_FILE };
 
+// Revalidation sur le mtime des sidecars, au plus une fois par minute. Un
+// simple cache à vie ne suffit pas : l'export réécrit ces fichiers quand le jeu
+// se met à jour, et le processus, lui, ne redémarre pas toujours — une espèce
+// ajoutée par une maj resterait alors invisible jusqu'au prochain démarrage.
+const CACHE_TTL_MS = 60_000;
+
 let framesCache = null;
+let checkedAt = 0;
+let signature = "";
+
+async function sidecarSignature() {
+  const stamps = [];
+
+  for (const [category, metadataFile] of Object.entries(RIVE_CATEGORIES)) {
+    const file = path.join(config.sprites.exportDir, "sprite", category, metadataFile);
+    try {
+      stamps.push(`${category}:${(await fs.stat(file)).mtimeMs}`);
+    } catch {
+      stamps.push(`${category}:-`);
+    }
+  }
+
+  return stamps.join("|");
+}
 
 /**
  * Charge (et met en cache) le contenu des sidecars Rive.
@@ -30,7 +53,12 @@ let framesCache = null;
  * @returns {Promise<Record<string, object>>} clé atlas -> métadonnées de frame
  */
 export async function getRiveFrames() {
-  if (framesCache) return framesCache;
+  const now = Date.now();
+  if (framesCache && now - checkedAt < CACHE_TTL_MS) return framesCache;
+
+  checkedAt = now;
+  const current = await sidecarSignature();
+  if (framesCache && current === signature) return framesCache;
 
   const frames = {};
 
@@ -47,12 +75,15 @@ export async function getRiveFrames() {
     }
   }
 
+  signature = current;
   framesCache = frames;
   return framesCache;
 }
 
 export function clearRiveFramesCache() {
   framesCache = null;
+  checkedAt = 0;
+  signature = "";
 }
 
 /**

@@ -69,8 +69,42 @@ function buildSpriteUrlObject(category, spriteName, options = {}) {
   };
 }
 
+/**
+ * Build the URL of a rendered animation loop (WebP/GIF).
+ *
+ * Même forme que les sprites, une dimension de plus : une espèce a plusieurs
+ * clips (`idle`, `walk`…), chacun disponible dans un ou plusieurs formats.
+ * Le nom de fichier reste plat (`Chicken_idle.webp`) pour que Nginx puisse
+ * servir le dossier directement, comme il le fait pour les PNG.
+ *
+ * @param {string} category - Catégorie d'animation (pets)
+ * @param {string} name - Nom de l'artboard (ex: Chicken, FireHorseActive)
+ * @param {string} clip - Identifiant du clip (idle, walk, eat, sleep)
+ * @param {string} format - webp | gif
+ * @param {Object} options - Mêmes options que buildSpriteUrl
+ * @returns {string|null} Animation URL
+ */
+function buildAnimationUrl(category, name, clip, format, options = {}) {
+  const { baseUrl = config.sprites.baseUrl, absolute = true, version = null } = options;
+
+  if (!name || !clip || !format) {
+    return null;
+  }
+
+  const relativePath = `/assets/animations/${category}/${name}_${clip}.${format}`;
+  const query = version ? `?v=${encodeURIComponent(version)}` : "";
+  const pathWithQuery = `${relativePath}${query}`;
+
+  if (absolute && baseUrl) {
+    return `${baseUrl.replace(/\/$/, "")}${pathWithQuery}`;
+  }
+
+  return pathWithQuery;
+}
+
 export {
   buildSpriteUrl,
   buildSpriteUrls,
   buildSpriteUrlObject,
+  buildAnimationUrl,
 };

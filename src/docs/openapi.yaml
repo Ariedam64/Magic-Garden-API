@@ -502,11 +502,22 @@ paths:
         - Name and price
         - Special ability reference
         - Sprite URL
+        - `animations`: looping WebP/GIF URLs (`idle`, `walk`, `eat`, `sleep`)
+          when they have been generated - see `/assets/animations`
+        - `rive`: the game's vector source, for clients that can render it live
+
+        **Unreleased species.** The game's Rive file ships with the client, so it
+        runs ahead of the game data: it currently holds `Rooster` and `Hedgehog`,
+        two pets the data does not mention yet. They are listed here with
+        `released: false`, and carry a name, a sprite and animations but no
+        stats - none exist. Filter them out for a shop, keep them for a bestiary.
 
         **Use cases:**
         - Build pet encyclopedias
         - Compare pet abilities
         - Display pet shop inventory
+        - Show a pet that actually moves, with a plain `<img>` tag
+        - See what is coming before it ships
       responses:
         '200':
           description: Pets data
@@ -525,6 +536,18 @@ paths:
                       coinPrice: 500
                       ability: "HarvestBoost"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Bunny.png"
+                      animations:
+                        idle:
+                          url: "https://mg-api.ariedam.fr/assets/animations/pets/Bunny_idle.webp?v=824"
+                          format: "webp"
+                          width: 198
+                          height: 257
+                          frames: 210
+                          fps: 30
+                          durationMs: 7000
+                          anchor:
+                            x: 0.5
+                            y: 1
                     Cat:
                       name: "Cat"
                       coinPrice: 750
@@ -535,6 +558,25 @@ paths:
                       coinPrice: 600
                       ability: "FindTreasure"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Dog.png"
+                    Rooster:
+                      name: "Rooster"
+                      released: false
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/pets/Rooster.png?v=824"
+                      animations:
+                        idle:
+                          url: "https://mg-api.ariedam.fr/assets/animations/pets/Rooster_idle.webp?v=824"
+                          format: "webp"
+                          timeline: "Pet_Idle"
+                          width: 253
+                          height: 257
+                          frames: 210
+                          fps: 30
+                          durationMs: 7000
+                      rive:
+                        url: "https://mg-api.ariedam.fr/assets/proxy?url=https%3A%2F%2Fmagicgarden.gg%2Fruntime-assets%2Fpets.bfec8b856f6e2b0e4a83.riv"
+                        origin: "https://magicgarden.gg/runtime-assets/pets.bfec8b856f6e2b0e4a83.riv"
+                        artboard: "Rooster"
+                        stateMachine: "Pet State Machine"
 
   /data/items:
     get:
@@ -1412,6 +1454,327 @@ paths:
                     error:
                       code: "NOT_FOUND"
                       message: "Sprite not found: seeds/NonExistent.png"
+
+  /assets/animations:
+    get:
+      tags:
+        - Assets
+      summary: Catalog of animated pet loops (WebP/GIF)
+      description: |
+        Pets are the only creatures the game renders as vectors rather than
+        sprites, so beyond the still PNG served by `/assets/sprites/pets/*`
+        this API can serve them **animated**: one looping WebP (or GIF) per
+        species and per state.
+
+        Loops are pre-rendered whenever the game ships a new pet file - never
+        on request - and served as plain files. Drop the URL in an `<img>` tag
+        and it plays; there is no runtime to embed.
+
+        **Clips:**
+        - `idle` - the resting loop, 7 s
+        - `walk` - one step cycle, ~0.6 s
+        - `eat` - eating, 1 s
+        - `sleep` - sleeping, 8 s
+
+        Not every species exposes every clip, and the two weather variants
+        (`FireHorseActive`, `ThunderWolfActive`) only ship `idle`.
+
+        **Filters:** `cat`, `name` (exact species), `clip`, `search`
+        (case-insensitive substring on the species name).
+
+        **Response notes:**
+        - Every loop is rendered to the same subject height, so species stay
+          visually comparable - a snail and a horse come out the same size.
+        - `url` is the link, in the primary format (WebP by default); `format`
+          names it, and any additional format appears under its own key
+          (`gif`).
+        - `anchor` places the sprite like the game does: `x` is always 0.5,
+          `y` marks the ground line under the pet's feet.
+        - `source.generatedAt` tells you when the loops were last rendered, and
+          `source.riveUrl` which game file they came from.
+        - Not to be confused with the `animations` **sprite** category
+          (`/assets/sprites/animations/*.png`), which holds still frames from
+          the game's atlases.
+      parameters:
+        - name: cat
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pets]
+          description: Only return animations from this category
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Exact species name (case-insensitive)
+          example: "Chicken"
+        - name: clip
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [idle, walk, eat, sleep]
+          description: Only return this clip
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive substring match on species names
+          example: "horse"
+      responses:
+        '200':
+          description: Animation catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 118
+                  baseUrl:
+                    type: string
+                    example: "https://mg-api.ariedam.fr"
+                  categories:
+                    type: array
+                    items:
+                      type: string
+                    example: ["pets"]
+                  formats:
+                    type: array
+                    items:
+                      type: string
+                    description: Formats currently generated
+                    example: ["webp"]
+                  source:
+                    type: object
+                    properties:
+                      riveUrl:
+                        type: string
+                        description: Game file the loops were rendered from
+                      generatedAt:
+                        type: string
+                        format: date-time
+                  animations:
+                    type: object
+                    description: Animations grouped by category
+                    additionalProperties:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/PetAnimation'
+              examples:
+                filtered:
+                  summary: One species (?name=Chicken)
+                  value:
+                    count: 4
+                    baseUrl: "https://mg-api.ariedam.fr"
+                    categories: ["pets"]
+                    formats: ["webp"]
+                    source:
+                      riveUrl: "https://magicgarden.gg/runtime-assets/pets.bfec8b856f6e2b0e4a83.riv"
+                      generatedAt: "2026-08-04T14:31:07.412Z"
+                    animations:
+                      pets:
+                        - category: "pets"
+                          name: "Chicken"
+                          clip: "idle"
+                          timeline: "Pet_Idle"
+                          url: "https://mg-api.ariedam.fr/assets/animations/pets/Chicken_idle.webp?v=824"
+                          format: "webp"
+                          width: 212
+                          height: 257
+                          frames: 210
+                          fps: 30
+                          durationMs: 7000
+                          anchor:
+                            x: 0.5
+                            y: 1
+        '400':
+          description: Unknown category in `cat`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /assets/animations/{category}/{file}:
+    get:
+      tags:
+        - Assets
+      summary: Download an animated loop
+      description: |
+        Download one looping animation as an animated WebP or GIF. The filename
+        is `<Species>_<clip>.<webp|gif>`.
+
+        WebP is the format to prefer: 8-bit alpha (these sprites have soft
+        edges and translucent shadows) and about half the bytes of the
+        equivalent GIF. GIF is only generated when the server is configured for
+        it, and pays for compatibility with a 256-colour palette and 1-bit
+        transparency.
+
+        **Examples:**
+        - `/assets/animations/pets/Chicken_idle.webp` - chicken, idle loop
+        - `/assets/animations/pets/Horse_walk.webp` - horse, one step cycle
+        - `/assets/animations/pets/ThunderWolfActive_idle.webp` - thunder wolf under active weather
+
+        **HTML:**
+        ```html
+        <img src="https://mg-api.ariedam.fr/assets/animations/pets/Chicken_idle.webp" alt="Chicken">
+        ```
+
+        The file loops forever on its own - no JavaScript, no Rive runtime.
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [pets]
+          example: "pets"
+        - name: file
+          in: path
+          required: true
+          description: "`<Species>_<clip>.<webp|gif>`"
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9-]+_[a-z0-9]+\.(webp|gif)$'
+          example: "Chicken_idle.webp"
+      responses:
+        '200':
+          description: Animated image
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid category or filename
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Animation not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notFound:
+                  summary: Species has no such clip
+                  value:
+                    error:
+                      code: "NOT_FOUND"
+                      message: "Animation not found: pets/Chicken_dance.webp"
+
+  /assets/rive:
+    get:
+      tags:
+        - Assets
+      summary: The game's Rive (vector) files and what they contain
+      description: |
+        Everything that moves in the game is vector art, rendered live by a Rive
+        runtime: the pets, but also the animated decor, the thought bubble, the
+        coin and the gift box. This endpoint publishes the files themselves and
+        an inventory of what is inside them.
+
+        **Why you may want the file rather than the images.** `pets.riv` is
+        3 MB and holds all 28 species with about 660 timelines, at any
+        resolution and frame rate. The equivalent coverage as pre-encoded WebP
+        would run to hundreds of megabytes. If your client can run the Rive
+        runtime, play the source; if it can only show a picture, use
+        `/assets/animations`.
+
+        **What the inventory is for.** Artboard names, state machine names,
+        timeline names and - above all - **the type of every state machine
+        input**. Half of a pet's inputs are *triggers* (`walk`, `eat`,
+        `petted`), not booleans (`sleep`, `fire`, `thunder`), and asking for the
+        wrong one fails silently. All of it changes with game updates, so
+        nothing here should ever be hardcoded by a client.
+
+        **Notes:**
+        - `url` goes through `/assets/proxy`, which adds the CORS headers
+          magicgarden.gg does not send - a browser cannot fetch `origin`
+          directly.
+        - `origin` is versioned by content hash, so it changes on every update.
+        - `loadable: false` means our pinned runtime cannot read the file.
+          `avatar.riv` is permanently in this state: it references assets stored
+          outside the file (the cosmetics bundle) and never finishes loading.
+        - The inventory is refreshed during sprite sync, never per request:
+          inspecting a file costs a download and a WASM pass.
+      parameters:
+        - name: key
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Return a single file, with full artboard detail
+          example: "pets"
+        - name: full
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["1"]
+          description: Include every artboard's timelines and state machines
+      responses:
+        '200':
+          description: Rive inventory
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 6
+                  baseUrl:
+                    type: string
+                    example: "https://mg-api.ariedam.fr"
+                  generatedAt:
+                    type: string
+                    format: date-time
+                    description: When the inventory was last refreshed
+                  files:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/RiveFile'
+              examples:
+                summary:
+                  summary: Default view
+                  value:
+                    count: 6
+                    baseUrl: "https://mg-api.ariedam.fr"
+                    generatedAt: "2026-08-04T18:25:17.004Z"
+                    files:
+                      pets:
+                        key: "pets"
+                        aliases: ["rive/pets.riv", "rive/pets"]
+                        bundle: "default"
+                        url: "https://mg-api.ariedam.fr/assets/proxy?url=https%3A%2F%2Fmagicgarden.gg%2Fruntime-assets%2Fpets.bfec8b856f6e2b0e4a83.riv"
+                        origin: "https://magicgarden.gg/runtime-assets/pets.bfec8b856f6e2b0e4a83.riv"
+                        bytes: 3085491
+                        loadable: true
+                        artboardCount: 29
+                        timelineCount: 638
+                        artboards: ["Pets", "Pig", "Horse", "Chicken"]
+                      avatar:
+                        key: "avatar"
+                        bundle: "default"
+                        loadable: false
+                        error: "Rive load timed out after 20000ms"
+        '404':
+          description: Unknown `key`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /assets/sprites/composed:
     get:
@@ -2683,6 +3046,292 @@ components:
           format: uri
           description: Absolute URL to pet sprite
           example: "https://mg-api.ariedam.fr/assets/sprites/pets/Bunny.png"
+        released:
+          type: boolean
+          description: |
+            Only present, and always `false`, on species that exist in the
+            game's Rive file but have no game data yet. Absent means the pet is
+            live. Filter on it if you are building a shop; keep them if you are
+            building a bestiary.
+          example: false
+        rive:
+          $ref: '#/components/schemas/RiveSource'
+        animations:
+          type: object
+          description: |
+            Looping animations for this species, keyed by clip (`idle`, `walk`,
+            `eat`, `sleep`). Absent when none have been generated - it is a
+            bonus, never a contract. See `/assets/animations`.
+          additionalProperties:
+            $ref: '#/components/schemas/PetAnimationLink'
+          example:
+            idle:
+              url: "https://mg-api.ariedam.fr/assets/animations/pets/Bunny_idle.webp?v=824"
+              format: "webp"
+              width: 198
+              height: 257
+              frames: 210
+              fps: 30
+              durationMs: 7000
+              anchor:
+                x: 0.5
+                y: 1
+
+    RiveFile:
+      type: object
+      description: One Rive file from the game's manifest, and what it contains
+      properties:
+        key:
+          type: string
+          description: Stable key, taken from the filename (not the alias, which the game can rename)
+          example: "pets"
+        aliases:
+          type: array
+          items:
+            type: string
+          example: ["rive/pets.riv", "rive/pets"]
+        bundle:
+          type: string
+          description: Manifest bundle declaring it - only `pets` and `avatar` live in `default`
+          example: "default"
+        url:
+          type: string
+          format: uri
+          description: Fetchable from a browser, through `/assets/proxy`
+        origin:
+          type: string
+          format: uri
+          description: Upstream URL, versioned by content hash
+        bytes:
+          type: integer
+          example: 3085491
+        loadable:
+          type: boolean
+          description: Whether the pinned runtime can read the file
+          example: true
+        error:
+          type: string
+          description: Present when `loadable` is false
+        defaultArtboard:
+          type: string
+          description: Container artboard the game never renders directly
+          example: "Pets"
+        artboardCount:
+          type: integer
+          example: 29
+        timelineCount:
+          type: integer
+          example: 638
+        artboards:
+          description: |
+            Artboard names by default; full objects with `?full=1` or `?key=`.
+          oneOf:
+            - type: array
+              items:
+                type: string
+            - type: array
+              items:
+                $ref: '#/components/schemas/RiveArtboard'
+        inspectedAt:
+          type: string
+          format: date-time
+
+    RiveArtboard:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Chicken"
+        width:
+          type: number
+          example: 600
+        height:
+          type: number
+          example: 850
+        animations:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "Pet_Idle"
+              frames:
+                type: integer
+                example: 420
+              fps:
+                type: number
+                example: 60
+              durationMs:
+                type: integer
+                example: 7000
+        stateMachines:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "Pet State Machine"
+              inputs:
+                type: array
+                description: |
+                  `type` is the part that matters: a `trigger` cannot be set like
+                  a `boolean`, and asking for the wrong one fails silently.
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: "sleep"
+                    type:
+                      type: string
+                      enum: [boolean, trigger, number, unknown]
+                      example: "boolean"
+
+    RiveSource:
+      type: object
+      description: |
+        The game's vector source for this pet, for clients that can run the Rive
+        runtime. One 3 MB file holds every species and all ~22 of their
+        timelines, at any resolution and frame rate - where the same coverage as
+        pre-encoded WebP would run to hundreds of megabytes.
+
+        `artboard` and `stateMachine` are the parts that cannot be guessed, and
+        that a client must never hardcode: they change with the game.
+      properties:
+        url:
+          type: string
+          format: uri
+          description: |
+            Fetchable from a browser - it goes through `/assets/proxy`, which
+            adds the CORS headers magicgarden.gg does not send.
+          example: "https://mg-api.ariedam.fr/assets/proxy?url=https%3A%2F%2Fmagicgarden.gg%2Fruntime-assets%2Fpets.bfec8b856f6e2b0e4a83.riv"
+        origin:
+          type: string
+          format: uri
+          description: Upstream URL, versioned by content hash
+          example: "https://magicgarden.gg/runtime-assets/pets.bfec8b856f6e2b0e4a83.riv"
+        artboard:
+          type: string
+          description: Artboard to instantiate for this species
+          example: "Chicken"
+        stateMachine:
+          type: string
+          description: State machine that sets the pet's scale and hides its ground shadow
+          example: "Pet State Machine"
+
+    PetAnimationLink:
+      type: object
+      description: One looping animation of a pet, as served to clients
+      properties:
+        url:
+          type: string
+          format: uri
+          description: The animation link, in the primary format (WebP by default)
+          example: "https://mg-api.ariedam.fr/assets/animations/pets/Chicken_idle.webp?v=824"
+        format:
+          type: string
+          description: Format `url` points to
+          example: "webp"
+        gif:
+          type: string
+          format: uri
+          description: Only present when the server also generates GIFs
+        timeline:
+          type: string
+          description: |
+            Rive timeline this loop was rendered from - what to play to
+            reproduce it live from `rive.url`.
+          example: "Pet_Idle"
+        width:
+          type: integer
+          example: 212
+        height:
+          type: integer
+          example: 257
+        frames:
+          type: integer
+          example: 210
+        fps:
+          type: number
+          example: 30
+        durationMs:
+          type: integer
+          description: Length of one full loop
+          example: 7000
+        anchor:
+          type: object
+          description: Placement anchor - `x` is always 0.5, `y` is the ground line
+          properties:
+            x:
+              type: number
+              example: 0.5
+            y:
+              type: number
+              example: 1
+
+    PetAnimation:
+      type: object
+      description: Catalog entry for one looping animation
+      properties:
+        category:
+          type: string
+          example: "pets"
+        name:
+          type: string
+          description: Artboard name (species, or weather variant)
+          example: "Chicken"
+        clip:
+          type: string
+          enum: [idle, walk, eat, sleep]
+          example: "idle"
+        timeline:
+          type: string
+          description: Rive timeline the loop was rendered from
+          example: "Pet_Idle"
+        url:
+          type: string
+          format: uri
+          example: "https://mg-api.ariedam.fr/assets/animations/pets/Chicken_idle.webp?v=824"
+        format:
+          type: string
+          description: Format `url` points to
+          example: "webp"
+        gif:
+          type: string
+          format: uri
+          description: Only present when the server also generates GIFs
+        width:
+          type: integer
+          example: 212
+        height:
+          type: integer
+          example: 257
+        frames:
+          type: integer
+          example: 210
+        fps:
+          type: number
+          example: 30
+        durationMs:
+          type: integer
+          example: 7000
+        anchor:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        bytes:
+          type: object
+          description: File size per format
+          additionalProperties:
+            type: object
+            properties:
+              bytes:
+                type: integer
 
     ItemData:
       type: object
@@ -2750,10 +3399,20 @@ components:
               items:
                 type: string
               example: ["plants", "pets", "items", "decor", "eggs", "mutations", "abilities"]
+        animations:
+          type: object
+          description: Pet animation rendering status
+          properties:
+            exportRunning:
+              type: boolean
+              description: Whether looping pet animations are currently being re-rendered in the background
+              example: false
       example:
         status: "ok"
         timestamp: "2024-01-20T10:30:00.000Z"
         uptime: 3600
+        animations:
+          exportRunning: false
         cache:
           hasBundleCached: true
           bundleUrl: "https://magicgarden.gg/version/642/assets/main-D3Z0cIc_.js"

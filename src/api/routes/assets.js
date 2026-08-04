@@ -5,6 +5,8 @@ import { asyncHandler, Errors } from "../middleware/index.js";
 import { assetDataService } from "../../services/index.js";
 import { spritesRouter } from "./sprites.js";
 import { composedRouter } from "./composed.js";
+import { animationsRouter } from "./animations.js";
+import { riveRouter } from "./rive.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 
 export const assetsRouter = express.Router();
@@ -105,3 +107,10 @@ assetsRouter.use("/sprites/composed", composedRouter);
 
 // Individual sprite PNGs: GET /assets/sprites/:category/:name.png
 assetsRouter.use("/sprites", spritesRouter);
+
+// Animated loops rendered from Rive: GET /assets/animations/:category/:name_<clip>.webp
+// (distinct from the `animations` sprite category, which holds still PNGs)
+assetsRouter.use("/animations", animationsRouter);
+
+// The game's Rive files themselves: GET /assets/rive
+assetsRouter.use("/rive", riveRouter);

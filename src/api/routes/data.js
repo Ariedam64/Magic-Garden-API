@@ -6,6 +6,7 @@ import { gameDataService } from "../../services/index.js";
 import { getCacheStats } from "../../core/game/cache.js";
 import { getStoredVersionCached } from "../../core/game/versionStorage.js";
 import { getTransformedPlants, enrichPlantsWithPurchasable } from "../../services/plantTransformer.js";
+import { getTransformedPets } from "../../services/petTransformer.js";
 import {
   transformDataWithSprites,
   transformWeathersWithSprites,
@@ -30,6 +31,20 @@ const transformedCache = {
   values: new Map(),
   pending: new Map(),
 };
+
+/**
+ * Vide le cache des données transformées.
+ *
+ * Il se purge tout seul quand la version du jeu ou le bundle changent, ce qui
+ * couvre les mises à jour. Mais l'export des animations de pets se termine
+ * **longtemps après** (une cinquantaine de minutes dans un processus fils) :
+ * sans purge explicite, `/data/pets` continuerait de servir la réponse mise en
+ * cache pendant l'export, donc sans les nouvelles boucles.
+ */
+export function clearTransformedDataCache() {
+  transformedCache.values.clear();
+  transformedCache.pending.clear();
+}
 
 function syncBundleCache(spriteVersion = null) {
   const bundleUrl = getCacheStats().bundleUrl;
@@ -118,9 +133,7 @@ dataRouter.get(
           getTransformedPlants({ spriteVersion })
         ),
         getOrBuildCached("pets", spriteVersion, () =>
-          gameDataService.getPets().then((data) =>
-            transformDataWithSprites(data, "pets", { spriteVersion })
-          )
+          getTransformedPets({ spriteVersion })
         ),
         getOrBuildCached("items", spriteVersion, () =>
           gameDataService.getItems().then((data) =>
@@ -193,9 +206,7 @@ dataRouter.get(
     if (maybeNotModified(req, res, "pets", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("pets", spriteVersion, () =>
-      gameDataService.getPets().then((data) =>
-        transformDataWithSprites(data, "pets", { spriteVersion })
-      )
+      getTransformedPets({ spriteVersion })
     );
     setDataCacheHeaders(res, "pets", spriteVersion);
     res.json(transformed);
@@ -338,7 +349,7 @@ const FORMAT_CONFIG = {
 // Category definitions: [routeName, cacheKey, builder(spriteVersion)]
 const CATEGORY_DEFS = [
   ["plants", "plants", (sv) => getTransformedPlants({ spriteVersion: sv })],
-  ["pets", "pets", (sv) => gameDataService.getPets().then((d) => transformDataWithSprites(d, "pets", { spriteVersion: sv }))],
+  ["pets", "pets", (sv) => getTransformedPets({ spriteVersion: sv })],
   ["items", "items", (sv) => gameDataService.getItems().then((d) => transformDataWithSprites(d, "items", { spriteVersion: sv }))],
   ["decors", "decor", (sv) => gameDataService.getDecor().then((d) => transformDataWithSprites(d, "decor", { spriteVersion: sv }))],
   ["eggs", "eggs", (sv) => gameDataService.getEggs().then((d) => transformDataWithSprites(d, "eggs", { spriteVersion: sv }))],

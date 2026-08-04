@@ -2,9 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getBaseUrl } from "../assets.js";
-import { loadManifest, getBundleByName } from "../manifest.js";
-import { joinUrl } from "../../utils/url.js";
+import { resolveRiveUrl } from "./riveManifest.js";
 import { logger } from "../../logger/index.js";
 import { loadRiveFile, renderArtboardToPng } from "./riveRenderer.js";
 
@@ -22,11 +20,11 @@ import { loadRiveFile, renderArtboardToPng } from "./riveRenderer.js";
  * des œufs qui, eux, restent dans l'atlas.
  */
 
-// Alias du fichier Rive des pets dans le manifest (le `src` réel est
-// versionné par hash, ex: /runtime-assets/pets.<hash>.riv).
-const PETS_RIVE_ALIASES = ["rive/pets.riv", "rive/pets"];
+// Clé du fichier Rive des pets dans le manifest (le `src` réel est versionné
+// par hash, ex: /runtime-assets/pets.<hash>.riv).
+const PETS_RIVE_KEY = "pets";
 
-const PET_STATE_MACHINE = "Pet State Machine";
+export const PET_STATE_MACHINE = "Pet State Machine";
 
 // Sidecar écrit à côté des PNG (préfixé `_` : le routeur de sprites n'accepte
 // que des noms en `.png`, donc il n'est jamais servi).
@@ -39,7 +37,7 @@ export const PET_METADATA_FILE = "_rive-frames.json";
 // Le jeu ne bake jamais ces variantes en image fixe : il n'existe donc aucune
 // pose de référence, et sa pose d'entrée attrape les éclairs/flammes à un creux
 // de leur pulsation. C'est le seul cas où on s'écarte de sa recette.
-const ACTIVE_VARIANTS = [
+export const ACTIVE_VARIANTS = [
   { artboard: "FireHorse", name: "FireHorseActive", input: "fire" },
   { artboard: "ThunderWolf", name: "ThunderWolfActive", input: "thunder" },
 ];
@@ -54,24 +52,7 @@ const SETTLE_SECONDS_WITH_INPUTS = 4;
  * @returns {Promise<string|null>}
  */
 export async function resolvePetsRiveUrl(baseUrl = null) {
-  const resolvedBase = baseUrl || (await getBaseUrl());
-  if (!resolvedBase) return null;
-
-  const manifest = await loadManifest({ baseUrl: resolvedBase });
-  const bundle = getBundleByName(manifest, "default");
-  if (!bundle?.assets) return null;
-
-  for (const asset of bundle.assets) {
-    const aliases = Array.isArray(asset?.alias) ? asset.alias : [];
-    if (!aliases.some((a) => PETS_RIVE_ALIASES.includes(a))) continue;
-
-    const src = (Array.isArray(asset?.src) ? asset.src : []).find(
-      (s) => typeof s === "string" && s.endsWith(".riv")
-    );
-    if (src) return joinUrl(resolvedBase, src);
-  }
-
-  return null;
+  return resolveRiveUrl(PETS_RIVE_KEY, { baseUrl });
 }
 
 async function downloadBuffer(url) {

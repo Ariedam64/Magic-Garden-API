@@ -56,6 +56,32 @@ export const config = {
     baseUrl: process.env.SPRITES_BASE_URL || "http://localhost:3000",
   },
 
+  // Animations de pets (boucles WebP/GIF rendues depuis rive/pets.riv).
+  // Ces fichiers pèsent ~1 Mo par espèce et coûtent quelques minutes de CPU à
+  // (re)générer : c'est un travail de fond, déclenché quand le .riv change.
+  animations: {
+    enabled: process.env.PET_ANIMATIONS_ENABLED !== "false",
+    // WebP d'abord : alpha 8 bits et ~2x plus compact que le GIF. Ajouter
+    // "gif" double le volume sur disque.
+    formats: (process.env.PET_ANIMATIONS_FORMATS || "webp")
+      .split(",")
+      .map((f) => f.trim().toLowerCase())
+      .filter(Boolean),
+    // Hauteur voulue du sujet (pas du canvas) : c'est ce qui rend les espèces
+    // comparables entre elles.
+    height: Number(process.env.PET_ANIMATIONS_HEIGHT) || 256,
+    // Niveau de near-lossless du WebP (1-100). Plus bas = plus compact et plus
+    // approximatif ; 20 rend une erreur maximale de 8/255, invisible à l'œil.
+    // Ce n'est pas une qualité lossy : voir encodeAnimation pour pourquoi le
+    // lossy est inadapté à ces aplats vectoriels.
+    quality: Number(process.env.PET_ANIMATIONS_QUALITY) || 20,
+    // Clips exportés, parmi ceux déclarés dans exportPetAnimations.js.
+    clips: (process.env.PET_ANIMATIONS_CLIPS || "idle,walk,eat,sleep")
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean),
+  },
+
   // History (SQLite persistence of shops/weather)
   history: {
     enabled: process.env.HISTORY_ENABLED !== "false",

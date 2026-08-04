@@ -19,6 +19,8 @@ import {
   resolvePetsRiveUrl,
 } from "../assets/sprites/exportPetsFromRive.js";
 import { getStoredRiveUrl, saveRiveAsset } from "../core/game/riveStorage.js";
+import { syncPetAnimations } from "./animationSync.js";
+import { syncRiveInventory } from "./riveSync.js";
 import { joinUrl } from "../utils/url.js";
 
 const VERSION_MISMATCH_CODES = new Set([CloseCodes.VERSION_MISMATCH, CloseCodes.VERSION_EXPIRED]);
@@ -202,7 +204,7 @@ async function fetchAllAtlases(baseUrl) {
  * suit ce fichier séparément, sinon un changement d'artwork de pet passerait
  * inaperçu (ou pire, on re-rendrait 30 artboards à chaque sync).
  *
- * @returns {Promise<{ exported: number, changed: boolean, reason?: string }>}
+ * @returns {Promise<{ exported: number, changed: boolean, riveUrl?: string, reason?: string }>}
  */
 async function syncPetSprites({ baseUrl, force = false } = {}) {
   try {
@@ -214,7 +216,7 @@ async function syncPetSprites({ baseUrl, force = false } = {}) {
     const storedUrl = await getStoredRiveUrl("pets");
     if (!force && storedUrl === riveUrl) {
       logger.debug({ riveUrl }, "Pets Rive file unchanged, skipping pet sprite export");
-      return { exported: 0, changed: false, reason: "unchanged" };
+      return { exported: 0, changed: false, riveUrl, reason: "unchanged" };
     }
 
     logger.info({ from: storedUrl, to: riveUrl, force }, "Exporting pet sprites from Rive");
@@ -228,7 +230,7 @@ async function syncPetSprites({ baseUrl, force = false } = {}) {
       await saveRiveAsset("pets", { url: riveUrl, names: result.names });
     }
 
-    return { exported: result.exported, changed: result.exported > 0 };
+    return { exported: result.exported, changed: result.exported > 0, riveUrl };
   } catch (err) {
     // Un échec de rendu Rive ne doit pas faire tomber la sync des atlas :
     // les PNG de pets déjà sur disque restent servis.
@@ -283,7 +285,19 @@ export async function checkAndSyncSprites({ force = false } = {}) {
     // leur propre suivi (hash du .riv), donc on les traite avant tous les
     // court-circuits ci-dessous — sinon un déploiement sur une install déjà
     // synchronisée n'exporterait jamais les pets, faute de montée de version.
+    // 2a. Inventaire de tous les .riv du manifest (6 fichiers, 5 bundles). Peu
+    // coûteux : chaque entrée est indexée par une URL versionnée par hash, donc
+    // seuls les fichiers qui ont réellement changé sont réinspectés.
+    await syncRiveInventory({ baseUrl, force }).catch((err) =>
+      logger.error({ error: err?.message || String(err) }, "Rive inventory sync failed")
+    );
+
     const petResult = await syncPetSprites({ baseUrl, force });
+
+    // 2b. Animations de pets : même source (`rive/pets.riv`), mais des minutes
+    // de rendu — donc un processus fils, qu'on ne suit pas. Les boucles déjà
+    // sur disque restent servies pendant la regénération.
+    await syncPetAnimations({ riveUrl: petResult.riveUrl ?? null, force });
 
     // 3. Skip the atlas work if version unchanged and not forced
     if (!versionChanged && !force) {

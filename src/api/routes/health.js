@@ -2,6 +2,7 @@
 
 import express from "express";
 import { getCacheStats } from "../../core/game/cache.js";
+import { isAnimationExportRunning } from "../../services/animationSync.js";
 
 export const healthRouter = express.Router();
 
@@ -17,6 +18,9 @@ healthRouter.get("/", (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
     cache: cacheStats,
+    // Le rendu des boucles de pets prend une dizaine de minutes dans un
+    // processus fils : sans ça, rien ne le signale hors des logs.
+    animations: { exportRunning: isAnimationExportRunning() },
   });
 });
 

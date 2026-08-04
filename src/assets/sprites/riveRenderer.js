@@ -21,8 +21,8 @@ import { logger } from "../../logger/index.js";
 // cadrage, et pas d'avance de la séquence d'amorçage. Le pas n'est pas
 // cosmétique — avancer 4 s d'un coup ne donne pas la même frame que huit fois
 // 0,5 s.
-const ALPHA_THRESHOLD = 16;
-const SETTLE_STEP_SECONDS = 0.5;
+export const ALPHA_THRESHOLD = 16;
+export const SETTLE_STEP_SECONDS = 0.5;
 
 // Balayage du cycle d'idle. Il se fait sur un canvas réduit : on ne compare
 // que des poses entre elles, la résolution finale n'apporte rien et coûte cher.
@@ -50,7 +50,7 @@ let rivePromise = null;
  * ferait échouer l'init — on répond donc `null` nous-mêmes pour l'aiguiller
  * vers le renderer Canvas2D (le seul dont on a besoin ici).
  */
-function makeShimmedCanvas(width = 1, height = 1) {
+export function makeShimmedCanvas(width = 1, height = 1) {
   const canvas = createCanvas(width, height);
   const getContext = canvas.getContext.bind(canvas);
   canvas.getContext = (type) => (type === "2d" ? getContext("2d") : null);
@@ -375,7 +375,7 @@ function frameLikeGame(canvas, context, width, height) {
 /**
  * Bounding box du contenu non transparent.
  */
-function alphaBounds(context, width, height) {
+export function alphaBounds(context, width, height) {
   const { data } = context.getImageData(0, 0, width, height);
 
   let minX = width;

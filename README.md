@@ -89,10 +89,15 @@ Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (
 | `GET /assets/sprites` | List available sprite categories |
 | `GET /assets/sprites/:category/:name` | Download individual sprite PNG |
 | `GET /assets/sprites/composed?key=…&mutations=…` | Pre-composed PNG with mutations applied |
+| `GET /assets/animations` | Catalog of animated pet loops (WebP/GIF) |
+| `GET /assets/animations/pets/:name_:clip.webp` | Download one looping animation |
+| `GET /assets/rive` | The game's Rive (vector) files and what they contain |
 
 **Available sprite categories**: `seeds`, `plants`, `tallPlants`, `mutations`, `pets`, `decor`, `items`, `objects`, `ui`, `animations`, `weather`, `tiles`, `winter`
 
 Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return URLs pointing to the game's versioned asset base. `/assets/sprites` serves PNGs from this API (controlled by `SPRITES_BASE_URL`).
+
+Pets are the only creatures the game renders as vectors (`rive/pets.riv`) rather than sprites, so on top of the still PNG the API serves them **animated**: one looping WebP per species and per state (`idle`, `walk`, `eat`, `sleep`). Each pet also carries a `rive` block - the vector source itself, for clients that can render it live: 3 MB covers every species and all their timelines. And because that file ships ahead of the game data, `/data/pets` lists species the game has not released yet, flagged `released: false`. The loops are pre-rendered when the game ships a new pet file and served as plain files - drop the URL in an `<img>` tag and it plays, no runtime needed. They are also attached to each species in `/data/pets` under `animations`. See `doc-rive.md` §7.
 
 The composed endpoint accepts a full atlas key (e.g. `sprite/tallplant/Cactus`) and an optional comma-separated list of mutations. It returns a single PNG with all layers merged (color filters, icons, overlays). See `doc-sprite.md` for the full spec.
 
@@ -381,7 +386,16 @@ LOG_LEVEL=info
 # Sprites
 SPRITES_EXPORT_DIR=./sprites_dump
 SPRITES_BASE_URL=http://localhost:3000
+
+# Pet animations (looping WebP/GIF rendered from the game's Rive file)
+PET_ANIMATIONS_ENABLED=true
+PET_ANIMATIONS_FORMATS=webp        # add ",gif" to also generate GIFs (doubles disk usage)
+PET_ANIMATIONS_HEIGHT=256          # rendered subject height, in pixels
+PET_ANIMATIONS_QUALITY=20          # WebP near-lossless level (lower = smaller)
+PET_ANIMATIONS_CLIPS=idle,walk,eat,sleep
 ```
+
+Animations are rendered at 30 fps, near-lossless, in a background child process when the game's pet file changes (~100 MB and ~50 minutes for the full set). `PET_ANIMATIONS_QUALITY` is a near-lossless level, not a lossy quality - lossy is a poor fit for this flat vector art, see `doc-rive.md` §7. Run it by hand with `npm run export:animations -- --force`.
 
 Set `CORS_ENABLED=false` or `RATE_LIMIT_ENABLED=false` to disable those features. SSE streams use a separate limiter (defaults to `RATE_LIMIT_MAX / 10` per window).
 
