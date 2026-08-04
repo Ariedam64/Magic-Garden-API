@@ -73,6 +73,25 @@ describe("pets Rive asset", () => {
     assert.ok(info.width > 1 && info.height > 1, "rendered sprite is empty");
   });
 
+  it("picks a wings-spread frame for flying pets", async () => {
+    // L'idle boucle : une frame prise au hasard donne des ailes repliées.
+    // La chauve-souris de l'atlas d'origine faisait 312x157, soit un ratio
+    // ~2 — c'est la signature de la pose ailes déployées qu'on veut retrouver.
+    const rendered = await renderArtboardToPng(riveFile, "Bat", {
+      stateMachineName: PET_STATE_MACHINE,
+    });
+
+    const { info } = await sharp(rendered.buffer)
+      .trim({ threshold: 1 })
+      .png()
+      .toBuffer({ resolveWithObject: true });
+
+    assert.ok(
+      info.width > info.height * 1.5,
+      `Bat should be much wider than tall, got ${info.width}x${info.height}`
+    );
+  });
+
   it("renders the weather-active variant differently from the base pose", async () => {
     const base = await renderArtboardToPng(riveFile, "ThunderWolf", {
       stateMachineName: PET_STATE_MACHINE,

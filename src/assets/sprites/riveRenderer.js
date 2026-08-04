@@ -17,6 +17,12 @@ import { logger } from "../../logger/index.js";
  * précompilés — pas de toolchain native à installer sur le serveur).
  */
 
+// Côté de la vignette utilisée pour comparer des poses entre elles.
+const THUMB_SIZE = 48;
+
+// Une frame est candidate si sa largeur atteint ce ratio de la plus large.
+const SPAN_TOLERANCE = 0.97;
+
 let rivePromise = null;
 
 /**
@@ -96,7 +102,9 @@ export async function loadRiveFile(bytes) {
  * @param {object} options
  * @param {string|null} options.stateMachineName - State machine à instancier
  * @param {Record<string, boolean>} options.inputs - Inputs booléens à forcer
- * @param {number} options.settleFrames - Frames à avancer avant capture
+ * @param {number} options.settleFrames - Frames avancées avant l'échantillonnage
+ * @param {number} options.scanFrames - Longueur du cycle échantillonné
+ * @param {number} options.scanStep - Une frame retenue sur N
  * @param {number} options.scale - Multiplicateur de résolution
  * @returns {Promise<{ buffer: Buffer, width: number, height: number }|null>}
  *   PNG non rogné aux dimensions de l'artboard, ou null si l'artboard manque
@@ -107,7 +115,9 @@ export async function renderArtboardToPng(
   {
     stateMachineName = null,
     inputs = null,
-    settleFrames = 240,
+    settleFrames = 120,
+    scanFrames = 300,
+    scanStep = 4,
     scale = 1,
   } = {}
 ) {
@@ -121,34 +131,26 @@ export async function renderArtboardToPng(
   const height = Math.max(1, Math.ceil((bounds.maxY - bounds.minY) * scale));
 
   const canvas = makeShimmedCanvas(width, height);
+  const context = canvas.getContext("2d");
   const renderer = rive.makeRenderer(canvas);
 
-  let machine = null;
-  try {
-    const machineDef = stateMachineName ? artboard.stateMachineByName(stateMachineName) : null;
+  const machineDef = stateMachineName ? artboard.stateMachineByName(stateMachineName) : null;
 
-    if (machineDef) {
-      machine = new rive.StateMachineInstance(machineDef, artboard);
+  const makeMachine = () => {
+    const instance = new rive.StateMachineInstance(machineDef, artboard);
 
-      if (inputs) {
-        for (let i = 0; i < machine.inputCount(); i++) {
-          const input = machine.input(i);
-          const value = inputs[input.name];
-          if (typeof value === "boolean") input.asBool().value = value;
-        }
+    if (inputs) {
+      for (let i = 0; i < instance.inputCount(); i++) {
+        const input = instance.input(i);
+        const value = inputs[input.name];
+        if (typeof value === "boolean") input.asBool().value = value;
       }
-
-      // On avance d'un nombre fixe de frames : la state machine part de son
-      // état d'entrée, les transitions/idle se stabilisent, et le résultat
-      // reste déterministe d'un export à l'autre.
-      for (let i = 0; i < settleFrames; i++) {
-        machine.advance(1 / 60);
-        artboard.advance(1 / 60);
-      }
-    } else {
-      artboard.advance(0);
     }
 
+    return instance;
+  };
+
+  const drawFrame = () => {
     renderer.clear();
     renderer.save();
     renderer.align(
@@ -163,10 +165,145 @@ export async function renderArtboardToPng(
     // Indispensable avec le renderer Canvas2D : `flush()` seul ne valide pas
     // la frame, le canvas resterait entièrement transparent.
     rive.resolveAnimationFrame();
+  };
+
+  let machine = null;
+  try {
+    if (!machineDef) {
+      artboard.advance(0);
+      drawFrame();
+      return { buffer: canvas.toBuffer("image/png"), width, height };
+    }
+
+    machine = makeMachine();
+
+    // L'idle d'un pet ne se stabilise jamais : il boucle (ailes qui battent,
+    // éclairs/flammes des variantes météo, clignements d'yeux…). Figer une
+    // frame arbitraire donne des poses ratées — chauve-souris ailes repliées,
+    // ThunderWolf sans éclairs, chèvre les yeux fermés.
+    for (let i = 0; i < settleFrames; i++) {
+      machine.advance(1 / 60);
+      artboard.advance(1 / 60);
+    }
+
+    // Passe 1 — on balaie un cycle en ne mesurant que les pixels (aucun
+    // encodage PNG) : largeur du contenu, plus une vignette en niveaux de gris
+    // qui servira à écarter les frames atypiques.
+    const samples = [];
+
+    for (let frame = 0; frame < scanFrames; frame++) {
+      if (frame % scanStep === 0) {
+        drawFrame();
+        samples.push({ frame, ...measureFrame(context, width, height) });
+      }
+      machine.advance(1 / 60);
+      artboard.advance(1 / 60);
+    }
+
+    const chosen = pickFrame(samples);
+    if (chosen === null) {
+      drawFrame();
+      return { buffer: canvas.toBuffer("image/png"), width, height };
+    }
+
+    // Passe 2 — on rejoue jusqu'à la frame retenue et on encode une seule
+    // fois. `advance` est déterministe, donc rejouer la même séquence sur une
+    // instance neuve redonne exactement la frame mesurée.
+    machine.delete?.();
+    machine = makeMachine();
+
+    for (let i = 0; i < settleFrames + chosen; i++) {
+      machine.advance(1 / 60);
+      artboard.advance(1 / 60);
+    }
+    drawFrame();
 
     return { buffer: canvas.toBuffer("image/png"), width, height };
   } finally {
     machine?.delete?.();
     renderer.delete?.();
   }
+}
+
+/**
+ * Mesure une frame sans l'encoder : largeur du contenu opaque + vignette.
+ */
+function measureFrame(context, width, height) {
+  const { data } = context.getImageData(0, 0, width, height);
+
+  let minX = width;
+  let maxX = -1;
+
+  const thumb = new Uint8Array(THUMB_SIZE * THUMB_SIZE);
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4;
+    const ty = Math.min(THUMB_SIZE - 1, ((y * THUMB_SIZE) / height) | 0);
+
+    for (let x = 0; x < width; x++) {
+      const i = row + x * 4;
+      const alpha = data[i + 3];
+      if (alpha <= 8) continue;
+
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+
+      // Luma approchée, pondérée par l'alpha : suffit à comparer des poses.
+      const tx = Math.min(THUMB_SIZE - 1, ((x * THUMB_SIZE) / width) | 0);
+      const luma = (data[i] * 77 + data[i + 1] * 151 + data[i + 2] * 28) >> 8;
+      thumb[ty * THUMB_SIZE + tx] = (luma * alpha) / 255;
+    }
+  }
+
+  return { span: maxX < minX ? 0 : maxX - minX + 1, thumb };
+}
+
+/**
+ * Choisit la frame à exporter parmi les frames échantillonnées.
+ *
+ * 1. On ne garde que les plus larges : c'est le critère qui retrouve les poses
+ *    de l'artwork d'origine (envergure maximale pour les volants, VFX déployés
+ *    pour les variantes météo).
+ * 2. Parmi elles, on prend la plus proche de la médiane pixel à pixel. Un
+ *    clignement d'yeux ne dure que quelques frames : c'est un outlier, donc
+ *    il est écarté sans avoir à le détecter explicitement.
+ *
+ * @returns {number|null} index de frame (relatif au début du balayage)
+ */
+function pickFrame(samples) {
+  if (!samples.length) return null;
+
+  const maxSpan = Math.max(...samples.map((s) => s.span));
+  if (maxSpan <= 0) return null;
+
+  const candidates = samples.filter((s) => s.span >= maxSpan * SPAN_TOLERANCE);
+  if (candidates.length === 1) return candidates[0].frame;
+
+  const pixels = THUMB_SIZE * THUMB_SIZE;
+  const median = new Uint8Array(pixels);
+  const column = new Uint8Array(candidates.length);
+
+  for (let p = 0; p < pixels; p++) {
+    for (let c = 0; c < candidates.length; c++) column[c] = candidates[c].thumb[p];
+    median[p] = column.slice().sort()[candidates.length >> 1];
+  }
+
+  let best = candidates[0];
+  let bestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    let distance = 0;
+    for (let p = 0; p < pixels; p++) {
+      const delta = candidate.thumb[p] - median[p];
+      distance += delta * delta;
+    }
+    // `<` strict : à égalité on garde la frame la plus précoce, pour rester
+    // reproductible d'un export à l'autre.
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+
+  return best.frame;
 }
