@@ -1,7 +1,7 @@
 // src/assets/sprites/riveSource.js
 
 import { config } from "../../config/index.js";
-import { getStoredRiveUrl } from "../../core/game/riveStorage.js";
+import { getStoredRiveUrl, loadRiveInventory } from "../../core/game/riveStorage.js";
 import { PET_STATE_MACHINE } from "./exportPetsFromRive.js";
 
 /**
@@ -34,14 +34,14 @@ function proxied(riveUrl) {
  * @param {string|null} riveUrl - URL amont du .riv
  * @returns {object|null}
  */
-export function buildRiveSource(artboard, riveUrl) {
+export function buildRiveSource(artboard, riveUrl, stateMachine = PET_STATE_MACHINE) {
   if (!riveUrl || !artboard) return null;
 
   return {
     url: proxied(riveUrl),
     origin: riveUrl,
     artboard,
-    stateMachine: PET_STATE_MACHINE,
+    ...(stateMachine ? { stateMachine } : {}),
   };
 }
 
@@ -54,4 +54,15 @@ export function buildRiveSource(artboard, riveUrl) {
  */
 export async function getPetsRiveUrl() {
   return getStoredRiveUrl("pets").catch(() => null);
+}
+
+/**
+ * URL d'un `.riv` quelconque, telle que relevée par le dernier inventaire.
+ *
+ * Contrairement aux pets, les autres fichiers n'ont pas d'export d'images à
+ * garder cohérent : l'inventaire suffit.
+ */
+export async function getRiveUrlFromInventory(key) {
+  const { files } = await loadRiveInventory();
+  return files?.[key]?.url ?? null;
 }

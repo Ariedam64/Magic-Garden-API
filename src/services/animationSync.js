@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "../config/index.js";
 import { logger } from "../logger/index.js";
-import { getPetAnimations, clearPetAnimationsCache } from "../assets/sprites/riveAnimations.js";
+import { getAnimations, clearAnimationsCache } from "../assets/sprites/riveAnimations.js";
 
 /**
  * Déclenchement des animations de pets, en tâche de fond.
@@ -56,7 +56,7 @@ export async function syncPetAnimations({ riveUrl = null, force = false } = {}) 
   }
 
   if (!force && riveUrl) {
-    const { riveUrl: generatedFrom } = await getPetAnimations();
+    const { riveUrl: generatedFrom } = await getAnimations("pets");
     if (generatedFrom === riveUrl) {
       logger.debug({ riveUrl }, "Pet animations already generated for this Rive file");
       return { started: false, reason: "unchanged" };
@@ -82,7 +82,7 @@ export async function syncPetAnimations({ riveUrl = null, force = false } = {}) 
     running = null;
     // Le sidecar vient de changer : sans ça, l'API servirait son ancien
     // catalogue jusqu'à expiration du cache.
-    clearPetAnimationsCache();
+    clearAnimationsCache();
 
     // `/data/pets` garde ses entrées transformées en cache, purgées seulement
     // au changement de version. Or l'export vient de se terminer bien après ce

@@ -62,6 +62,14 @@ const MAX_FRAMES = 320;
  * comme le fait `renderArtboardToPng`.
  */
 function instantiateMachine(rive, artboard, stateMachineName, bools, settleSeconds = 0) {
+  // Certains fichiers n'en ont pas besoin : les décors sont de simples boucles
+  // sans état, leur artboard se rend correctement tel quel. On ne l'exige donc
+  // pas — mais si un nom est demandé et introuvable, on lève (voir plus bas).
+  if (!stateMachineName) {
+    artboard.advance(0);
+    return null;
+  }
+
   const definition = artboard.stateMachineByName(stateMachineName);
   if (!definition) {
     throw new Error(
@@ -202,7 +210,8 @@ function probeCycle(
       if (box.y + box.height - 1 > maxY) maxY = box.y + box.height - 1;
     });
   } finally {
-    machine.delete?.();
+    // `machine` est null quand l'artboard n'a pas de state machine (les décors).
+    machine?.delete?.();
     renderer.delete?.();
   }
 
@@ -338,7 +347,8 @@ export async function renderArtboardAnimation(
       offset += rowBytes * cropHeight;
     });
   } finally {
-    machine.delete?.();
+    // null quand l'artboard n'a pas de state machine (les décors).
+    machine?.delete?.();
     renderer.delete?.();
   }
 

@@ -7,6 +7,7 @@ import { getCacheStats } from "../../core/game/cache.js";
 import { getStoredVersionCached } from "../../core/game/versionStorage.js";
 import { getTransformedPlants, enrichPlantsWithPurchasable } from "../../services/plantTransformer.js";
 import { getTransformedPets } from "../../services/petTransformer.js";
+import { getTransformedDecor } from "../../services/decorTransformer.js";
 import {
   transformDataWithSprites,
   transformWeathersWithSprites,
@@ -141,9 +142,7 @@ dataRouter.get(
           )
         ),
         getOrBuildCached("decor", spriteVersion, () =>
-          gameDataService.getDecor().then((data) =>
-            transformDataWithSprites(data, "decor", { spriteVersion })
-          )
+          getTransformedDecor({ spriteVersion })
         ),
         getOrBuildCached("eggs", spriteVersion, () =>
           gameDataService.getEggs().then((data) =>
@@ -236,9 +235,7 @@ dataRouter.get(
     if (maybeNotModified(req, res, "decor", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("decor", spriteVersion, () =>
-      gameDataService.getDecor().then((data) =>
-        transformDataWithSprites(data, "decor", { spriteVersion })
-      )
+      getTransformedDecor({ spriteVersion })
     );
     setDataCacheHeaders(res, "decor", spriteVersion);
     res.json(transformed);
@@ -351,7 +348,7 @@ const CATEGORY_DEFS = [
   ["plants", "plants", (sv) => getTransformedPlants({ spriteVersion: sv })],
   ["pets", "pets", (sv) => getTransformedPets({ spriteVersion: sv })],
   ["items", "items", (sv) => gameDataService.getItems().then((d) => transformDataWithSprites(d, "items", { spriteVersion: sv }))],
-  ["decors", "decor", (sv) => gameDataService.getDecor().then((d) => transformDataWithSprites(d, "decor", { spriteVersion: sv }))],
+  ["decors", "decor", (sv) => getTransformedDecor({ spriteVersion: sv })],
   ["eggs", "eggs", (sv) => gameDataService.getEggs().then((d) => transformDataWithSprites(d, "eggs", { spriteVersion: sv }))],
   ["abilities", "abilities", () => gameDataService.getAbilities()],
   ["mutations", "mutations", (sv) => gameDataService.getMutations().then((d) => transformDataWithSprites(d, "mutations", { spriteVersion: sv }))],

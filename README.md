@@ -89,15 +89,17 @@ Every data and live endpoint is also available in **CSV** (`.csv`) and **TSV** (
 | `GET /assets/sprites` | List available sprite categories |
 | `GET /assets/sprites/:category/:name` | Download individual sprite PNG |
 | `GET /assets/sprites/composed?key=…&mutations=…` | Pre-composed PNG with mutations applied |
-| `GET /assets/animations` | Catalog of animated pet loops (WebP/GIF) |
-| `GET /assets/animations/pets/:name_:clip.webp` | Download one looping animation |
+| `GET /assets/animations` | Catalog of animated loops (pets + decor) |
+| `GET /assets/animations/:category/:name_:clip.webp` | Download one looping animation |
 | `GET /assets/rive` | The game's Rive (vector) files and what they contain |
 
 **Available sprite categories**: `seeds`, `plants`, `tallPlants`, `mutations`, `pets`, `decor`, `items`, `objects`, `ui`, `animations`, `weather`, `tiles`, `winter`
 
 Note: `/assets/sprite-data`, `/assets/cosmetics`, and `/assets/audios` return URLs pointing to the game's versioned asset base. `/assets/sprites` serves PNGs from this API (controlled by `SPRITES_BASE_URL`).
 
-Pets are the only creatures the game renders as vectors (`rive/pets.riv`) rather than sprites, so on top of the still PNG the API serves them **animated**: one looping WebP per species and per state (`idle`, `walk`, `eat`, `sleep`). Each pet also carries a `rive` block - the vector source itself, for clients that can render it live: 3 MB covers every species and all their timelines. And because that file ships ahead of the game data, `/data/pets` lists species the game has not released yet, flagged `released: false`. The loops are pre-rendered when the game ships a new pet file and served as plain files - drop the URL in an `<img>` tag and it plays, no runtime needed. They are also attached to each species in `/data/pets` under `animations`. See `doc-rive.md` §7.
+Pets are the only creatures the game renders as vectors (`rive/pets.riv`) rather than sprites, so on top of the still PNG the API serves them **animated**: one looping WebP per species and per state (`idle`, `walk`, `eat`, `sleep`). Each pet also carries a `rive` block - the vector source itself, for clients that can render it live: 3 MB covers every species and all their timelines. And because that file ships ahead of the game data, `/data/pets` lists species the game has not released yet, flagged `released: false`.
+
+The eight animated decorations (windmill, fountain, cauldron, …) get the same treatment from `rive/decor.riv`, attached to `/data/decors` - including `WeatherStation` and `BoobooBooth`, which exist only in the Rive file. The loops are pre-rendered when the game ships a new pet file and served as plain files - drop the URL in an `<img>` tag and it plays, no runtime needed. They are also attached to each species in `/data/pets` under `animations`. See `doc-rive.md` §7.
 
 The composed endpoint accepts a full atlas key (e.g. `sprite/tallplant/Cactus`) and an optional comma-separated list of mutations. It returns a single PNG with all layers merged (color filters, icons, overlays). See `doc-sprite.md` for the full spec.
 

@@ -16,11 +16,12 @@ import assert from "node:assert/strict";
 import sharp from "sharp";
 
 import { resolvePetsRiveUrl, PET_STATE_MACHINE } from "../src/assets/sprites/exportPetsFromRive.js";
-import { loadRiveFile } from "../src/assets/sprites/riveRenderer.js";
+import { loadRiveFile, getRive } from "../src/assets/sprites/riveRenderer.js";
 import { renderArtboardAnimation, encodeAnimation } from "../src/assets/sprites/riveAnimator.js";
 import { buildAnimationUrl } from "../src/utils/spriteUrlBuilder.js";
-import { buildPetAnimationLinks } from "../src/assets/sprites/riveAnimations.js";
+import { buildAnimationLinks } from "../src/assets/sprites/riveAnimations.js";
 import { buildRiveSource } from "../src/assets/sprites/riveSource.js";
+import { resolveRiveUrl } from "../src/assets/sprites/riveManifest.js";
 
 const FETCH_TIMEOUT = 30_000;
 const TARGET_HEIGHT = 128;
@@ -221,7 +222,7 @@ describe("animation links", () => {
       formats: { webp: { bytes: 1 }, gif: { bytes: 2 } },
     };
 
-    const links = buildPetAnimationLinks("Chicken", {
+    const links = buildAnimationLinks("pets", "Chicken", {
       version: "824",
       animations: { Chicken: { idle: clip } },
     });
@@ -235,7 +236,7 @@ describe("animation links", () => {
     assert.match(links.idle.gif, /Chicken_idle\.gif\?v=824$/);
     assert.equal(links.idle.webp, undefined);
 
-    const webpOnly = buildPetAnimationLinks("Chicken", {
+    const webpOnly = buildAnimationLinks("pets", "Chicken", {
       animations: { Chicken: { idle: { ...clip, formats: { webp: { bytes: 1 } } } } },
     });
 
@@ -246,14 +247,14 @@ describe("animation links", () => {
   });
 
   it("returns null for a species with no animation", () => {
-    assert.equal(buildPetAnimationLinks("Chicken", { animations: {} }), null);
-    assert.equal(buildPetAnimationLinks("Chicken", { animations: { Chicken: {} } }), null);
+    assert.equal(buildAnimationLinks("pets", "Chicken", { animations: {} }), null);
+    assert.equal(buildAnimationLinks("pets", "Chicken", { animations: { Chicken: {} } }), null);
   });
 
   it("names the timeline each clip came from", () => {
     // C'est ce qui permet à un client de rejouer le même clip depuis le .riv :
     // sans ce nom, il devrait deviner que `idle` s'appelle `Pet_Idle`.
-    const links = buildPetAnimationLinks("Chicken", {
+    const links = buildAnimationLinks("pets", "Chicken", {
       animations: {
         Chicken: {
           walk: { timeline: "Pet_Walk", formats: { webp: { bytes: 1 } } },
@@ -280,5 +281,62 @@ describe("rive source", () => {
   it("says nothing rather than guessing when the file is unknown", () => {
     assert.equal(buildRiveSource("Chicken", null), null);
     assert.equal(buildRiveSource(null, "https://magicgarden.gg/x.riv"), null);
+  });
+});
+
+describe("decor animations", () => {
+  it("derives clips from what the artboard declares, not from a hardcoded list", async () => {
+    // Les noms de timelines des décors sont incohérents (`WoodWindmill_On`,
+    // `WindSpinner_Spins`, `Caludron` — la faute est dans le fichier du jeu, et
+    // deux `Timeline 1`). Les coder en dur casserait à la première maj.
+    const riveUrl = await resolveRiveUrl("decor", {});
+    if (!riveUrl) return;
+
+    const res = await fetch(riveUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      redirect: "follow",
+    });
+    const { file, artboardNames } = await loadRiveFile(Buffer.from(await res.arrayBuffer()));
+
+    assert.ok(artboardNames.length >= 8, `expected 8+ decor artboards, got ${artboardNames.length}`);
+
+    for (const name of artboardNames) {
+      const artboard = file.artboardByName(name);
+      assert.ok(artboard.animationCount() >= 1, `${name} has no timeline`);
+
+      // Un décor tourne en boucle sans état : sa state machine n'a aucune
+      // entrée. C'est ce qui les rend plus simples que les pets.
+      if (artboard.stateMachineCount() > 0) {
+        const rive = await getRive();
+        const definition = artboard.stateMachineByIndex(0);
+        const instance = new rive.StateMachineInstance(definition, artboard);
+        assert.equal(instance.inputCount(), 0, `${name} unexpectedly exposes inputs`);
+        instance.delete?.();
+      }
+    }
+  });
+
+  it("renders a decor loop without needing a state machine name", async () => {
+    const riveUrl = await resolveRiveUrl("decor", {});
+    if (!riveUrl) return;
+
+    const res = await fetch(riveUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      redirect: "follow",
+    });
+    const { file } = await loadRiveFile(Buffer.from(await res.arrayBuffer()));
+
+    const capture = await renderArtboardAnimation(file, "WoodWindmill", {
+      stateMachineName: null,
+      timeline: "WoodWindmill_On",
+      fps: 8,
+      height: TARGET_HEIGHT,
+    });
+
+    assert.ok(capture, "decor render returned nothing");
+    assert.ok(capture.frames > 1);
+    assert.equal(capture.anchor.x, 0.5);
   });
 });

@@ -7,8 +7,12 @@ import { logger } from "../../logger/index.js";
 import { config } from "../../config/index.js";
 import { asyncHandler, Errors } from "../middleware/index.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
-import { getPetAnimations, getAnimationEntries, animationDir } from "../../assets/sprites/riveAnimations.js";
-import { ANIMATION_CATEGORY } from "../../assets/sprites/exportPetAnimations.js";
+import {
+  getAnimationEntries,
+  getAnimationSources,
+  animationDir,
+  ANIMATION_CATEGORIES,
+} from "../../assets/sprites/riveAnimations.js";
 
 export const animationsRouter = express.Router();
 
@@ -28,7 +32,7 @@ export const animationsRouter = express.Router();
 const CATALOG_CACHE_CONTROL = "public, max-age=3600, stale-while-revalidate=300";
 const FILE_CACHE_CONTROL = "public, max-age=86400";
 
-const ALLOWED_CATEGORIES = new Set([ANIMATION_CATEGORY]);
+const ALLOWED_CATEGORIES = new Set(ANIMATION_CATEGORIES);
 
 const CONTENT_TYPES = {
   webp: "image/webp",
@@ -72,7 +76,7 @@ animationsRouter.get(
       );
     }
 
-    const { riveUrl, generatedAt } = await getPetAnimations();
+    const sources = await getAnimationSources();
     const entries = await getAnimationEntries();
     const needle = search ? String(search).toLowerCase() : null;
 
@@ -94,14 +98,16 @@ animationsRouter.get(
       baseUrl: config.sprites.baseUrl,
       categories: Array.from(ALLOWED_CATEGORIES),
       formats: config.animations.formats,
-      source: { riveUrl, generatedAt },
+      // Une source par catégorie : chacune vient de son propre .riv, et leurs
+      // exports ne se terminent pas au même moment.
+      sources,
       animations: byCategory,
     };
 
     const etag = buildWeakEtag(
       "assets:animations",
       config.sprites.baseUrl,
-      String(generatedAt),
+      JSON.stringify(sources),
       req.originalUrl,
       String(filtered.length)
     );

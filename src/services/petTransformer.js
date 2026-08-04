@@ -2,7 +2,7 @@
 
 import { gameDataService } from "./gameData.js";
 import { transformDataWithSprites } from "./dataTransformer.js";
-import { getPetAnimations, buildPetAnimationLinks } from "../assets/sprites/riveAnimations.js";
+import { getAnimations, buildAnimationLinks } from "../assets/sprites/riveAnimations.js";
 import { getRiveFrames } from "../assets/sprites/riveFrames.js";
 import { buildRiveSource, getPetsRiveUrl } from "../assets/sprites/riveSource.js";
 import { buildSpriteUrl } from "../utils/spriteUrlBuilder.js";
@@ -60,13 +60,13 @@ export async function getTransformedPets({ spriteVersion = null } = {}) {
   const transformed = transformDataWithSprites(data, "pets", { spriteVersion });
 
   const [{ animations }, frames, riveUrl] = await Promise.all([
-    getPetAnimations(),
+    getAnimations("pets"),
     getRiveFrames(),
     getPetsRiveUrl(),
   ]);
 
   const decorate = (id, pet) => {
-    const links = buildPetAnimationLinks(id, { animations, version: spriteVersion });
+    const links = buildAnimationLinks("pets", id, { animations, version: spriteVersion });
     const rive = animations[id] || frames[`sprite/pet/${id}`] ? buildRiveSource(id, riveUrl) : null;
 
     if (!links && !rive) return pet;

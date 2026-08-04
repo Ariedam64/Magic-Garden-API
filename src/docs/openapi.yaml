@@ -641,6 +641,15 @@ paths:
         - Display decoration shop
         - Build decoration catalogs
         - Show customization options
+
+        Eight decorations are not still images: they are Rive artboards that run
+        continuously (the windmill, the fountain, the cauldron...). Those carry
+        `animations` with a single `loop` clip, plus a `rive` block for clients
+        that render the vector source live.
+
+        Two of them - `WeatherStation` and `BoobooBooth` - exist only in the Rive
+        file: no game data, not even an atlas sprite. They are listed with
+        `released: false`, an animation, and nothing else.
       responses:
         '200':
           description: Decorations data
@@ -1461,10 +1470,15 @@ paths:
         - Assets
       summary: Catalog of animated pet loops (WebP/GIF)
       description: |
-        Pets are the only creatures the game renders as vectors rather than
-        sprites, so beyond the still PNG served by `/assets/sprites/pets/*`
-        this API can serve them **animated**: one looping WebP (or GIF) per
-        species and per state.
+        Everything the game animates is vector art, so beyond the still PNGs
+        this API serves those subjects **animated**: one looping WebP (or GIF)
+        per subject and per state.
+
+        Two categories:
+        - `pets` - one loop per species and per state (`idle`, `walk`, `eat`,
+          `sleep`), plus the two weather variants.
+        - `decor` - the eight animated garden decorations (windmill, fountain,
+          cauldron, …). Each has a single continuous loop, keyed `loop`.
 
         Loops are pre-rendered whenever the game ships a new pet file - never
         on request - and served as plain files. Drop the URL in an `<img>` tag
@@ -1477,7 +1491,9 @@ paths:
         - `sleep` - sleeping, 8 s
 
         Not every species exposes every clip, and the two weather variants
-        (`FireHorseActive`, `ThunderWolfActive`) only ship `idle`.
+        (`FireHorseActive`, `ThunderWolfActive`) only ship `idle`. Decor clip
+        names are taken from what each artboard declares, never hardcoded - the
+        game's own timeline names are inconsistent.
 
         **Filters:** `cat`, `name` (exact species), `clip`, `search`
         (case-insensitive substring on the species name).
@@ -1501,7 +1517,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pets]
+            enum: [pets, decor]
           description: Only return animations from this category
         - name: name
           in: query
@@ -1515,8 +1531,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [idle, walk, eat, sleep]
-          description: Only return this clip
+            enum: [idle, walk, eat, sleep, loop]
+          description: Only return this clip (`loop` for decor)
         - name: search
           in: query
           required: false
@@ -1542,22 +1558,27 @@ paths:
                     type: array
                     items:
                       type: string
-                    example: ["pets"]
+                    example: ["pets", "decor"]
                   formats:
                     type: array
                     items:
                       type: string
                     description: Formats currently generated
                     example: ["webp"]
-                  source:
+                  sources:
                     type: object
-                    properties:
-                      riveUrl:
-                        type: string
-                        description: Game file the loops were rendered from
-                      generatedAt:
-                        type: string
-                        format: date-time
+                    description: |
+                      One entry per category - each comes from its own Rive file,
+                      and their exports do not finish at the same time.
+                    additionalProperties:
+                      type: object
+                      properties:
+                        riveUrl:
+                          type: string
+                          description: Game file the loops were rendered from
+                        generatedAt:
+                          type: string
+                          format: date-time
                   animations:
                     type: object
                     description: Animations grouped by category
@@ -1573,9 +1594,10 @@ paths:
                     baseUrl: "https://mg-api.ariedam.fr"
                     categories: ["pets"]
                     formats: ["webp"]
-                    source:
-                      riveUrl: "https://magicgarden.gg/runtime-assets/pets.bfec8b856f6e2b0e4a83.riv"
-                      generatedAt: "2026-08-04T14:31:07.412Z"
+                    sources:
+                      pets:
+                        riveUrl: "https://magicgarden.gg/runtime-assets/pets.bfec8b856f6e2b0e4a83.riv"
+                        generatedAt: "2026-08-04T18:21:07.633Z"
                     animations:
                       pets:
                         - category: "pets"
@@ -1618,6 +1640,7 @@ paths:
         - `/assets/animations/pets/Chicken_idle.webp` - chicken, idle loop
         - `/assets/animations/pets/Horse_walk.webp` - horse, one step cycle
         - `/assets/animations/pets/ThunderWolfActive_idle.webp` - thunder wolf under active weather
+        - `/assets/animations/decor/MarbleFountain_loop.webp` - the fountain running
 
         **HTML:**
         ```html
@@ -1631,7 +1654,7 @@ paths:
           required: true
           schema:
             type: string
-            enum: [pets]
+            enum: [pets, decor]
           example: "pets"
         - name: file
           in: path

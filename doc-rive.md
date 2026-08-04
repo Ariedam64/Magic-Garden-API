@@ -170,8 +170,8 @@ Coût identique à l'export actuel.
 
 **Animations.** ✅ Fait — voir § 7.
 
-**Décors animés et bulle de pensée.** Mêmes conditions que les pets. Le
-pipeline du § 7 n'attend qu'une table de clips pour `decor.riv`.
+**Décors animés.** ✅ Fait — voir § 8. **Bulle de pensée, pièce, coffre** :
+mêmes conditions, le pipeline du § 7 les prendrait tels quels.
 
 **Résolution libre.** C'est du vectoriel : du 1024 px net ne coûte que du CPU,
 là où l'ancien atlas était plafonné à sa résolution native.
@@ -408,3 +408,46 @@ Les mêmes cas qu'au § 5, plus un : les **noms de timelines** (`Pet_Idle`,
 mais fait disparaître le clip en silence — `renderArtboardAnimation` retourne
 `null` sur une timeline absente, ce qui est le comportement voulu pour une
 espèce qui n'expose pas tous les états.
+
+
+---
+
+## 8. Les décors
+
+Huit décors du jeu sont des artboards de `decor.riv` qui tournent en continu :
+moulin, station météo, girouettes, chaudron, bain d'oiseaux, kiosque, fontaine.
+Ils passent par le même moteur d'export que les pets
+(`riveAnimationExport.js`) ; seule la fonction qui dresse la liste des rendus
+change.
+
+Sortie : `/assets/animations/decor/<Nom>_loop.webp`, rattachée à
+`/data/decors`.
+
+### Bien plus simples que les pets
+
+Une seule timeline par artboard, et une state machine **sans aucune entrée** —
+rien à piloter, pas de variantes, pas d'amorçage. Le rendu complet des huit
+tient en **93 s pour 4,4 Mo**, contre ~50 min pour les pets.
+
+### Trois pièges, tous liés au nommage
+
+- **Les noms de timelines sont incohérents** : `WoodWindmill_On`,
+  `WindSpinner_Spins`, `WindTurner`, `MarbleFountain_On`, `Caludron` (la faute
+  de frappe est dans le fichier du jeu) et deux `Timeline 1`. Impossible d'en
+  faire une table en dur : on lit ce que l'artboard déclare. Comme chacun n'en
+  a qu'une, le clip est publié sous l'id `loop` plutôt qu'un slug illisible.
+- **La casse ne concorde pas avec les données** : l'artboard s'appelle
+  `StoneBirdBath`, la donnée du jeu `StoneBirdbath`. Le rapprochement se fait
+  donc sans tenir compte de la casse — sinon ce décor perdrait son animation en
+  silence, ce que rien n'aurait signalé.
+- **Le nom de la state machine n'est pas garanti.** Elles s'appellent toutes
+  `State Machine 1` aujourd'hui ; on lit celle que l'artboard porte, et
+  `renderArtboardAnimation` accepte de rendre sans state machine du tout (un
+  décor n'en a pas besoin, contrairement à un pet dont elle fixe l'échelle).
+
+### Deux décors inédits
+
+`WeatherStation` et `BoobooBooth` n'existent **que** dans le `.riv` : ni données
+de jeu, ni sprite d'atlas. Comme `Rooster` et `Hedgehog` côté pets, ils sortent
+dans `/data/decors` avec `released: false` et leur animation pour seule
+représentation.
