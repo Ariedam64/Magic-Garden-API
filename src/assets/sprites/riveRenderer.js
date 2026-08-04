@@ -26,6 +26,10 @@ const SETTLE_STEP_SECONDS = 0.5;
 
 // Balayage du cycle d'idle. Il se fait sur un canvas réduit : on ne compare
 // que des poses entre elles, la résolution finale n'apporte rien et coûte cher.
+// Borne de chargement d'un .riv (voir loadRiveFile : un fichier illisible ne
+// rejette pas, il ne résout jamais).
+const LOAD_TIMEOUT_MS = 60_000;
+
 const SCAN_WIDTH = 200;
 const SCAN_STEP = 6;
 const DEFAULT_CYCLE_FRAMES = 420;
@@ -92,12 +96,39 @@ export async function getRive() {
 /**
  * Charge un fichier .riv et retourne la liste des noms d'artboards.
  *
+ * `rive.load()` ne rejette pas sur un fichier qu'il ne sait pas lire : il
+ * **ne résout jamais**. C'est le cas aujourd'hui d'`avatar.riv`, et ce sera le
+ * cas de `pets.riv` le jour où le jeu passera à un format Rive plus récent que
+ * notre runtime. Sans borne, ce blocage remonte jusqu'à la sync de sprites,
+ * dont le timeout tue le process — donc boucle de redémarrage. On borne ici
+ * pour que ça devienne une simple erreur : l'export est sauté et les PNG déjà
+ * sur disque continuent d'être servis.
+ *
  * @param {Buffer|Uint8Array} bytes
+ * @param {object} options
+ * @param {number} options.timeoutMs
  * @returns {Promise<{ file: object, artboardNames: string[] }>}
  */
-export async function loadRiveFile(bytes) {
+export async function loadRiveFile(bytes, { timeoutMs = LOAD_TIMEOUT_MS } = {}) {
   const rive = await getRive();
-  const file = await rive.load(new Uint8Array(bytes));
+
+  let timer;
+  const file = await Promise.race([
+    rive.load(new Uint8Array(bytes)),
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `Rive load timed out after ${timeoutMs}ms — the file is likely in a newer format than the pinned runtime`
+            )
+          ),
+        timeoutMs
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+
+  if (!file) throw new Error("Rive load returned no file");
 
   const artboardNames = [];
   for (let i = 0; i < file.artboardCount(); i++) {
@@ -165,6 +196,18 @@ export async function renderArtboardToPng(
   const renderer = rive.makeRenderer(canvas);
 
   const machineDef = stateMachineName ? artboard.stateMachineByName(stateMachineName) : null;
+
+  // Sans state machine, l'artboard rend sa pose d'édition : le pet apparaît
+  // petit et son ombre au sol réapparaît. C'est un PNG parfaitement valide,
+  // donc une renommage de la state machine côté jeu passerait inaperçu et
+  // corromprait les 28 sprites en silence. On préfère échouer : l'appelant
+  // loguera et sautera ce pet, et l'ancien PNG reste servi.
+  if (stateMachineName && !machineDef) {
+    renderer.delete?.();
+    throw new Error(
+      `State machine '${stateMachineName}' not found on artboard '${artboardName}'`
+    );
+  }
 
   const makeMachine = () => {
     const instance = new rive.StateMachineInstance(machineDef, artboard);

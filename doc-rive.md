@@ -176,6 +176,31 @@ là où l'ancien atlas était plafonné à sa résolution native.
 - **Pas de WebGL** : le runtime tourne en Canvas2D (`@napi-rs/canvas`). Si un
   artboard utilisait des *image meshes*, il ne s'afficherait pas. Aucun des 5
   fichiers qui chargent n'est concerné aujourd'hui.
+- **Un `.riv` illisible ne rejette pas, il ne résout jamais.** C'est le cas
+  d'`avatar.riv`, et ce sera celui de `pets.riv` le jour où le jeu passera à un
+  format Rive plus récent que notre runtime épinglé. `loadRiveFile` borne donc
+  le chargement : l'export est sauté, les PNG déjà sur disque restent servis.
+  Sans cette borne, le blocage remonte jusqu'au timeout de la sync, qui tue le
+  process — donc boucle de redémarrage sous pm2.
+- **Une state machine renommée corromprait tout en silence** : sans elle,
+  l'artboard rend sa pose d'édition (pet à la mauvaise échelle, ombre au sol
+  visible) et produit un PNG parfaitement valide. `renderArtboardToPng` lève
+  donc plutôt que de rendre ce repli.
+
+### Ce qui survit tout seul à une maj, et ce qui ne survit pas
+
+Survit : l'ajout de pets (nouveaux artboards exportés d'office), un changement
+d'artwork (suivi par le hash du `.riv`), un changement de résolution, le retour
+d'un champ `sprite` dans les données de pets (on ne l'écrase pas).
+
+Ne survit pas, mais échoue proprement (log + PNG existants conservés) : le
+renommage de l'alias `rive/pets.riv` dans le manifest, celui de la state
+machine `Pet State Machine`, un format Rive trop récent.
+
+Ne survit pas et passe inaperçu : un **troisième pet à variante météo** — la
+liste `ACTIVE_VARIANTS` est en dur dans `exportPetsFromRive.js`, on exporterait
+le pet mais pas sa variante active. Et un second artboard non-pet ajouté au
+fichier serait exporté comme un pet (on ne saute que l'artboard par défaut).
 - **Pièges du runtime**, déjà encaissés, à ne pas réapprendre :
   - il sonde `getContext('webgl2')` au démarrage et `@napi-rs/canvas` **lève**
     au lieu de renvoyer `null` → il faut shunter vers Canvas2D ;

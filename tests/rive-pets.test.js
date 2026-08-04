@@ -120,6 +120,30 @@ describe("pets Rive asset", () => {
     );
   });
 
+  it("fails loudly when the state machine is renamed", async () => {
+    // Sans state machine l'artboard rend sa pose d'édition — un PNG valide,
+    // mais avec l'ombre au sol et le pet à la mauvaise échelle. Un renommage
+    // côté jeu corromprait les 28 sprites en silence.
+    await assert.rejects(
+      () =>
+        renderArtboardToPng(riveFile, "Peacock", {
+          stateMachineName: "Pet State Machine RENAMED",
+        }),
+      /State machine .* not found/
+    );
+  });
+
+  it("bounds a Rive file it cannot read instead of hanging", async () => {
+    // `rive.load()` ne rejette pas sur un format inconnu, il ne résout jamais.
+    // Non borné, ça fait tomber la sync dans son timeout, qui tue le process.
+    const notRive = Buffer.concat([Buffer.from("RIVE"), Buffer.alloc(4096, 7)]);
+
+    await assert.rejects(
+      () => loadRiveFile(notRive, { timeoutMs: 3000 }),
+      (err) => /timed out|no file|Rive/i.test(err.message)
+    );
+  });
+
   it("no longer finds pet creatures in the sprite atlases", async () => {
     // Garde-fou : si le jeu remet les pets dans l'atlas, l'export Rive devient
     // redondant et ce test le signale.
