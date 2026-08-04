@@ -14,6 +14,11 @@ import {
 import { getBaseUrl } from "../assets/assets.js";
 import { loadManifest, getBundleByName, extractJsonFiles } from "../assets/manifest.js";
 import { exportSpritesToDisk } from "../assets/sprites/exportSpritesToDisk.js";
+import {
+  exportPetsFromRive,
+  resolvePetsRiveUrl,
+} from "../assets/sprites/exportPetsFromRive.js";
+import { getStoredRiveUrl, saveRiveAsset } from "../core/game/riveStorage.js";
 import { joinUrl } from "../utils/url.js";
 
 const VERSION_MISMATCH_CODES = new Set([CloseCodes.VERSION_MISMATCH, CloseCodes.VERSION_EXPIRED]);
@@ -182,6 +187,53 @@ async function fetchAllAtlases(baseUrl) {
 }
 
 /**
+ * Re-render the pet sprites from the game's Rive file when it changed.
+ *
+ * Les pets ne sont plus dans les atlas TexturePacker (seuls les œufs y
+ * restent) : ils vivent dans `rive/pets.riv`, servi sous une URL versionnée
+ * par hash. La comparaison d'atlas ne peut donc rien dire à leur sujet — on
+ * suit ce fichier séparément, sinon un changement d'artwork de pet passerait
+ * inaperçu (ou pire, on re-rendrait 30 artboards à chaque sync).
+ *
+ * @returns {Promise<{ exported: number, changed: boolean, reason?: string }>}
+ */
+async function syncPetSprites({ baseUrl, force = false } = {}) {
+  try {
+    const riveUrl = await resolvePetsRiveUrl(baseUrl);
+    if (!riveUrl) {
+      return { exported: 0, changed: false, reason: "rive_not_in_manifest" };
+    }
+
+    const storedUrl = await getStoredRiveUrl("pets");
+    if (!force && storedUrl === riveUrl) {
+      logger.debug({ riveUrl }, "Pets Rive file unchanged, skipping pet sprite export");
+      return { exported: 0, changed: false, reason: "unchanged" };
+    }
+
+    logger.info({ from: storedUrl, to: riveUrl, force }, "Exporting pet sprites from Rive");
+
+    const result = await exportPetsFromRive({
+      outDir: config.sprites.exportDir,
+      riveUrl,
+    });
+
+    if (result.exported > 0) {
+      await saveRiveAsset("pets", { url: riveUrl, names: result.names });
+    }
+
+    return { exported: result.exported, changed: result.exported > 0 };
+  } catch (err) {
+    // Un échec de rendu Rive ne doit pas faire tomber la sync des atlas :
+    // les PNG de pets déjà sur disque restent servis.
+    logger.error(
+      { error: err?.message || String(err) },
+      "Failed to export pet sprites from Rive"
+    );
+    return { exported: 0, changed: false, reason: "error" };
+  }
+}
+
+/**
  * Check if sprites need syncing and export only changed sprites.
  * Returns sync result or null if no changes needed.
  */
@@ -214,26 +266,39 @@ export async function checkAndSyncSprites({ force = false } = {}) {
       "Version check"
     );
 
-    // Skip if version unchanged and not forced
-    if (!versionChanged && !force) {
-      logger.info("Version unchanged, skipping sprite sync");
-      return { skipped: true, reason: "version_unchanged" };
-    }
-
-    // 2. Fetch current atlases
     const baseUrl = await getBaseUrl();
     if (!baseUrl) {
       logger.error("Failed to get base URL");
       return null;
     }
 
+    // 2. Pets : hors atlas depuis que le jeu les a passés en Rive. Ils ont
+    // leur propre suivi (hash du .riv), donc on les traite avant tous les
+    // court-circuits ci-dessous — sinon un déploiement sur une install déjà
+    // synchronisée n'exporterait jamais les pets, faute de montée de version.
+    const petResult = await syncPetSprites({ baseUrl, force });
+
+    // 3. Skip the atlas work if version unchanged and not forced
+    if (!versionChanged && !force) {
+      logger.info(
+        { petsExported: petResult.exported },
+        "Version unchanged, skipping atlas sprite sync"
+      );
+      return {
+        skipped: !petResult.changed,
+        success: petResult.changed || undefined,
+        reason: "version_unchanged",
+        petsExported: petResult.exported,
+      };
+    }
+
     logger.info({ baseUrl }, "Fetching atlas metadata for comparison");
     const currentAtlases = await fetchAllAtlases(baseUrl);
 
-    // 3. Load stored atlas metadata
+    // 4. Load stored atlas metadata
     const storedAtlases = await loadStoredAtlases();
 
-    // 4. Compare atlases
+    // 5. Compare atlases
     const comparison = compareAllAtlases(currentAtlases, storedAtlases);
 
     logger.info(
@@ -245,21 +310,28 @@ export async function checkAndSyncSprites({ force = false } = {}) {
       "Atlas comparison result"
     );
 
-    // 5. If no changes and not forced, skip export
+    // 6. If no atlas changes and not forced, skip the atlas export. Les pets
+    // ont déjà été traités à l'étape 2, donc on remonte quand même leur
+    // résultat.
     if (!comparison.hasChanges && !force) {
-      logger.info("No sprite changes detected, updating version only");
+      logger.info(
+        { petsExported: petResult.exported },
+        "No atlas sprite changes detected, updating version only"
+      );
       await saveVersion(currentVersion);
       return {
-        skipped: true,
+        skipped: !petResult.changed,
+        success: petResult.changed || undefined,
         reason: "no_sprite_changes",
         versionUpdated: true,
+        petsExported: petResult.exported,
       };
     }
 
-    // 5b. If forced but no changes, do full export (initial export case)
+    // 6b. If forced but no changes, do full export (initial export case)
     const doFullExport = force && !comparison.hasChanges;
 
-    // 6. Export sprites (full or selective)
+    // 7. Export sprites (full or selective)
     if (doFullExport) {
       logger.info({ exportDir: config.sprites.exportDir }, "Starting FULL sprite export (initial)");
     } else {
@@ -283,7 +355,7 @@ export async function checkAndSyncSprites({ force = false } = {}) {
 
     const elapsed = Date.now() - startTime;
 
-    // 7. Update stored metadata
+    // 8. Update stored metadata
     await updateStoredAtlases(comparison.atlasChanges);
     await saveVersion(currentVersion);
 
@@ -296,6 +368,7 @@ export async function checkAndSyncSprites({ force = false } = {}) {
         added: comparison.summary.totalAdded,
         modified: comparison.summary.totalModified,
         removed: comparison.summary.totalRemoved,
+        petsExported: petResult.exported,
       },
       "Selective sprite export completed"
     );
@@ -303,6 +376,7 @@ export async function checkAndSyncSprites({ force = false } = {}) {
     return {
       success: true,
       exported: exportResult.exported,
+      petsExported: petResult.exported,
       added: comparison.summary.totalAdded,
       modified: comparison.summary.totalModified,
       removed: comparison.summary.totalRemoved,

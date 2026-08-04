@@ -1,6 +1,7 @@
 import { getBaseUrl } from "../../assets/assets.js";
 import { loadManifest, getBundleByName } from "../../assets/manifest.js";
 import { joinUrl } from "../../utils/url.js";
+import { getRiveSpriteEntries } from "./riveFrames.js";
 
 const MANIFEST_FILENAME = "manifest.json";
 
@@ -247,12 +248,25 @@ export function lookupSpriteByAliases(aliases) {
  * - search: string (filtre sur id/key)
  * - cat: string (filtre catégorie)
  * - flat: boolean (retourne une liste au lieu de groups)
+ * - includeRive: inclut les sprites pré-rendus depuis Rive (default: true).
+ *   À désactiver pour les consommateurs qui découpent des atlas — ces
+ *   sprites-là n'en ont pas (cf. riveFrames.js).
  */
-export async function getSpritesPayload({ full = false, search = "", cat = "", flat = false } = {}) {
+export async function getSpritesPayload({
+  full = false,
+  search = "",
+  cat = "",
+  flat = false,
+  includeRive = true,
+} = {}) {
   await initSprites();
 
   const q = String(search || "").toLowerCase().trim();
   const filterCat = String(cat || "").trim();
+
+  // Les pets ont quitté l'atlas pour du Rive : sans ce complément, le
+  // catalogue ne listerait plus que les œufs sous `pets`.
+  const riveEntries = includeRive ? await getRiveSpriteEntries() : [];
 
   // Build the slim payload AND the (cat, slim) pairs in one pass — the slim
   // shape drops `cat` to keep the response compact, so we have to remember
@@ -263,7 +277,7 @@ export async function getSpritesPayload({ full = false, search = "", cat = "", f
   const list = [];
   const pairs = []; // [{ cat, item }]
 
-  for (const x of state.all) {
+  for (const x of [...state.all, ...riveEntries]) {
     if (filterCat && x.cat !== filterCat) continue;
     if (q && !String(x.id || "").toLowerCase().includes(q)) continue;
 

@@ -1,8 +1,10 @@
 // src/assets/sprites/spriteComposer.js
+import fs from "node:fs/promises";
 import sharp from "sharp";
 import { initSprites, lookupSprite, lookupSpriteByAliases } from "./sprites.js";
 import { decodeKTX2, isKTX2 } from "../ktx2Decoder.js";
 import { gameDataService } from "../../services/gameData.js";
+import { getRiveFrames, clearRiveFramesCache, riveSpritePath } from "./riveFrames.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -184,9 +186,37 @@ async function extractSprite(meta) {
   };
 }
 
+/**
+ * Charge un sprite exporté depuis Rive, en imitant le retour d'extractSprite.
+ */
+async function extractRiveSprite(key) {
+  const frames = await getRiveFrames();
+  const meta = frames[key];
+  if (!meta) return null;
+
+  let buffer;
+  try {
+    buffer = await fs.readFile(riveSpritePath(meta));
+  } catch {
+    return null;
+  }
+
+  return {
+    buffer,
+    width: meta.sourceSize?.w ?? 0,
+    height: meta.sourceSize?.h ?? 0,
+    anchor: meta.anchor ?? { x: 0.5, y: 1 },
+    isTall: false, // les pets ne sont jamais "tall" (cf. doc-sprite.md §11)
+    key,
+  };
+}
+
 async function extractByKey(key) {
   const meta = lookupSprite(key);
-  return meta ? extractSprite(meta) : null;
+  if (meta) return extractSprite(meta);
+
+  // Repli disque pour les sprites qui ont quitté l'atlas (pets en Rive).
+  return extractRiveSprite(key);
 }
 
 // ─── Mutation normalization ───────────────────────────────────────────────────
@@ -435,6 +465,7 @@ export function clearComposedCache() {
   composedCache.clear();
   atlasCache.clear();
   plantMetaCache = null;
+  clearRiveFramesCache();
 }
 
 /**

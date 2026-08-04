@@ -68,7 +68,9 @@ export async function exportSpritesToDisk({
   onlyCats = null, // ex: ["seeds","plants"]
   onlyKeys = null, // ex: Set(["sprite/plant/Carrot", "sprite/seed/Tomato"])
 } = {}) {
-  const payload = await getSpritesPayload({ full: true, flat: true });
+  // includeRive:false — les sprites pré-rendus depuis Rive (pets) n'ont pas
+  // d'atlas à découper, ils sont produits par exportPetsFromRive.js.
+  const payload = await getSpritesPayload({ full: true, flat: true, includeRive: false });
   const items = payload?.items || [];
 
   const frames = items.filter((x) => x.type === "frame" && x.url && x.frame);
