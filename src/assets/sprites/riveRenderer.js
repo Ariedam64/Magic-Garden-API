@@ -24,10 +24,11 @@ import { logger } from "../../logger/index.js";
 const ALPHA_THRESHOLD = 16;
 const SETTLE_STEP_SECONDS = 0.5;
 
-// Balayage de secours (pose "widest"), pour les visuels sans équivalent bakés
-// côté jeu. Voir pickFrame.
-const SCAN_FRAMES = 300;
-const SCAN_STEP = 4;
+// Balayage du cycle d'idle. Il se fait sur un canvas réduit : on ne compare
+// que des poses entre elles, la résolution finale n'apporte rien et coûte cher.
+const SCAN_WIDTH = 200;
+const SCAN_STEP = 6;
+const DEFAULT_CYCLE_FRAMES = 420;
 
 // Côté de la vignette utilisée pour comparer des poses entre elles.
 const THUMB_SIZE = 48;
@@ -126,7 +127,8 @@ export async function loadRiveFile(bytes) {
  * @param {string|null} options.stateMachineName - State machine à instancier
  * @param {Record<string, boolean>} options.inputs - Inputs booléens à forcer
  * @param {number} options.settleSeconds - Secondes avancées après l'entrée
- * @param {"game"|"widest"} options.pose - Voir pickFrame ci-dessous
+ * @param {"neutral"|"widest"|"game"} options.pose - Voir pickFrame ci-dessous
+ * @param {string} options.cycleAnimation - Timeline dont on balaie un cycle
  * @param {number|null} options.bakeHeight - Hauteur de rendu avant cadrage
  * @returns {Promise<{ buffer, width, height, anchor }|null>}
  *   PNG cadré, ou null si l'artboard n'existe pas
@@ -138,7 +140,8 @@ export async function renderArtboardToPng(
     stateMachineName = null,
     inputs = null,
     settleSeconds = 0,
-    pose = "game",
+    pose = "neutral",
+    cycleAnimation = "Pet_Idle",
     bakeHeight = null,
   } = {}
 ) {
@@ -227,23 +230,45 @@ export async function renderArtboardToPng(
       return frameLikeGame(canvas, context, width, height);
     }
 
-    // pose === "widest" : on balaie un cycle en ne mesurant que les pixels
-    // (aucun encodage), puis on rejoue jusqu'à la frame retenue. `advance` est
-    // déterministe, donc rejouer la même séquence sur une instance neuve
-    // redonne exactement la frame mesurée.
-    const samples = [];
+    // Un cycle de la timeline d'idle, mesuré à basse résolution : on ne compare
+    // que des poses, la finesse est inutile et coûteuse.
+    const cycleFrames = animationFrameCount(artboard, cycleAnimation) ?? DEFAULT_CYCLE_FRAMES;
+    const scanCanvas = makeShimmedCanvas(SCAN_WIDTH, Math.round((SCAN_WIDTH * height) / width));
+    const scanContext = scanCanvas.getContext("2d");
+    const scanRenderer = rive.makeRenderer(scanCanvas);
 
-    for (let frame = 0; frame < SCAN_FRAMES; frame++) {
-      if (frame % SCAN_STEP === 0) {
-        drawFrame();
-        samples.push({ frame, ...measureFrame(context, width, height) });
+    const samples = [];
+    try {
+      for (let frame = 0; frame < cycleFrames; frame++) {
+        if (frame % SCAN_STEP === 0) {
+          scanRenderer.clear();
+          scanRenderer.save();
+          scanRenderer.align(
+            rive.Fit.contain,
+            rive.Alignment.center,
+            { minX: 0, minY: 0, maxX: scanCanvas.width, maxY: scanCanvas.height },
+            bounds
+          );
+          artboard.draw(scanRenderer);
+          scanRenderer.restore();
+          rive.resolveAnimationFrame();
+
+          samples.push({
+            frame,
+            ...measureFrame(scanContext, scanCanvas.width, scanCanvas.height),
+          });
+        }
+        machine.advance(1 / 60);
+        artboard.advance(1 / 60);
       }
-      machine.advance(1 / 60);
-      artboard.advance(1 / 60);
+    } finally {
+      scanRenderer.delete?.();
     }
 
-    const chosen = pickFrame(samples);
+    const chosen = pickFrame(samples, pose);
 
+    // `advance` est déterministe : rejouer la même séquence sur une instance
+    // neuve redonne exactement la frame mesurée.
     machine.delete?.();
     machine = makeMachine();
     settle(machine, settleSeconds);
@@ -364,29 +389,50 @@ function measureFrame(context, width, height) {
 }
 
 /**
+ * Nombre de frames d'une timeline de l'artboard, si elle existe.
+ */
+function animationFrameCount(artboard, name) {
+  if (!name) return null;
+  try {
+    const animation = artboard.animationByName(name);
+    return animation?.duration || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Choisit la frame à exporter parmi les frames échantillonnées.
  *
- * Réservé aux visuels que le jeu ne bake jamais lui-même — en pratique les
- * variantes météo (`FireHorseActive`, `ThunderWolfActive`), que le jeu obtient
- * en basculant un input sur le sprite vivant. Il n'existe donc aucune pose de
- * référence côté jeu, et la pose d'entrée y attrape les éclairs/flammes à un
- * creux de leur pulsation. On reconstitue ce que montraient les anciennes
- * frames d'atlas :
+ * Le jeu, lui, ne désigne aucune frame : son baker capture la frame 0 de
+ * `Pet_Idle` (`advanceZero()`, et `draw()` n'avance pas au premier appel).
+ * Or `Pet_Idle` est une boucle de 7 s et sa frame 0 tombe sur un extrême du
+ * balancement — corps de travers, éventail du paon replié. Les anciens
+ * sprites d'atlas, eux, étaient sur une pose neutre.
  *
- * 1. ne garder que les frames les plus larges — VFX déployés ;
- * 2. parmi elles, la plus proche de la médiane pixel à pixel. Un clignement
- *    d'yeux ne dure que quelques frames : c'est un outlier, donc il est écarté
- *    sans avoir à le détecter explicitement.
+ * On prend donc la frame la plus proche de la **médiane pixel à pixel** du
+ * cycle : le pet passe l'essentiel de son idle autour de sa pose de repos, et
+ * les écarts (balancement, clignements, battements d'ailes) sont des outliers
+ * qui s'éliminent tout seuls. Aucun réglage par espèce, donc un pet ajouté par
+ * une maj est traité correctement sans intervention.
+ *
+ * `pose: "widest"` restreint d'abord aux frames les plus larges. Réservé aux
+ * variantes météo, que le jeu n'a jamais bakées : sans ça les éclairs et les
+ * flammes sont attrapés à un creux de leur pulsation.
  *
  * @returns {number|null} index de frame (relatif au début du balayage)
  */
-function pickFrame(samples) {
+function pickFrame(samples, pose = "neutral") {
   if (!samples.length) return null;
 
   const maxSpan = Math.max(...samples.map((s) => s.span));
   if (maxSpan <= 0) return null;
 
-  const candidates = samples.filter((s) => s.span >= maxSpan * SPAN_TOLERANCE);
+  const candidates =
+    pose === "widest"
+      ? samples.filter((s) => s.span >= maxSpan * SPAN_TOLERANCE)
+      : samples;
+
   if (candidates.length === 1) return candidates[0].frame;
 
   const pixels = THUMB_SIZE * THUMB_SIZE;

@@ -103,19 +103,44 @@ Notes annexes :
 - `settleDraws` vaut 1 par défaut → une seule passe de dessin, et
   `deterministicCapture` reste vrai. Au-delà de 1, le jeu désactive lui-même le
   cache de cadrage (le rendu n'est plus reproductible).
+- **Le jeu ne désigne aucune frame.** `advanceZero()` fait littéralement
+  `stateMachine.advance(0); artboard.advance(0)`, le hook `prepareSource` est
+  omis à l'instanciation (`new sbe(a, b, c)`, 3 arguments) donc c'est un no-op,
+  et `draw(captureTimeMs)` n'avance pas non plus : `advance(e)` calcule
+  `lastTimeMs === null ? 0 : …`. La capture est donc la frame 0 de `Pet_Idle`,
+  une boucle de 7 s dont la frame 0 tombe sur un extrême du balancement.
+  C'est pour ça qu'on ne reprend **pas** sa pose : voir §3 bis.
 - Le cadre serré est mémoïsé par `species@bakeHeight` (`tightFrameCache`).
 - Dans le **monde** (pas l'UI), c'est l'inverse : `randomizeInitialPhase: true`
   et `settleSeconds: 4`, pour que les pets ne battent pas des ailes en cœur.
 
-### Écart avec notre export
+## 3 bis. Où on s'écarte du jeu, et pourquoi
 
-On rogne au plus serré sur les deux axes, le jeu symétrise en horizontal. Nos
-PNG sont donc décalés par rapport à l'axe du corps : **6 px de médiane, jusqu'à
-66 px** (Rooster ; puis ThunderWolfActive 44, Platypus 52, Squirrel 45).
+**Cadrage : on suit le jeu.** La symétrisation autour de l'axe de l'artboard est
+reprise telle quelle. Mesuré sur les 28 pets (axe de symétrie réel du dessin
+contre centre de l'image), c'est nettement le meilleur des candidats :
 
-S'aligner est peu coûteux — on a déjà l'offset de rogne, il suffit de padder
-symétriquement — et rendrait les ancres inutiles pour le centrage horizontal.
-À faire si on veut du pixel-perfect avec l'UI du jeu.
+| approche | erreur moyenne | max |
+|---|---|---|
+| v810 (rognage serré d'origine) | 14,5 px | 59,5 |
+| rognage serré des deux côtés | 17,9 px | 63,5 |
+| **axe artboard (retenu)** | **5,0 px** | 22,5 |
+
+**Pose : on s'en écarte.** Le jeu capture la frame 0 de `Pet_Idle`. Or c'est une
+boucle de 7 s et sa frame 0 tombe sur un extrême du balancement : corps de
+travers, éventail du paon replié, regard décalé. Les anciens sprites d'atlas
+étaient sur une pose neutre.
+
+On prend donc la frame la plus proche de la **médiane pixel à pixel du cycle**.
+Le pet passe l'essentiel de son idle autour de sa pose de repos ; balancements,
+clignements et battements d'ailes sont des outliers qui s'éliminent seuls.
+Aucun réglage par espèce — un pet ajouté par une maj est traité correctement
+sans intervention.
+
+Seule exception : les variantes météo (`FireHorseActive`, `ThunderWolfActive`),
+où on restreint d'abord aux frames les plus larges. Le jeu ne les bake jamais,
+donc il n'existe aucune pose de référence, et la médiane attrape les éclairs et
+les flammes à un creux de leur pulsation.
 
 ---
 

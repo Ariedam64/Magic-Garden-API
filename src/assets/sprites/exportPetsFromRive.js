@@ -108,13 +108,15 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
   const petNames = artboardNames.filter((n) => n !== containerName);
 
   const outputs = [
-    // Pose du jeu : c'est la recette de son propre baker d'icônes, donc un pet
-    // ajouté par une maj sort conforme sans qu'on ait à s'en occuper.
+    // Pose neutre : le baker du jeu capture la frame 0 de `Pet_Idle`, qui
+    // tombe sur un extrême du balancement. On prend la pose médiane du cycle,
+    // celle des anciens sprites d'atlas. Aucun réglage par espèce, donc un pet
+    // ajouté par une maj est traité correctement tout seul.
     ...petNames.map((name) => ({
       artboard: name,
       name,
       inputs: null,
-      pose: "game",
+      pose: "neutral",
       settleSeconds: 0,
     })),
     ...ACTIVE_VARIANTS.filter((v) => petNames.includes(v.artboard)).map((v) => ({
