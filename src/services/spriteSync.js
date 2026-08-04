@@ -18,6 +18,7 @@ import {
   exportPetsFromRive,
   resolvePetsRiveUrl,
 } from "../assets/sprites/exportPetsFromRive.js";
+import { exportDecorFromRive } from "../assets/sprites/exportDecorFromRive.js";
 import { getStoredRiveUrl, saveRiveAsset } from "../core/game/riveStorage.js";
 import { syncPetAnimations } from "./animationSync.js";
 import { syncRiveInventory } from "./riveSync.js";
@@ -293,6 +294,14 @@ export async function checkAndSyncSprites({ force = false } = {}) {
     );
 
     const petResult = await syncPetSprites({ baseUrl, force });
+
+    // 2a bis. Images fixes des décors que les atlas ne fournissent pas. Deux
+    // artboards aujourd'hui, donc quelques secondes : on le fait avant les
+    // court-circuits ci-dessous, sinon un déploiement sur une install déjà
+    // synchronisée ne les exporterait jamais.
+    await exportDecorFromRive({ outDir: config.sprites.exportDir }).catch((err) =>
+      logger.error({ error: err?.message || String(err) }, "Decor sprite export failed")
+    );
 
     // 2b. Animations de pets : même source (`rive/pets.riv`), mais des minutes
     // de rendu — donc un processus fils, qu'on ne suit pas. Les boucles déjà

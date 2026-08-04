@@ -5,6 +5,8 @@ import { transformDataWithSprites } from "./dataTransformer.js";
 import { getAnimations, buildAnimationLinks } from "../assets/sprites/riveAnimations.js";
 import { buildRiveSource, getRiveUrlFromInventory } from "../assets/sprites/riveSource.js";
 import { loadRiveInventory } from "../core/game/riveStorage.js";
+import { getRiveFrames } from "../assets/sprites/riveFrames.js";
+import { buildSpriteUrl } from "../utils/spriteUrlBuilder.js";
 
 /**
  * Données de décors enrichies de leurs boucles animées.
@@ -20,9 +22,11 @@ import { loadRiveInventory } from "../core/game/riveStorage.js";
  *    `StoneBirdBath`, la donnée du jeu `StoneBirdbath`. Le rapprochement se
  *    fait donc sans tenir compte de la casse, sinon ce décor perdrait son
  *    animation en silence.
- * 2. **Les inédits n'ont pas d'image.** `WeatherStation` et `BoobooBooth`
- *    existent dans le `.riv` mais nulle part ailleurs : ni données, ni PNG
- *    d'atlas. Ils sortent donc avec une animation mais sans `sprite`.
+ * 2. **Les inédits n'ont pas de PNG d'atlas.** `WeatherStation` et
+ *    `BoobooBooth` existent dans le `.riv` mais nulle part ailleurs. On leur
+ *    rend donc une image fixe depuis Rive (`exportDecorFromRive.js`), pour
+ *    qu'ils aient un `sprite` comme n'importe quel décor et pas seulement une
+ *    animation.
  */
 
 const CATEGORY = "decor";
@@ -59,10 +63,11 @@ export async function getTransformedDecor({ spriteVersion = null } = {}) {
   const data = await gameDataService.getDecor();
   const transformed = transformDataWithSprites(data, CATEGORY, { spriteVersion });
 
-  const [{ animations }, riveUrl, inventory] = await Promise.all([
+  const [{ animations }, riveUrl, inventory, frames] = await Promise.all([
     getAnimations(CATEGORY),
     getRiveUrlFromInventory(CATEGORY),
     loadRiveInventory(),
+    getRiveFrames(),
   ]);
 
   const artboards = Object.keys(animations);
@@ -92,9 +97,15 @@ export async function getTransformedDecor({ spriteVersion = null } = {}) {
 
     // Décor présent dans le .riv mais absent des données du jeu : même
     // traitement que les espèces de pets pas encore sorties.
+    // Son image fixe vient de notre propre rendu, faute d'entrée d'atlas.
+    const rendered = frames[`sprite/${CATEGORY}/${artboard}`];
+
     out[artboard] = {
       name: artboard,
       released: false,
+      ...(rendered
+        ? { sprite: buildSpriteUrl(CATEGORY, artboard, { version: spriteVersion }) }
+        : {}),
       ...(links ? { animations: links } : {}),
       ...(rive ? { rive } : {}),
     };

@@ -449,5 +449,13 @@ tient en **93 s pour 4,4 Mo**, contre ~50 min pour les pets.
 
 `WeatherStation` et `BoobooBooth` n'existent **que** dans le `.riv` : ni données
 de jeu, ni sprite d'atlas. Comme `Rooster` et `Hedgehog` côté pets, ils sortent
-dans `/data/decors` avec `released: false` et leur animation pour seule
-représentation.
+dans `/data/decors` avec `released: false`.
+
+Leur image fixe est rendue depuis Rive (`exportDecorFromRive.js`), avec la même
+sélection de pose médiane que les pets — une frame arbitraire attraperait la
+fontaine au creux de son jet. **On ne rend que ce qui manque** : les six autres
+décors ont toujours leur PNG officiel dans les atlas, et c'est celui-là qui doit
+être servi. Le test se fait sur l'index d'atlas, pas sur le disque, pour ne pas
+dépendre de l'ordre des exports ; et le sidecar est réécrit intégralement à
+chaque passage, pour qu'un décor que le jeu vient de publier cesse d'annoncer
+notre rendu à la place du sien.

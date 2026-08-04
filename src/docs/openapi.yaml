@@ -648,8 +648,10 @@ paths:
         that render the vector source live.
 
         Two of them - `WeatherStation` and `BoobooBooth` - exist only in the Rive
-        file: no game data, not even an atlas sprite. They are listed with
-        `released: false`, an animation, and nothing else.
+        file: no game data and no atlas sprite. They are listed with
+        `released: false`, and get their still `sprite` rendered from the Rive
+        file so they are usable like any other decoration. Only the missing ones
+        are rendered - the six others keep their official atlas PNG.
       responses:
         '200':
           description: Decorations data

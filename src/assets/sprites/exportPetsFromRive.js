@@ -5,6 +5,7 @@ import path from "node:path";
 import { resolveRiveUrl } from "./riveManifest.js";
 import { logger } from "../../logger/index.js";
 import { loadRiveFile, renderArtboardToPng } from "./riveRenderer.js";
+import { RIVE_FRAMES_FILE } from "./riveFrames.js";
 
 /**
  * Export des sprites de pets depuis le fichier Rive du jeu.
@@ -26,9 +27,7 @@ const PETS_RIVE_KEY = "pets";
 
 export const PET_STATE_MACHINE = "Pet State Machine";
 
-// Sidecar écrit à côté des PNG (préfixé `_` : le routeur de sprites n'accepte
-// que des noms en `.png`, donc il n'est jamais servi).
-export const PET_METADATA_FILE = "_rive-frames.json";
+export { RIVE_FRAMES_FILE as PET_METADATA_FILE } from "./riveFrames.js";
 
 // Variantes "météo active" : le jeu ne change pas d'artboard, il pousse un
 // input booléen sur la state machine (map `kl` du bundle). Les anciens atlas
@@ -151,7 +150,7 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
   // (`/assets/sprites/composed`).
   if (exportedNames.length) {
     await fs.writeFile(
-      path.join(destDir, PET_METADATA_FILE),
+      path.join(destDir, RIVE_FRAMES_FILE),
       JSON.stringify({ riveUrl: url, frames: metadata }, null, 2)
     );
   }

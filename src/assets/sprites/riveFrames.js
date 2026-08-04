@@ -5,7 +5,7 @@ import path from "node:path";
 import { config } from "../../config/index.js";
 import { buildSpriteUrl } from "../../utils/spriteUrlBuilder.js";
 import { getStoredVersionCached } from "../../core/game/versionStorage.js";
-import { PET_METADATA_FILE } from "./exportPetsFromRive.js";
+
 
 /**
  * Accès aux sprites qui ne viennent plus d'un atlas TexturePacker.
@@ -19,8 +19,14 @@ import { PET_METADATA_FILE } from "./exportPetsFromRive.js";
  * sur deux selon qu'il interroge l'atlas ou le disque.
  */
 
-// Répertoires où sont exportés les sprites issus de Rive, par catégorie.
-const RIVE_CATEGORIES = { pets: PET_METADATA_FILE };
+// Nom du sidecar écrit à côté des PNG rendus depuis Rive (préfixé `_` : le
+// routeur de sprites n'accepte que des noms en `.png`, il n'est jamais servi).
+export const RIVE_FRAMES_FILE = "_rive-frames.json";
+
+// Catégories dont une partie des sprites vient de Rive et non d'un atlas.
+// `pets` : toutes les créatures (le jeu les a sorties des atlas).
+// `decor` : uniquement les décors que les atlas ne fournissent pas encore.
+const RIVE_CATEGORIES = { pets: RIVE_FRAMES_FILE, decor: RIVE_FRAMES_FILE };
 
 // Revalidation sur le mtime des sidecars, au plus une fois par minute. Un
 // simple cache à vie ne suffit pas : l'export réécrit ces fichiers quand le jeu
