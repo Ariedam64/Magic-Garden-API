@@ -73,22 +73,31 @@ describe("pets Rive asset", () => {
     assert.ok(info.width > 1 && info.height > 1, "rendered sprite is empty");
   });
 
-  it("picks a wings-spread frame for flying pets", async () => {
-    // L'idle boucle : une frame prise au hasard donne des ailes repliées.
-    // La chauve-souris de l'atlas d'origine faisait 312x157, soit un ratio
-    // ~2 — c'est la signature de la pose ailes déployées qu'on veut retrouver.
+  it("centres every pet on the artboard axis, like the game does", async () => {
+    // Le cadrage du jeu symétrise autour de l'axe de l'artboard (doc-rive.md
+    // §3), donc l'ancre horizontale vaut 0.5 par construction. Un rognage
+    // serré des deux côtés la ferait dériver dès qu'une queue dépasse.
+    for (const pet of EXPECTED_PETS) {
+      const rendered = await renderArtboardToPng(riveFile, pet, {
+        stateMachineName: PET_STATE_MACHINE,
+      });
+
+      assert.equal(rendered.anchor.x, 0.5, `${pet} is not centred`);
+      assert.equal(rendered.width % 1, 0);
+      assert.ok(rendered.height > 1, `${pet} rendered empty`);
+    }
+  });
+
+  it("keeps flying pets wider than tall", async () => {
+    // Garde-fou de pose : ailes repliées, la chauve-souris devient plus haute
+    // que large. La frame d'atlas d'origine faisait 312x157.
     const rendered = await renderArtboardToPng(riveFile, "Bat", {
       stateMachineName: PET_STATE_MACHINE,
     });
 
-    const { info } = await sharp(rendered.buffer)
-      .trim({ threshold: 1 })
-      .png()
-      .toBuffer({ resolveWithObject: true });
-
     assert.ok(
-      info.width > info.height * 1.5,
-      `Bat should be much wider than tall, got ${info.width}x${info.height}`
+      rendered.width > rendered.height * 1.2,
+      `Bat should be wider than tall, got ${rendered.width}x${rendered.height}`
     );
   });
 
@@ -99,6 +108,8 @@ describe("pets Rive asset", () => {
     const active = await renderArtboardToPng(riveFile, "ThunderWolf", {
       stateMachineName: PET_STATE_MACHINE,
       inputs: { thunder: true },
+      pose: "widest",
+      settleSeconds: 4,
     });
 
     assert.ok(base && active);

@@ -17,6 +17,18 @@ import { logger } from "../../logger/index.js";
  * précompilés — pas de toolchain native à installer sur le serveur).
  */
 
+// Valeurs reprises telles quelles du jeu (cf. doc-rive.md §3) : seuil alpha du
+// cadrage, et pas d'avance de la séquence d'amorçage. Le pas n'est pas
+// cosmétique — avancer 4 s d'un coup ne donne pas la même frame que huit fois
+// 0,5 s.
+const ALPHA_THRESHOLD = 16;
+const SETTLE_STEP_SECONDS = 0.5;
+
+// Balayage de secours (pose "widest"), pour les visuels sans équivalent bakés
+// côté jeu. Voir pickFrame.
+const SCAN_FRAMES = 300;
+const SCAN_STEP = 4;
+
 // Côté de la vignette utilisée pour comparer des poses entre elles.
 const THUMB_SIZE = 48;
 
@@ -95,19 +107,29 @@ export async function loadRiveFile(bytes) {
 }
 
 /**
- * Rend un artboard en PNG.
+ * Rend un artboard en PNG, cadré comme le fait le jeu.
+ *
+ * Le jeu bake ses propres images fixes de pets (`PetIconService`, chunk
+ * `main-*.js`) et on en reprend la recette — voir doc-rive.md §3 :
+ *
+ *   sprite ancré (0.5, 1), hauteur `bakeHeight`, largeur = hauteur × ratio
+ *   artboard ; puis cadre = bbox alpha (seuil 16) **symétrisée
+ *   horizontalement autour de l'axe de l'artboard**, serrée verticalement.
+ *
+ * C'est cette symétrie qui donne des sujets parfaitement centrés : un pet dont
+ * la queue ou l'aile dépasse d'un seul côté n'est pas décalé pour autant, ce
+ * qu'un rognage serré des deux côtés ne sait pas faire.
  *
  * @param {object} file - Fichier Rive chargé via loadRiveFile
  * @param {string} artboardName
  * @param {object} options
  * @param {string|null} options.stateMachineName - State machine à instancier
  * @param {Record<string, boolean>} options.inputs - Inputs booléens à forcer
- * @param {number} options.settleFrames - Frames avancées avant l'échantillonnage
- * @param {number} options.scanFrames - Longueur du cycle échantillonné
- * @param {number} options.scanStep - Une frame retenue sur N
- * @param {number} options.scale - Multiplicateur de résolution
- * @returns {Promise<{ buffer: Buffer, width: number, height: number }|null>}
- *   PNG non rogné aux dimensions de l'artboard, ou null si l'artboard manque
+ * @param {number} options.settleSeconds - Secondes avancées après l'entrée
+ * @param {"game"|"widest"} options.pose - Voir pickFrame ci-dessous
+ * @param {number|null} options.bakeHeight - Hauteur de rendu avant cadrage
+ * @returns {Promise<{ buffer, width, height, anchor }|null>}
+ *   PNG cadré, ou null si l'artboard n'existe pas
  */
 export async function renderArtboardToPng(
   file,
@@ -115,10 +137,9 @@ export async function renderArtboardToPng(
   {
     stateMachineName = null,
     inputs = null,
-    settleFrames = 120,
-    scanFrames = 300,
-    scanStep = 4,
-    scale = 1,
+    settleSeconds = 0,
+    pose = "game",
+    bakeHeight = null,
   } = {}
 ) {
   const rive = await getRive();
@@ -127,8 +148,14 @@ export async function renderArtboardToPng(
   if (!artboard) return null;
 
   const bounds = artboard.bounds;
-  const width = Math.max(1, Math.ceil((bounds.maxX - bounds.minX) * scale));
-  const height = Math.max(1, Math.ceil((bounds.maxY - bounds.minY) * scale));
+  const artboardWidth = bounds.maxX - bounds.minX;
+  const artboardHeight = bounds.maxY - bounds.minY;
+
+  // Le jeu bake à 512 px de haut, taille dictée par son budget d'atlas GPU.
+  // On rend à la hauteur native de l'artboard : le cadrage est identique au
+  // pixel près (il ne dépend que de ratios), mais l'image est plus fine.
+  const height = Math.max(1, Math.round(bakeHeight ?? artboardHeight));
+  const width = Math.max(1, Math.round((height * artboardWidth) / artboardHeight));
 
   const canvas = makeShimmedCanvas(width, height);
   const context = canvas.getContext("2d");
@@ -148,6 +175,23 @@ export async function renderArtboardToPng(
     }
 
     return instance;
+  };
+
+  // Séquence d'amorçage du jeu (`RiveSprite.hydrate`) : un `advance(0)` pour
+  // appliquer l'état d'entrée, puis `settleSeconds` consommées par pas de
+  // SETTLE_STEP_SECONDS. Le pas compte — avancer 4 s d'un coup ou en huit fois
+  // ne donne pas la même frame.
+  const settle = (machine, seconds) => {
+    machine.advance(0);
+    artboard.advance(0);
+
+    let remaining = seconds;
+    while (remaining > 0) {
+      const step = Math.min(remaining, SETTLE_STEP_SECONDS);
+      machine.advance(step);
+      artboard.advance(step);
+      remaining -= step;
+    }
   };
 
   const drawFrame = () => {
@@ -172,27 +216,25 @@ export async function renderArtboardToPng(
     if (!machineDef) {
       artboard.advance(0);
       drawFrame();
-      return { buffer: canvas.toBuffer("image/png"), width, height };
+      return frameLikeGame(canvas, context, width, height);
     }
 
     machine = makeMachine();
+    settle(machine, settleSeconds);
 
-    // L'idle d'un pet ne se stabilise jamais : il boucle (ailes qui battent,
-    // éclairs/flammes des variantes météo, clignements d'yeux…). Figer une
-    // frame arbitraire donne des poses ratées — chauve-souris ailes repliées,
-    // ThunderWolf sans éclairs, chèvre les yeux fermés.
-    for (let i = 0; i < settleFrames; i++) {
-      machine.advance(1 / 60);
-      artboard.advance(1 / 60);
+    if (pose === "game") {
+      drawFrame();
+      return frameLikeGame(canvas, context, width, height);
     }
 
-    // Passe 1 — on balaie un cycle en ne mesurant que les pixels (aucun
-    // encodage PNG) : largeur du contenu, plus une vignette en niveaux de gris
-    // qui servira à écarter les frames atypiques.
+    // pose === "widest" : on balaie un cycle en ne mesurant que les pixels
+    // (aucun encodage), puis on rejoue jusqu'à la frame retenue. `advance` est
+    // déterministe, donc rejouer la même séquence sur une instance neuve
+    // redonne exactement la frame mesurée.
     const samples = [];
 
-    for (let frame = 0; frame < scanFrames; frame++) {
-      if (frame % scanStep === 0) {
+    for (let frame = 0; frame < SCAN_FRAMES; frame++) {
+      if (frame % SCAN_STEP === 0) {
         drawFrame();
         samples.push({ frame, ...measureFrame(context, width, height) });
       }
@@ -201,28 +243,91 @@ export async function renderArtboardToPng(
     }
 
     const chosen = pickFrame(samples);
-    if (chosen === null) {
-      drawFrame();
-      return { buffer: canvas.toBuffer("image/png"), width, height };
-    }
 
-    // Passe 2 — on rejoue jusqu'à la frame retenue et on encode une seule
-    // fois. `advance` est déterministe, donc rejouer la même séquence sur une
-    // instance neuve redonne exactement la frame mesurée.
     machine.delete?.();
     machine = makeMachine();
+    settle(machine, settleSeconds);
 
-    for (let i = 0; i < settleFrames + chosen; i++) {
+    for (let i = 0; i < (chosen ?? 0); i++) {
       machine.advance(1 / 60);
       artboard.advance(1 / 60);
     }
     drawFrame();
 
-    return { buffer: canvas.toBuffer("image/png"), width, height };
+    return frameLikeGame(canvas, context, width, height);
   } finally {
     machine?.delete?.();
     renderer.delete?.();
   }
+}
+
+/**
+ * Applique le cadrage du jeu au canvas rendu.
+ *
+ * @returns {{ buffer: Buffer, width: number, height: number, anchor: {x,y} }}
+ */
+function frameLikeGame(canvas, context, width, height) {
+  const box = alphaBounds(context, width, height);
+
+  // Canvas entièrement transparent : on rend l'image telle quelle plutôt que
+  // de lever — l'appelant loguera un sprite vide, c'est plus diagnosticable.
+  if (!box) {
+    return {
+      buffer: canvas.toBuffer("image/png"),
+      width,
+      height,
+      anchor: { x: 0.5, y: 1 },
+    };
+  }
+
+  const centerX = width / 2;
+  const half = Math.max(centerX - box.x, box.x + box.width - centerX);
+
+  const left = Math.max(0, Math.round(centerX - half));
+  const cropWidth = Math.min(width - left, Math.max(1, Math.round(2 * half)));
+
+  const cropped = makeShimmedCanvas(cropWidth, box.height);
+  cropped
+    .getContext("2d")
+    .drawImage(canvas, left, box.y, cropWidth, box.height, 0, 0, cropWidth, box.height);
+
+  return {
+    buffer: cropped.toBuffer("image/png"),
+    width: cropWidth,
+    height: box.height,
+    // x vaut 0.5 par construction (c'est tout l'intérêt de la symétrie) ;
+    // y place le sol de l'artboard, qui tombe sous les pattes — d'où le clamp.
+    anchor: {
+      x: 0.5,
+      y: Math.min(1, (height - box.y) / box.height),
+    },
+  };
+}
+
+/**
+ * Bounding box du contenu non transparent.
+ */
+function alphaBounds(context, width, height) {
+  const { data } = context.getImageData(0, 0, width, height);
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y++) {
+    const row = y * width * 4;
+    for (let x = 0; x < width; x++) {
+      if (data[row + x * 4 + 3] < ALPHA_THRESHOLD) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX) return null;
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
 }
 
 /**
@@ -243,7 +348,7 @@ function measureFrame(context, width, height) {
     for (let x = 0; x < width; x++) {
       const i = row + x * 4;
       const alpha = data[i + 3];
-      if (alpha <= 8) continue;
+      if (alpha < ALPHA_THRESHOLD) continue;
 
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
@@ -261,12 +366,17 @@ function measureFrame(context, width, height) {
 /**
  * Choisit la frame à exporter parmi les frames échantillonnées.
  *
- * 1. On ne garde que les plus larges : c'est le critère qui retrouve les poses
- *    de l'artwork d'origine (envergure maximale pour les volants, VFX déployés
- *    pour les variantes météo).
- * 2. Parmi elles, on prend la plus proche de la médiane pixel à pixel. Un
- *    clignement d'yeux ne dure que quelques frames : c'est un outlier, donc
- *    il est écarté sans avoir à le détecter explicitement.
+ * Réservé aux visuels que le jeu ne bake jamais lui-même — en pratique les
+ * variantes météo (`FireHorseActive`, `ThunderWolfActive`), que le jeu obtient
+ * en basculant un input sur le sprite vivant. Il n'existe donc aucune pose de
+ * référence côté jeu, et la pose d'entrée y attrape les éclairs/flammes à un
+ * creux de leur pulsation. On reconstitue ce que montraient les anciennes
+ * frames d'atlas :
+ *
+ * 1. ne garder que les frames les plus larges — VFX déployés ;
+ * 2. parmi elles, la plus proche de la médiane pixel à pixel. Un clignement
+ *    d'yeux ne dure que quelques frames : c'est un outlier, donc il est écarté
+ *    sans avoir à le détecter explicitement.
  *
  * @returns {number|null} index de frame (relatif au début du balayage)
  */

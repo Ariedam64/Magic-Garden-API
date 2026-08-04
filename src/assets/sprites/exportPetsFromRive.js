@@ -2,7 +2,6 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import sharp from "sharp";
 import { getBaseUrl } from "../assets.js";
 import { loadManifest, getBundleByName } from "../manifest.js";
 import { joinUrl } from "../../utils/url.js";
@@ -36,10 +35,18 @@ export const PET_METADATA_FILE = "_rive-frames.json";
 // Variantes "météo active" : le jeu ne change pas d'artboard, il pousse un
 // input booléen sur la state machine (map `kl` du bundle). Les anciens atlas
 // exposaient ces poses comme des sprites distincts — on garde ces noms.
+//
+// Le jeu ne bake jamais ces variantes en image fixe : il n'existe donc aucune
+// pose de référence, et sa pose d'entrée attrape les éclairs/flammes à un creux
+// de leur pulsation. C'est le seul cas où on s'écarte de sa recette.
 const ACTIVE_VARIANTS = [
   { artboard: "FireHorse", name: "FireHorseActive", input: "fire" },
   { artboard: "ThunderWolf", name: "ThunderWolfActive", input: "thunder" },
 ];
+
+// Secondes d'amorçage quand un input est forcé, comme le jeu (`settleSeconds`
+// vaut 4 dès qu'il pousse sleep/fire/thunder, et rien sinon).
+const SETTLE_SECONDS_WITH_INPUTS = 4;
 
 /**
  * Résout l'URL du .riv des pets depuis le manifest.
@@ -78,47 +85,6 @@ async function downloadBuffer(url) {
 }
 
 /**
- * Rogne les bords transparents pour obtenir un PNG serré, comme les frames
- * trimmées que produisaient les atlas, et recalcule l'ancre correspondante.
- *
- * L'artboard Rive est posé par le jeu avec l'ancre {x:.5, y:1} sur sa boîte
- * complète : on reprojette ce point (centre horizontal, bas de l'artboard)
- * dans le repère de l'image rognée. Le bas de l'artboard tombe toujours sous
- * les pattes, donc y sature à 1 — ce qui reproduit la convention des anciennes
- * frames d'atlas, dont l'ancre valait 0.96–0.99 (pieds en bas du sprite).
- */
-async function trimTransparent(pngBuffer, artboard) {
-  try {
-    const { data, info } = await sharp(pngBuffer)
-      .trim({ threshold: 1 })
-      .png()
-      .toBuffer({ resolveWithObject: true });
-
-    const left = -(info.trimOffsetLeft ?? 0);
-    const top = -(info.trimOffsetTop ?? 0);
-    const clamp = (v) => Math.min(1, Math.max(0, v));
-
-    return {
-      buffer: data,
-      width: info.width,
-      height: info.height,
-      anchor: {
-        x: clamp((artboard.width * 0.5 - left) / info.width),
-        y: clamp((artboard.height - top) / info.height),
-      },
-    };
-  } catch {
-    // sharp lève si l'image est entièrement transparente — on garde l'original.
-    return {
-      buffer: pngBuffer,
-      width: artboard.width,
-      height: artboard.height,
-      anchor: { x: 0.5, y: 1 },
-    };
-  }
-}
-
-/**
  * Rend tous les artboards de pets en PNG dans `outDir/sprite/pets/`.
  *
  * @param {object} options
@@ -142,11 +108,21 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
   const petNames = artboardNames.filter((n) => n !== containerName);
 
   const outputs = [
-    ...petNames.map((name) => ({ artboard: name, name, inputs: null })),
+    // Pose du jeu : c'est la recette de son propre baker d'icônes, donc un pet
+    // ajouté par une maj sort conforme sans qu'on ait à s'en occuper.
+    ...petNames.map((name) => ({
+      artboard: name,
+      name,
+      inputs: null,
+      pose: "game",
+      settleSeconds: 0,
+    })),
     ...ACTIVE_VARIANTS.filter((v) => petNames.includes(v.artboard)).map((v) => ({
       artboard: v.artboard,
       name: v.name,
       inputs: { [v.input]: true },
+      pose: "widest",
+      settleSeconds: SETTLE_SECONDS_WITH_INPUTS,
     })),
   ];
 
@@ -161,6 +137,8 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
       const rendered = await renderArtboardToPng(file, target.artboard, {
         stateMachineName: PET_STATE_MACHINE,
         inputs: target.inputs,
+        pose: target.pose,
+        settleSeconds: target.settleSeconds,
       });
 
       if (!rendered) {
@@ -168,14 +146,13 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
         continue;
       }
 
-      const trimmed = await trimTransparent(rendered.buffer, rendered);
-      await fs.writeFile(path.join(destDir, `${target.name}.png`), trimmed.buffer);
+      await fs.writeFile(path.join(destDir, `${target.name}.png`), rendered.buffer);
 
       metadata[`sprite/pet/${target.name}`] = {
         name: target.name,
         artboard: target.artboard,
-        sourceSize: { w: trimmed.width, h: trimmed.height },
-        anchor: trimmed.anchor,
+        sourceSize: { w: rendered.width, h: rendered.height },
+        anchor: rendered.anchor,
       };
       exportedNames.push(target.name);
     } catch (err) {
