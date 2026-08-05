@@ -92,9 +92,15 @@ function describeArtboard(rive, file, name) {
 /**
  * Télécharge et inspecte un fichier Rive.
  *
- * Ne lève jamais : un fichier illisible est un résultat, pas une panne. C'est
- * le cas d'`avatar.riv`, qui référence des assets hors fichier (les cosmétiques)
- * que le runtime attend qu'on lui fournisse — il ne résout donc jamais.
+ * Ne lève jamais : un fichier illisible est un résultat, pas une panne (borne
+ * de chargement dans `loadRiveFile`, pour le cas d'un format plus récent que
+ * le runtime pinné).
+ *
+ * `loadable: true` ne veut pas dire "autonome" : `avatar.riv` et désormais
+ * `pets.riv` ont des assets sans contenu inline (les cosmétiques — voir
+ * `makeAssetLoader` dans `riveRenderer.js` pour le signal utilisé) que le
+ * runtime n'attend plus grâce au loader, mais qui restent non résolus ici.
+ * Voir `referencedAssetCount`/`assets` dans le résultat pour les repérer.
  *
  * @param {string} url
  * @param {object} options
@@ -118,7 +124,9 @@ export async function inspectRiveFile(url, { key = null } = {}) {
 
   try {
     const rive = await getRive();
-    const { file, artboardNames } = await loadRiveFile(bytes, { timeoutMs: INSPECT_TIMEOUT_MS });
+    const { file, artboardNames, assets } = await loadRiveFile(bytes, {
+      timeoutMs: INSPECT_TIMEOUT_MS,
+    });
 
     // Le conteneur n'est pas un contenu : c'est un artboard générique que le
     // jeu ne rend jamais, structurellement identique à un pet. Le publier au
@@ -133,6 +141,8 @@ export async function inspectRiveFile(url, { key = null } = {}) {
       .map((name) => describeArtboard(rive, file, name))
       .filter(Boolean);
 
+    const referencedAssets = assets.filter((asset) => asset.referenced);
+
     return {
       url,
       bytes: bytes.length,
@@ -141,6 +151,8 @@ export async function inspectRiveFile(url, { key = null } = {}) {
       artboardCount: artboards.length,
       timelineCount: artboards.reduce((sum, a) => sum + a.animations.length, 0),
       artboards,
+      assets,
+      referencedAssetCount: referencedAssets.length,
     };
   } catch (err) {
     return { url, bytes: bytes.length, loadable: false, error: err?.message || String(err) };

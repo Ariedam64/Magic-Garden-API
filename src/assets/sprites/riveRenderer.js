@@ -103,17 +103,37 @@ export async function getRive() {
  * fichier a des artboards et des state machines tout à fait lisibles, il n'a
  * juste jamais eu de loader pour lui dire de ne pas attendre.
  *
- * On ne fait *rien* d'autre que répondre `true` ("je m'en occupe"). Appeler
- * `asset.decode(bytes)` ici pour rendre les quelques assets qui embarquent un
- * repli (`Top_Custom_ForbiddenMethod`, les frames `RickRoll_0x`…) semblait
- * l'usage naturel de ce callback, mais ça bloque le chargement indéfiniment —
- * constaté empiriquement, pas documenté par Rive. On perd juste le rendu
- * pixel de ces quelques assets ; l'inventaire (artboards, timelines, state
- * machines) n'en a pas besoin.
+ * On ne fait jamais `asset.decode(bytes)` ici pour rendre les quelques assets
+ * qui embarquent un repli (`Top_Custom_ForbiddenMethod`, les frames
+ * `RickRoll_0x`…) — ça semblait l'usage naturel du callback, mais ça bloque le
+ * chargement indéfiniment, constaté empiriquement, pas documenté par Rive. On
+ * perd juste le rendu pixel de ces quelques assets ; l'inventaire (artboards,
+ * timelines, state machines) n'en a pas besoin.
+ *
+ * On note en revanche chaque asset **au passage** via `onAsset`, avec le
+ * signal qui compte réellement : `bytes.byteLength`. `cdnUuid` s'est révélé
+ * vide pour tous les assets observés, embarqués ou non (le champ ne dit donc
+ * rien ici) — c'est la présence ou l'absence d'un contenu inline qui distingue
+ * un asset autonome (ex. `Top_Basket` dans `avatar.riv`, ~Ko de PNG) d'un slot
+ * vide destiné à être rempli par le jeu à l'équipement d'un cosmetic (`bytes`
+ * vide ou quasi, ex. `HatSlotEmpty`/`NeckSlotEmpty` — apparus dans `pets.riv`
+ * alors que ce fichier charge et rend sans accroc ; rien d'autre n'aurait
+ * signalé leur apparition).
  */
-function makeAssetLoader(rive) {
+function makeAssetLoader(rive, onAsset) {
   return new rive.CustomFileAssetLoader({
-    loadContents: () => true,
+    loadContents: (asset, bytes) => {
+      onAsset?.({
+        name: asset.name,
+        uniqueFilename: asset.uniqueFilename,
+        fileExtension: asset.fileExtension,
+        type: asset.isImage ? "image" : asset.isFont ? "font" : asset.isAudio ? "audio" : "unknown",
+        cdnUuid: asset.cdnUuid,
+        embeddedBytes: bytes?.byteLength ?? 0,
+        referenced: (bytes?.byteLength ?? 0) === 0,
+      });
+      return true;
+    },
   });
 }
 
@@ -132,11 +152,12 @@ function makeAssetLoader(rive) {
  * @param {Buffer|Uint8Array} bytes
  * @param {object} options
  * @param {number} options.timeoutMs
- * @returns {Promise<{ file: object, artboardNames: string[] }>}
+ * @returns {Promise<{ file: object, artboardNames: string[], assets: object[] }>}
  */
 export async function loadRiveFile(bytes, { timeoutMs = LOAD_TIMEOUT_MS } = {}) {
   const rive = await getRive();
-  const assetLoader = makeAssetLoader(rive);
+  const assets = [];
+  const assetLoader = makeAssetLoader(rive, (asset) => assets.push(asset));
 
   let timer;
   const file = await Promise.race([
@@ -161,7 +182,7 @@ export async function loadRiveFile(bytes, { timeoutMs = LOAD_TIMEOUT_MS } = {}) 
     artboardNames.push(file.artboardByIndex(i).name);
   }
 
-  return { file, artboardNames };
+  return { file, artboardNames, assets };
 }
 
 /**
