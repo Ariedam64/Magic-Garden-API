@@ -1,5 +1,6 @@
 // src/assets/sprites/riveAnimator.js
 
+import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
@@ -171,7 +172,16 @@ function drawTo(rive, artboard, renderer, bounds, width, height) {
 }
 
 /**
- * Passe de repérage : union des bbox du cycle, en fractions du canvas.
+ * Passe de repérage : union des bbox du cycle, **et empreinte de son contenu**.
+ *
+ * L'empreinte est ce qui permet de ne pas tout refaire à chaque mise à jour du
+ * jeu. Un `.riv` est un binaire opaque : son hash change dès qu'une virgule
+ * bouge, sans dire *quoi* a changé. Ici on hache les pixels réellement rendus —
+ * si deux versions du fichier donnent le même cycle à 160 px, l'animation est
+ * visuellement identique et son fichier encodé reste valable.
+ *
+ * C'est rentable parce que cette passe est déjà là et coûte ~1 s, quand le
+ * rendu final et l'encodage en coûtent ~40.
  */
 function probeCycle(
   rive,
@@ -199,9 +209,16 @@ function probeCycle(
   let maxX = -1;
   let maxY = -1;
 
+  const digest = createHash("md5");
+
   try {
     playCycle(rive, artboard, machine, animation, frameCount, dt, () => {
       drawTo(rive, artboard, renderer, bounds, width, height);
+
+      // Hachage des pixels de la frame : `advance` étant déterministe, deux
+      // exécutions du même contenu donnent exactement la même empreinte.
+      digest.update(Buffer.from(context.getImageData(0, 0, width, height).data));
+
       const box = alphaBounds(context, width, height);
       if (!box) return;
       if (box.x < minX) minX = box.x;
@@ -222,6 +239,8 @@ function probeCycle(
     right: Math.min(width, maxX + 1 + PROBE_MARGIN) / width,
     top: Math.max(0, minY - PROBE_MARGIN) / height,
     bottom: Math.min(height, maxY + 1 + PROBE_MARGIN) / height,
+    // Même longueur que les empreintes d'atlas (cf. atlasStorage.js).
+    fingerprint: digest.digest("hex").slice(0, 12),
   };
 }
 
@@ -240,36 +259,14 @@ function probeCycle(
  * @param {number} options.maxFrames - Plafond de frames (borne la taille du fichier)
  * @returns {Promise<object|null>} capture, ou null si la timeline n'existe pas
  */
-export async function renderArtboardAnimation(
-  file,
-  artboardName,
-  {
-    stateMachineName = null,
-    timeline,
-    bools = null,
-    settleSeconds = 0,
-    fps = 15,
-    height: targetHeight = 256,
-    maxFrames = MAX_FRAMES,
-  } = {}
-) {
-  const rive = await getRive();
-
-  const artboard = file.artboardByName(artboardName);
-  if (!artboard) return null;
-
+function prepareCycle(artboard, artboardName, timeline, fps, maxFrames) {
   const animation = artboard.animationByName(timeline);
   // Toutes les espèces n'exposent pas toutes les timelines : l'appelant saute.
   if (!animation) return null;
 
-  const bounds = artboard.bounds;
-  const artboardWidth = bounds.maxX - bounds.minX;
-  const artboardHeight = bounds.maxY - bounds.minY;
-
   const cycleSeconds = animation.duration / (animation.fps || 60);
   const wanted = Math.max(1, Math.round(cycleSeconds * fps));
   const frameCount = Math.min(maxFrames, wanted);
-  const dt = cycleSeconds / frameCount;
 
   // Le plafond ne tronque pas l'animation (la boucle reste complète), il en
   // abaisse le fps — donc en silence. On le signale : c'est le symptôme d'un
@@ -281,17 +278,95 @@ export async function renderArtboardAnimation(
     );
   }
 
+  return { animation, cycleSeconds, frameCount, dt: cycleSeconds / frameCount };
+}
+
+/**
+ * Repère un cycle sans le rendre : cadrage et empreinte, rien de plus.
+ *
+ * C'est ce qui permet à l'export de décider s'il a quelque chose à refaire
+ * **avant** de payer le rendu final et l'encodage. Le résultat se repasse tel
+ * quel à `renderArtboardAnimation` via l'option `probe`, pour ne pas repérer
+ * deux fois.
+ *
+ * @returns {Promise<object|null>} `{ fingerprint, left, right, top, bottom, … }`
+ */
+export async function probeArtboardAnimation(
+  file,
+  artboardName,
+  {
+    stateMachineName = null,
+    timeline,
+    bools = null,
+    settleSeconds = 0,
+    fps = 15,
+    maxFrames = MAX_FRAMES,
+  } = {}
+) {
+  const rive = await getRive();
+
+  const artboard = file.artboardByName(artboardName);
+  if (!artboard) return null;
+
+  const cycle = prepareCycle(artboard, artboardName, timeline, fps, maxFrames);
+  if (!cycle) return null;
+
   const probe = probeCycle(
     rive,
     artboard,
-    bounds,
+    artboard.bounds,
     stateMachineName,
     bools,
     settleSeconds,
-    animation,
-    frameCount,
-    dt
+    cycle.animation,
+    cycle.frameCount,
+    cycle.dt
   );
+  if (!probe) return null;
+
+  return { ...probe, ...cycle };
+}
+
+export async function renderArtboardAnimation(
+  file,
+  artboardName,
+  {
+    stateMachineName = null,
+    timeline,
+    bools = null,
+    settleSeconds = 0,
+    fps = 15,
+    height: targetHeight = 256,
+    maxFrames = MAX_FRAMES,
+    probe: precomputed = null,
+  } = {}
+) {
+  const rive = await getRive();
+
+  const artboard = file.artboardByName(artboardName);
+  if (!artboard) return null;
+
+  const cycle = prepareCycle(artboard, artboardName, timeline, fps, maxFrames);
+  if (!cycle) return null;
+
+  const bounds = artboard.bounds;
+  const artboardWidth = bounds.maxX - bounds.minX;
+  const artboardHeight = bounds.maxY - bounds.minY;
+  const { cycleSeconds, frameCount, dt, animation } = cycle;
+
+  const probe =
+    precomputed ??
+    probeCycle(
+      rive,
+      artboard,
+      bounds,
+      stateMachineName,
+      bools,
+      settleSeconds,
+      animation,
+      frameCount,
+      dt
+    );
   if (!probe) return null;
 
   // Hauteur de rendu telle que le sujet fasse `targetHeight` : c'est ce qui
@@ -361,6 +436,7 @@ export async function renderArtboardAnimation(
     width: cropWidth,
     height: cropHeight,
     frames: frameCount,
+    fingerprint: probe.fingerprint,
     delays: frameDelays(cycleSeconds, frameCount),
     durationMs: Math.round(cycleSeconds * 1000),
     fps: Number((frameCount / cycleSeconds).toFixed(2)),

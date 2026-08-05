@@ -6,6 +6,7 @@ import { config } from "../src/config/index.js";
 import { logger } from "../src/logger/index.js";
 import { exportPetAnimations } from "../src/assets/sprites/exportPetAnimations.js";
 import { exportDecorAnimations } from "../src/assets/sprites/exportDecorAnimations.js";
+import { acquireLock, clearLock } from "../src/assets/sprites/animationLock.js";
 
 /**
  * Génère les boucles animées des pets.
@@ -49,6 +50,21 @@ try {
 }
 
 const startedAt = Date.now();
+
+// Le verrou est pris ici, par le processus qui travaille : un lancement manuel
+// et un export déclenché par la sync ne doivent pas se marcher dessus.
+if (!(await acquireLock({ categories: args.only ? [args.only] : "all" }))) {
+  process.exit(0);
+}
+
+// Un arrêt brutal (kill, redémarrage) laisse le verrou derrière lui ; il sera
+// détecté comme orphelin au prochain passage, son PID n'existant plus.
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, async () => {
+    await clearLock();
+    process.exit(130);
+  });
+}
 
 const categories = args.only ? [args.only] : Object.keys(EXPORTERS);
 
@@ -104,5 +120,7 @@ logger.info(
   },
   "Animation export complete"
 );
+
+await clearLock();
 
 process.exit(failed > 0 && exported === 0 ? 1 : 0);

@@ -21,6 +21,11 @@ const ALLOWED_CATEGORIES = new Set([
   "tallPlants",
   "mutations",
   "pets",
+  // Accessoires de pets, arrivés avec la v830 (chapeaux, cravates, badges).
+  // Ils sont dans les atlas comme les autres sprites — rien de vectoriel — mais
+  // sans cette entrée le routeur refuse la catégorie et les 16 PNG déjà
+  // exportés sur disque restent inatteignables.
+  "pet-cosmetic",
   "decor",
   "items",
   "objects",

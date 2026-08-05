@@ -361,10 +361,31 @@ dans un processus fils (`scripts/exportPetAnimations.js`, lancé par
 `services/animationSync.js`), en priorité basse, et n'est pas attendu — les
 boucles déjà sur disque restent servies pendant la regénération.
 
-Il est **reprenable** : le sidecar retient l'URL du `.riv`, versionnée par hash,
-donc une exécution interrompue reprend là où elle s'était arrêtée au lieu de
-tout refaire. À l'inverse, un clip désactivé ou un pet retiré du jeu voit son
-fichier supprimé — à ~470 Ko pièce, un orphelin ne se laisse pas traîner.
+### On ne re-rend que ce qui a changé
+
+Un `.riv` est un binaire opaque : son hash change dès qu'une virgule bouge, sans
+dire *quoi* a changé. Se fier à lui, c'est réencoder 114 boucles à chaque mise à
+jour du jeu — cinquante minutes pour, le plus souvent, un résultat identique au
+pixel près.
+
+On compare donc **les pixels, pas le fichier**. La passe de repérage rejoue déjà
+le cycle entier à 160 px : on en hache les frames, et cette empreinte, combinée
+aux réglages de rendu (hauteur, qualité, formats), donne la signature du clip.
+Signature inchangée = fichier encodé toujours valable.
+
+L'arbitrage tient dans les ordres de grandeur : le repérage coûte **~1 s** par
+clip, le rendu final et l'encodage **~40 s**. Vérifier les 114 boucles prend
+quelques minutes ; les réencoder en prend cinquante. Mesuré sur les décors :
+80 s pour un export complet, **8 s** quand rien n'a bougé.
+
+Les réglages font partie de la signature, sinon changer `PET_ANIMATIONS_HEIGHT`
+ou `PET_ANIMATIONS_QUALITY` ne serait jamais appliqué. Et l'empreinte est fiable
+parce qu'`advance` est déterministe : mêmes dt et même résolution donnent
+exactement les mêmes pixels.
+
+Un clip désactivé ou un artboard retiré du jeu voit son fichier supprimé — à
+~1,5 Mo pièce, un orphelin ne se laisse pas traîner. L'API suit le jeu : ce
+qu'il retire disparaît.
 
 ### Les espèces en avance sur le jeu
 
@@ -401,7 +422,28 @@ les noms de timelines (repris dans chaque clip sous `timeline`), et le fait que
 triggers. Un client qui coderait ça en dur casserait en silence à la prochaine
 maj.
 
+### Deux pièges de concurrence, tous deux rencontrés
+
+**Le verrou doit être sur disque, et détenu par le worker.** Un drapeau en
+mémoire ne survit pas au redémarrage du processus : quand le jeu change de
+version, la sync se termine par un `process.exit(0)` et pm2 relance l'API, qui
+repart avec un drapeau vierge et forke un **second** export pendant que le
+premier tourne. Et un verrou détenu par le lanceur ne couvre pas un
+`npm run export:animations` lancé à la main. Le verrou porte donc le PID du
+processus qui travaille, et un verrou dont le PID n'existe plus est retiré au
+passage — sinon une machine redémarrée en plein export bloquerait tous les
+suivants.
+
 ### Ce qui ne survit pas à une maj
+
+**Le conteneur ne se repère pas avec `defaultArtboard()`.** Il renvoyait `Pets`,
+la v830 lui a fait renvoyer `Bat` : la chauve-souris a cessé d'être exportée et
+le conteneur est sorti à sa place, sous le nom `Pets`. Une espèce perdue en
+silence, remplacée par un doublon. Structurellement le conteneur est
+indiscernable d'un pet — mêmes dimensions, mêmes 22 timelines, même state
+machine — donc on le repère **par son nom**, celui du fichier. Et en cas de
+doute on n'exclut rien : exporter un artboard en trop se voit, perdre une espèce
+ne se voit pas.
 
 Les mêmes cas qu'au § 5, plus un : les **noms de timelines** (`Pet_Idle`,
 `Pet_Walk`…) sont en dur dans `PET_CLIPS`. Un renommage côté jeu ne casse rien

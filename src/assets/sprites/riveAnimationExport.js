@@ -1,11 +1,16 @@
 // src/assets/sprites/riveAnimationExport.js
 
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import { loadRiveFile } from "./riveRenderer.js";
-import { renderArtboardAnimation, encodeAnimation } from "./riveAnimator.js";
+import {
+  probeArtboardAnimation,
+  renderArtboardAnimation,
+  encodeAnimation,
+} from "./riveAnimator.js";
 import { resolveRiveUrl } from "./riveManifest.js";
 
 /**
@@ -16,6 +21,16 @@ import { resolveRiveUrl } from "./riveManifest.js";
  * et deux variantes météo pilotées par des entrées booléennes, les décors une
  * seule boucle sans état. Tout le reste — téléchargement, reprise, encodage,
  * sidecar, nettoyage des orphelins — est identique et vit ici.
+ *
+ * **On ne re-rend que ce qui a réellement changé.** Un `.riv` est un binaire
+ * opaque : son hash change dès qu'une virgule bouge, sans dire quoi. On compare
+ * donc les pixels, pas le fichier — chaque clip porte une signature tirée de la
+ * passe de repérage (cf. `probeArtboardAnimation`), combinée aux réglages de
+ * rendu. Signature inchangée = fichier encodé toujours valable.
+ *
+ * L'arbitrage est net : le repérage coûte ~1 s par clip, le rendu final et
+ * l'encodage ~40. Vérifier les 114 boucles prend quelques minutes ; les
+ * réencoder en prend cinquante.
  */
 
 // Sidecar écrit dans chaque catégorie (préfixé `_` : les routeurs n'acceptent
@@ -34,6 +49,23 @@ async function downloadBuffer(url) {
 
 function fileName(name, clipId, format) {
   return `${name}_${clipId}.${format}`;
+}
+
+/**
+ * Signature d'un clip : ce qu'il montre, et comment on l'encode.
+ *
+ * L'empreinte des pixels ne suffit pas — changer `PET_ANIMATIONS_HEIGHT` ou la
+ * qualité ne change rien à l'animation mais tout au fichier. Les réglages font
+ * donc partie de la signature, sinon un changement de configuration ne serait
+ * jamais appliqué.
+ */
+function clipSignature(fingerprint, formats) {
+  const settings = JSON.stringify({
+    height: config.animations.height,
+    quality: config.animations.quality,
+    formats: [...formats].sort(),
+  });
+  return createHash("md5").update(`${fingerprint}|${settings}`).digest("hex").slice(0, 12);
 }
 
 async function readSidecar(sidecarPath) {
@@ -127,10 +159,11 @@ export async function exportRiveAnimations({
 
   const sidecarPath = path.join(destDir, ANIMATIONS_SIDECAR);
   const previous = await readSidecar(sidecarPath);
-  // Le .riv est versionné par hash : une URL identique garantit un contenu
-  // identique, donc les fichiers déjà écrits sont valides. C'est ce qui rend
-  // l'export reprenable après une coupure, sans tout refaire.
-  const reusable = !force && previous?.riveUrl === url ? previous.animations || {} : {};
+  // On repart de tout ce qui a déjà été produit, quelle que soit la version du
+  // .riv dont il venait : c'est la signature de chaque clip qui décide, pas
+  // l'URL du fichier. Un pet inchangé traverse donc les mises à jour du jeu
+  // sans être réencodé.
+  const reusable = force ? {} : previous?.animations || {};
 
   const bytes = await downloadBuffer(url);
   const { file, artboardNames } = await loadRiveFile(bytes);
@@ -146,24 +179,46 @@ export async function exportRiveAnimations({
   for (const target of targets) {
     const clipId = target.clip.id;
 
-    const cached = reusable[target.name]?.[clipId];
-    if (cached && (await allFilesExist(destDir, target.name, clipId, formats))) {
-      animations[target.name] ??= {};
-      animations[target.name][clipId] = cached;
-      totalBytes += sumBytes(cached);
-      skipped++;
-      done++;
-      continue;
-    }
-
     try {
-      const capture = await renderArtboardAnimation(file, target.artboard, {
+      const probeOptions = {
         stateMachineName: target.stateMachineName ?? null,
         timeline: target.clip.timeline,
         bools: target.bools ?? null,
         settleSeconds: target.settleSeconds ?? 0,
         fps: target.clip.fps,
+      };
+
+      // Repérage d'abord : il donne le cadrage *et* l'empreinte du cycle, pour
+      // quelques secondes contre ~40 pour un rendu complet.
+      const probe = await probeArtboardAnimation(file, target.artboard, probeOptions);
+      if (!probe) {
+        logger.debug(
+          { artboard: target.artboard, timeline: target.clip.timeline },
+          "Timeline not available, skipping animation"
+        );
+        done++;
+        continue;
+      }
+
+      const signature = clipSignature(probe.fingerprint, formats);
+      const cached = reusable[target.name]?.[clipId];
+
+      if (
+        cached?.signature === signature &&
+        (await allFilesExist(destDir, target.name, clipId, formats))
+      ) {
+        animations[target.name] ??= {};
+        animations[target.name][clipId] = cached;
+        totalBytes += sumBytes(cached);
+        skipped++;
+        done++;
+        continue;
+      }
+
+      const capture = await renderArtboardAnimation(file, target.artboard, {
+        ...probeOptions,
         height: config.animations.height,
+        probe,
       });
 
       // Timeline absente de cet artboard : ce n'est pas une erreur, tous
@@ -197,6 +252,7 @@ export async function exportRiveAnimations({
         fps: capture.fps,
         durationMs: capture.durationMs,
         anchor: capture.anchor,
+        signature,
         formats: written,
       };
       exported++;
@@ -236,7 +292,14 @@ export async function exportRiveAnimations({
   await pruneStaleFiles(destDir, animations, formats);
 
   logger.info(
-    { category, riveUrl: url, exported, skipped, failed, megabytes: (totalBytes / 1e6).toFixed(1) },
+    {
+      category,
+      riveUrl: url,
+      exported,
+      reused: skipped,
+      failed,
+      megabytes: (totalBytes / 1e6).toFixed(1),
+    },
     "Animations rendered from Rive"
   );
 

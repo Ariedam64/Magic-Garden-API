@@ -54,6 +54,26 @@ export async function resolvePetsRiveUrl(baseUrl = null) {
   return resolveRiveUrl(PETS_RIVE_KEY, { baseUrl });
 }
 
+/**
+ * Repère l'artboard conteneur du fichier, celui que le jeu ne rend jamais.
+ *
+ * **Ne pas se fier à `defaultArtboard()`.** C'est ce qu'on faisait, et la v830
+ * l'a cassé : il renvoyait `Pets`, il renvoie désormais `Bat`. Résultat, la
+ * chauve-souris n'était plus exportée et le conteneur sortait à sa place, sous
+ * le nom `Pets` — une espèce perdue en silence, remplacée par un doublon.
+ *
+ * Le conteneur porte le nom du fichier (`pets.riv` -> `Pets`). Structurellement
+ * il est indiscernable d'un pet : mêmes dimensions, mêmes 22 timelines, même
+ * state machine. Ce nom est donc le seul repère fiable.
+ *
+ * En cas de doute on n'exclut rien : exporter un artboard en trop se voit,
+ * perdre une espèce ne se voit pas.
+ */
+export function findContainerArtboard(artboardNames, key = PETS_RIVE_KEY) {
+  const wanted = key.toLowerCase();
+  return artboardNames.find((name) => name.toLowerCase() === wanted) ?? null;
+}
+
 async function downloadBuffer(url) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" },
@@ -82,9 +102,7 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
   const bytes = await downloadBuffer(url);
   const { file, artboardNames } = await loadRiveFile(bytes);
 
-  // Le premier artboard est le conteneur du fichier (il duplique un pet) ; le
-  // jeu ne le rend jamais, il demande toujours un artboard nommé.
-  const containerName = file.defaultArtboard?.()?.name ?? null;
+  const containerName = findContainerArtboard(artboardNames);
   const petNames = artboardNames.filter((n) => n !== containerName);
 
   const outputs = [

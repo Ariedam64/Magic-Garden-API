@@ -1071,7 +1071,7 @@ paths:
           description: Filter by category
           schema:
             type: string
-            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "pet-cosmetic", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
           example: 'seeds'
         - name: flat
           in: query
@@ -1273,6 +1273,7 @@ paths:
         - `tallPlants` - Tall plant varieties
         - `mutations` - Mutation variants
         - `pets` - Pet companions
+        - `pet-cosmetic` - Hats and accessories pets can wear
         - `decor` - Garden decorations
         - `items` - Tools and consumables
         - `objects` - Interactive objects
@@ -1302,7 +1303,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [seeds, plants, tallPlants, mutations, pets, decor, items, objects, ui, animations, weather, tiles, winter]
+            enum: [seeds, plants, tallPlants, mutations, pets, pet-cosmetic, decor, items, objects, ui, animations, weather, tiles, winter]
           description: Only return sprites from this category
         - name: search
           in: query
@@ -1421,7 +1422,7 @@ paths:
           description: Sprite category (seeds, plants, pets, etc.)
           schema:
             type: string
-            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "pet-cosmetic", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
           example: "seeds"
         - name: name
           in: path

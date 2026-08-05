@@ -2,7 +2,11 @@
 
 import { config } from "../../config/index.js";
 import { exportRiveAnimations, ANIMATIONS_SIDECAR } from "./riveAnimationExport.js";
-import { ACTIVE_VARIANTS, PET_STATE_MACHINE } from "./exportPetsFromRive.js";
+import {
+  ACTIVE_VARIANTS,
+  PET_STATE_MACHINE,
+  findContainerArtboard,
+} from "./exportPetsFromRive.js";
 
 /**
  * Export des animations de pets depuis `rive/pets.riv`.
@@ -54,9 +58,7 @@ const VARIANT_CLIPS = ["idle"];
  * Liste des rendus : chaque espèce × chaque clip demandé, plus les variantes.
  */
 function buildTargets(file, artboardNames) {
-  // Le premier artboard est le conteneur du fichier (il duplique un pet) ; le
-  // jeu ne le rend jamais, il demande toujours un artboard nommé.
-  const containerName = file.defaultArtboard?.()?.name ?? null;
+  const containerName = findContainerArtboard(artboardNames);
   const petNames = artboardNames.filter((n) => n !== containerName);
 
   const wanted = PET_CLIPS.filter((clip) => config.animations.clips.includes(clip.id));

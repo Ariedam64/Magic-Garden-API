@@ -94,15 +94,40 @@ export async function getRive() {
 }
 
 /**
+ * Déclare chaque asset référencé "géré", sans jamais tenter de le résoudre.
+ *
+ * Sans loader, `rive.load()` résout chaque asset référencé via son `cdnUuid`
+ * — et reste bloqué indéfiniment quand celui-ci est vide, ce qui est le cas
+ * de tous les assets externes d'`avatar.riv` (les tenues, la photo Discord…).
+ * C'était la vraie cause de son timeout, pas un format trop récent : le
+ * fichier a des artboards et des state machines tout à fait lisibles, il n'a
+ * juste jamais eu de loader pour lui dire de ne pas attendre.
+ *
+ * On ne fait *rien* d'autre que répondre `true` ("je m'en occupe"). Appeler
+ * `asset.decode(bytes)` ici pour rendre les quelques assets qui embarquent un
+ * repli (`Top_Custom_ForbiddenMethod`, les frames `RickRoll_0x`…) semblait
+ * l'usage naturel de ce callback, mais ça bloque le chargement indéfiniment —
+ * constaté empiriquement, pas documenté par Rive. On perd juste le rendu
+ * pixel de ces quelques assets ; l'inventaire (artboards, timelines, state
+ * machines) n'en a pas besoin.
+ */
+function makeAssetLoader(rive) {
+  return new rive.CustomFileAssetLoader({
+    loadContents: () => true,
+  });
+}
+
+/**
  * Charge un fichier .riv et retourne la liste des noms d'artboards.
  *
  * `rive.load()` ne rejette pas sur un fichier qu'il ne sait pas lire : il
- * **ne résout jamais**. C'est le cas aujourd'hui d'`avatar.riv`, et ce sera le
- * cas de `pets.riv` le jour où le jeu passera à un format Rive plus récent que
- * notre runtime. Sans borne, ce blocage remonte jusqu'à la sync de sprites,
- * dont le timeout tue le process — donc boucle de redémarrage. On borne ici
- * pour que ça devienne une simple erreur : l'export est sauté et les PNG déjà
- * sur disque continuent d'être servis.
+ * **ne résout jamais**. Ce sera le cas de `pets.riv` le jour où le jeu passera
+ * à un format Rive plus récent que notre runtime — le loader d'assets
+ * ci-dessus ne couvre que le blocage sur assets externes, pas celui-là. Sans
+ * borne, ce blocage remonte jusqu'à la sync de sprites, dont le timeout tue le
+ * process — donc boucle de redémarrage. On borne ici pour que ça devienne une
+ * simple erreur : l'export est sauté et les PNG déjà sur disque continuent
+ * d'être servis.
  *
  * @param {Buffer|Uint8Array} bytes
  * @param {object} options
@@ -111,10 +136,11 @@ export async function getRive() {
  */
 export async function loadRiveFile(bytes, { timeoutMs = LOAD_TIMEOUT_MS } = {}) {
   const rive = await getRive();
+  const assetLoader = makeAssetLoader(rive);
 
   let timer;
   const file = await Promise.race([
-    rive.load(new Uint8Array(bytes)),
+    rive.load(new Uint8Array(bytes), assetLoader),
     new Promise((_, reject) => {
       timer = setTimeout(
         () =>

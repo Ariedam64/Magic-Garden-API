@@ -17,7 +17,11 @@ import sharp from "sharp";
 
 import { resolvePetsRiveUrl, PET_STATE_MACHINE } from "../src/assets/sprites/exportPetsFromRive.js";
 import { loadRiveFile, getRive } from "../src/assets/sprites/riveRenderer.js";
-import { renderArtboardAnimation, encodeAnimation } from "../src/assets/sprites/riveAnimator.js";
+import {
+  probeArtboardAnimation,
+  renderArtboardAnimation,
+  encodeAnimation,
+} from "../src/assets/sprites/riveAnimator.js";
 import { buildAnimationUrl } from "../src/utils/spriteUrlBuilder.js";
 import { buildAnimationLinks } from "../src/assets/sprites/riveAnimations.js";
 import { buildRiveSource } from "../src/assets/sprites/riveSource.js";
@@ -338,5 +342,73 @@ describe("decor animations", () => {
     assert.ok(capture, "decor render returned nothing");
     assert.ok(capture.frames > 1);
     assert.equal(capture.anchor.x, 0.5);
+  });
+});
+
+describe("incremental export", () => {
+  let riveFile = null;
+
+  before(async () => {
+    const riveUrl = await resolvePetsRiveUrl();
+    if (!riveUrl) return;
+    const res = await fetch(riveUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      redirect: "follow",
+    });
+    riveFile = (await loadRiveFile(Buffer.from(await res.arrayBuffer()))).file;
+  });
+
+  it("gives the same fingerprint for the same cycle, twice", async () => {
+    // C'est la propriété sur laquelle repose tout l'export incrémental : si le
+    // repérage n'était pas déterministe, chaque sync réencoderait tout.
+    const options = {
+      stateMachineName: PET_STATE_MACHINE,
+      timeline: "Pet_Idle",
+      fps: 6,
+    };
+
+    const first = await probeArtboardAnimation(riveFile, "Chicken", options);
+    const second = await probeArtboardAnimation(riveFile, "Chicken", options);
+
+    assert.ok(first?.fingerprint, "no fingerprint produced");
+    assert.equal(first.fingerprint, second.fingerprint);
+  });
+
+  it("gives different fingerprints for different subjects and clips", async () => {
+    const idle = await probeArtboardAnimation(riveFile, "Chicken", {
+      stateMachineName: PET_STATE_MACHINE,
+      timeline: "Pet_Idle",
+      fps: 6,
+    });
+    const otherPet = await probeArtboardAnimation(riveFile, "Horse", {
+      stateMachineName: PET_STATE_MACHINE,
+      timeline: "Pet_Idle",
+      fps: 6,
+    });
+    const otherClip = await probeArtboardAnimation(riveFile, "Chicken", {
+      stateMachineName: PET_STATE_MACHINE,
+      timeline: "Pet_Walk",
+      fps: 6,
+    });
+
+    assert.notEqual(idle.fingerprint, otherPet.fingerprint);
+    assert.notEqual(idle.fingerprint, otherClip.fingerprint);
+  });
+
+  it("reuses the probe instead of measuring the cycle twice", async () => {
+    const options = {
+      stateMachineName: PET_STATE_MACHINE,
+      timeline: "Pet_Walk",
+      fps: 8,
+      height: TARGET_HEIGHT,
+    };
+
+    const probe = await probeArtboardAnimation(riveFile, "Chicken", options);
+    const capture = await renderArtboardAnimation(riveFile, "Chicken", { ...options, probe });
+
+    // Le rendu doit porter l'empreinte du repérage qu'on lui a passé, sinon
+    // c'est qu'il en a refait un pour son compte.
+    assert.equal(capture.fingerprint, probe.fingerprint);
   });
 });
