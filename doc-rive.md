@@ -42,20 +42,34 @@ Ce tableau n'est plus à maintenir à la main : `/assets/rive` le publie, relev�
 à chaque sync (`riveSync.js`), avec pour chaque fichier ses artboards, ses
 timelines et **le type de chaque entrée de state machine**.
 
+Relevé à la **v830** (les comptes bougent à chaque maj — `/assets/rive` fait foi) :
+
 | Fichier | Taille | Contenu | Chargement |
 |---|---|---|---|
-| `pets.riv` | 3,0 Mo | 29 artboards, **638 timelines**, 29 state machines | ✅ |
-| `decor.riv` | 224 Ko | 8 décors animés, 8 timelines, 8 SM | ✅ |
+| `pets.riv` | 3,1 Mo | 26 pets, **572 timelines** | ✅ |
+| `decor.riv` | 224 Ko | 8 décors animés, 8 timelines | ✅ |
 | `currency.riv` | 32 Ko | `BreadSlice`, 7 timelines | ✅ |
 | `thought-bubble.riv` | 8 Ko | `ThoughtBubble`, 3 timelines | ✅ |
 | `giftbox.riv` | 8 Ko | `Gift`, 2 timelines | ✅ |
-| `avatar.riv` | 616 Ko | avatars joueurs | ❌ bloque |
+| `avatar.riv` | 616 Ko | `AvatarElements` | ⚠️ lent |
 
-Soit **~40 artboards et ~660 timelines** exploitables.
+**pets.riv** contient en plus un artboard conteneur, `Pets`, qui duplique un pet
+sans en être un : le jeu ne le rend jamais, il demande toujours un artboard
+nommé. Il est exclu partout (export et inventaire) — voir le repérage par nom
+plus bas, `defaultArtboard()` n'est pas fiable pour ça.
 
-**pets.riv** — 28 pets + 1 artboard conteneur (`Pets`, qui duplique un pet ;
-le jeu ne le rend jamais, il demande toujours un artboard nommé). Contient
-`Rooster` et `Hedgehog`, absents de `/data/pets` : deux pets pas encore sortis.
+**Le fichier précède les données du jeu, dans les deux sens.** À la v824 il
+contenait `Rooster` et `Hedgehog`, deux pets absents de `/data/pets` ; la v830
+les a **retirés** avant même leur sortie. L'API suit le fichier : ce qui y entre
+apparaît, ce qui en sort disparaît.
+
+**avatar.riv** a longtemps été réputé illisible — `rive.load()` semblait ne
+jamais résoudre. Il se charge en réalité, mais lentement : il avait été marqué
+illisible pendant que deux exports saturaient les deux vCPU. C'est pour ça que
+l'inventaire ne met en cache que les inspections **réussies** : un échec de
+chargement peut n'être qu'un manque de CPU. Reste qu'il référence des assets
+hors fichier (les cosmétiques du bundle `cosmetic`) — les exploiter demanderait
+un resolver d'assets et la combinatoire des tenues.
 
 Chaque pet expose une state machine `Pet State Machine` et ~22 timelines :
 `Pet_Idle`, `Pet_IdleBreak`, `Pet_Walk`, `Pet_Sleep`, `Pet_Eat`, `Pet_Petted`,
@@ -68,12 +82,6 @@ Inputs de la state machine (booléens et triggers) : `sleep`, `held`, `fire`,
 
 **decor.riv** — `WoodWindmill`, `WeatherStation`, `WindSpinner`, `WindTurner`,
 `Cauldron`, `StoneBirdBath`, `BoobooBooth`, `MarbleFountain`.
-
-**avatar.riv** ne se charge pas : `rive.load()` ne résout jamais. Il référence
-des assets **hors fichier** (`Top_Basket`, `Bottom_Mesh`,
-`Top_DiscordPopsicle`… — les cosmétiques du bundle `cosmetic`) et le runtime
-attend qu'on les lui fournisse. Faisable, mais il faut un resolver d'assets
-plus la combinatoire des tenues.
 
 ---
 

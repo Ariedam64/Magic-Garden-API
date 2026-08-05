@@ -2,7 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { resolveRiveUrl } from "./riveManifest.js";
+import { resolveRiveUrl, findContainerArtboard } from "./riveManifest.js";
 import { logger } from "../../logger/index.js";
 import { loadRiveFile, renderArtboardToPng } from "./riveRenderer.js";
 import { RIVE_FRAMES_FILE } from "./riveFrames.js";
@@ -28,6 +28,7 @@ const PETS_RIVE_KEY = "pets";
 export const PET_STATE_MACHINE = "Pet State Machine";
 
 export { RIVE_FRAMES_FILE as PET_METADATA_FILE } from "./riveFrames.js";
+export { findContainerArtboard };
 
 // Variantes "météo active" : le jeu ne change pas d'artboard, il pousse un
 // input booléen sur la state machine (map `kl` du bundle). Les anciens atlas
@@ -52,26 +53,6 @@ const SETTLE_SECONDS_WITH_INPUTS = 4;
  */
 export async function resolvePetsRiveUrl(baseUrl = null) {
   return resolveRiveUrl(PETS_RIVE_KEY, { baseUrl });
-}
-
-/**
- * Repère l'artboard conteneur du fichier, celui que le jeu ne rend jamais.
- *
- * **Ne pas se fier à `defaultArtboard()`.** C'est ce qu'on faisait, et la v830
- * l'a cassé : il renvoyait `Pets`, il renvoie désormais `Bat`. Résultat, la
- * chauve-souris n'était plus exportée et le conteneur sortait à sa place, sous
- * le nom `Pets` — une espèce perdue en silence, remplacée par un doublon.
- *
- * Le conteneur porte le nom du fichier (`pets.riv` -> `Pets`). Structurellement
- * il est indiscernable d'un pet : mêmes dimensions, mêmes 22 timelines, même
- * state machine. Ce nom est donc le seul repère fiable.
- *
- * En cas de doute on n'exclut rien : exporter un artboard en trop se voit,
- * perdre une espèce ne se voit pas.
- */
-export function findContainerArtboard(artboardNames, key = PETS_RIVE_KEY) {
-  const wanted = key.toLowerCase();
-  return artboardNames.find((name) => name.toLowerCase() === wanted) ?? null;
 }
 
 async function downloadBuffer(url) {
@@ -102,7 +83,7 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
   const bytes = await downloadBuffer(url);
   const { file, artboardNames } = await loadRiveFile(bytes);
 
-  const containerName = findContainerArtboard(artboardNames);
+  const containerName = findContainerArtboard(artboardNames, PETS_RIVE_KEY);
   const petNames = artboardNames.filter((n) => n !== containerName);
 
   const outputs = [

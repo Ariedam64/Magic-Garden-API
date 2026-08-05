@@ -81,3 +81,29 @@ export async function resolveRiveUrl(key, { baseUrl = null } = {}) {
   const assets = await resolveRiveAssets({ baseUrl });
   return assets.find((asset) => asset.key === key)?.url ?? null;
 }
+
+/**
+ * Repère l'artboard conteneur d'un fichier, celui que le jeu ne rend jamais.
+ *
+ * **Ne pas se fier à `defaultArtboard()` du runtime.** C'est ce qu'on faisait :
+ * il désignait `Pets` dans `pets.riv`, et la v830 lui a fait désigner `Bat`.
+ * Résultat, une espèce disparaissait de l'export et le conteneur sortait à sa
+ * place. Structurellement il est indiscernable d'un pet — mêmes dimensions,
+ * mêmes timelines, même state machine.
+ *
+ * Le seul repère fiable est son nom : celui du fichier (`pets.riv` -> `Pets`).
+ * Les autres fichiers n'en ont pas — dans `decor.riv`, aucun artboard ne
+ * s'appelle `Decor`, et rien n'est donc exclu.
+ *
+ * En cas de doute on n'exclut rien : montrer un artboard en trop se voit,
+ * en perdre un ne se voit pas.
+ *
+ * @param {string[]} artboardNames
+ * @param {string} key - Clé du fichier (`pets`, `decor`…)
+ * @returns {string|null}
+ */
+export function findContainerArtboard(artboardNames, key) {
+  const wanted = String(key ?? "").toLowerCase();
+  if (!wanted) return null;
+  return artboardNames.find((name) => name.toLowerCase() === wanted) ?? null;
+}

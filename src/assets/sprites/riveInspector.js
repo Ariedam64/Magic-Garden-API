@@ -2,6 +2,7 @@
 
 import { logger } from "../../logger/index.js";
 import { getRive, loadRiveFile } from "./riveRenderer.js";
+import { findContainerArtboard } from "./riveManifest.js";
 
 /**
  * Inventaire du contenu d'un fichier Rive.
@@ -96,9 +97,11 @@ function describeArtboard(rive, file, name) {
  * que le runtime attend qu'on lui fournisse — il ne résout donc jamais.
  *
  * @param {string} url
+ * @param {object} options
+ * @param {string} options.key - Clé du fichier, pour repérer son conteneur
  * @returns {Promise<object>} description du fichier, avec `loadable`
  */
-export async function inspectRiveFile(url) {
+export async function inspectRiveFile(url, { key = null } = {}) {
   let bytes;
 
   try {
@@ -117,8 +120,16 @@ export async function inspectRiveFile(url) {
     const rive = await getRive();
     const { file, artboardNames } = await loadRiveFile(bytes, { timeoutMs: INSPECT_TIMEOUT_MS });
 
-    const defaultArtboard = file.defaultArtboard?.()?.name ?? null;
+    // Le conteneur n'est pas un contenu : c'est un artboard générique que le
+    // jeu ne rend jamais, structurellement identique à un pet. Le publier au
+    // milieu des espèces revient à annoncer une créature qui n'existe pas.
+    //
+    // On ne le déduit pas de `defaultArtboard()` du runtime : cette valeur a
+    // changé toute seule à la v830 (`Pets` -> `Bat`), ce qui aurait fait passer
+    // une vraie espèce pour du décorum.
+    const container = findContainerArtboard(artboardNames, key);
     const artboards = artboardNames
+      .filter((name) => name !== container)
       .map((name) => describeArtboard(rive, file, name))
       .filter(Boolean);
 
@@ -126,7 +137,7 @@ export async function inspectRiveFile(url) {
       url,
       bytes: bytes.length,
       loadable: true,
-      defaultArtboard,
+      container,
       artboardCount: artboards.length,
       timelineCount: artboards.reduce((sum, a) => sum + a.animations.length, 0),
       artboards,

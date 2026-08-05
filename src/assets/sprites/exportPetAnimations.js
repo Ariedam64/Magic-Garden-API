@@ -58,7 +58,7 @@ const VARIANT_CLIPS = ["idle"];
  * Liste des rendus : chaque espèce × chaque clip demandé, plus les variantes.
  */
 function buildTargets(file, artboardNames) {
-  const containerName = findContainerArtboard(artboardNames);
+  const containerName = findContainerArtboard(artboardNames, "pets");
   const petNames = artboardNames.filter((n) => n !== containerName);
 
   const wanted = PET_CLIPS.filter((clip) => config.animations.clips.includes(clip.id));

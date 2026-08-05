@@ -43,15 +43,20 @@ export async function syncRiveInventory({ baseUrl = null, force = false } = {}) 
   for (const asset of assets) {
     const known = previous[asset.key];
 
-    if (!force && known?.url === asset.url) {
+    // On ne réutilise que les inspections **réussies**. Un échec ne dit pas
+    // toujours « ce fichier est illisible » : la borne de chargement est
+    // sensible à la charge machine, et `avatar.riv` a été marqué illisible
+    // pendant que deux exports saturaient les deux vCPU — puis s'est chargé
+    // sans problème une fois la machine libre. Mettre un échec en cache jusqu'au
+    // prochain changement d'URL le rendrait définitif.
+    if (!force && known?.url === asset.url && known.loadable) {
       files[asset.key] = { ...known, aliases: asset.aliases, bundle: asset.bundle };
       reused++;
-      if (!known.loadable) failed++;
       continue;
     }
 
     logger.info({ key: asset.key, url: asset.url }, "Inspecting Rive file");
-    const described = await inspectRiveFile(asset.url);
+    const described = await inspectRiveFile(asset.url, { key: asset.key });
 
     files[asset.key] = {
       key: asset.key,
