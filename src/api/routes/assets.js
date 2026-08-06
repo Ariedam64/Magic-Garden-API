@@ -72,19 +72,27 @@ assetsRouter.get(
   })
 );
 
-// GET /assets/proxy?url=<https-magicgarden.gg-url>
+// GET /assets/proxy?url=<https-magicgarden.gg-or-own-sprite-url>
 // Streams an upstream asset (cosmetic PNGs, audio mp3s, …) through this API so
 // clients can fetch + download them cross-origin. Upstream magicgarden.gg
 // doesn't set CORS, so the browser blocks direct fetch from third-party
-// origins like the explorer page; this proxy adds the headers we need.
-// Whitelisted to magicgarden.gg only - not a general open proxy.
+// origins like the explorer page; this proxy adds the headers we need. Same
+// problem for our own /assets/sprites/ — it's served straight off disk by
+// nginx (see nginx.conf) with no CORS header of its own, which is why pet
+// cosmetics (exported PNGs, not on magicgarden.gg) needed adding here too.
+// Whitelisted to magicgarden.gg and our own sprite exports - not a general
+// open proxy.
+const PROXY_ALLOWED_URL_RX = [
+  /^https:\/\/magicgarden\.gg\/[\w./%-]+$/i,
+  /^https:\/\/mg-api\.ariedam\.fr\/assets\/sprites\/[\w./%-]+$/i,
+];
 assetsRouter.get(
   "/proxy",
   asyncHandler(async (req, res) => {
     const url = String(req.query.url || "");
     if (!url) throw Errors.badRequest("Missing required query param: url");
-    if (!/^https:\/\/magicgarden\.gg\/[\w./%-]+$/i.test(url)) {
-      throw Errors.badRequest("URL must be a https://magicgarden.gg/ asset");
+    if (!PROXY_ALLOWED_URL_RX.some((rx) => rx.test(url))) {
+      throw Errors.badRequest("URL must be a https://magicgarden.gg/ or mg-api sprite asset");
     }
     const upstream = await fetch(url);
     if (!upstream.ok) throw Errors.notFound(`Upstream HTTP ${upstream.status}`);
