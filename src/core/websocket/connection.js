@@ -5,10 +5,13 @@ import WebSocket from "ws";
 
 import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
-import { fetchGameVersion } from "../game/version.js";
+import { fetchGameVersion, invalidateVersionCache } from "../game/version.js";
 import { generatePlayerId, generateRoomId } from "../../utils/id.js";
 import { buildMagicGardenWsUrl } from "./url.js";
+import { CloseCodes } from "./closeCodes.js";
 import { shouldReconnect, getReconnectDelayMs } from "./reconnect.js";
+
+const GAME_UPDATE_CODES = new Set([CloseCodes.VERSION_MISMATCH, CloseCodes.VERSION_EXPIRED]);
 
 const DEFAULT_ANONYMOUS_USER_STYLE = Object.freeze({
   avatarBottom: "Bottom_DefaultGray.png",
@@ -124,6 +127,23 @@ export class MagicGardenConnection extends EventEmitter {
       const reason = reasonBuf?.toString?.() || "";
       logger.info({ code, reason }, "WebSocket closed");
       this.emit("close", { code, reason });
+
+      if (this.manualStop || !this.autoReconnect) return;
+
+      if (GAME_UPDATE_CODES.has(code)) {
+        // Le jeu vient d'être mis à jour : la room qu'on occupait a été
+        // créée sous l'ancien netcode et reste désynchronisée même après
+        // reconnexion (c'est ce qui provoquait les data figées/en retard).
+        // On repart sur une room neuve plutôt que de rejouer l'ancienne, et
+        // on force un refetch de version pour ne pas retenter avec la
+        // version qui vient d'expirer (cache de 1 min sinon).
+        invalidateVersionCache();
+        this.roomId = generateRoomId();
+        this.retryCount = 0;
+        logger.warn({ code, roomId: this.roomId }, "Game update detected, rotating to a fresh room");
+        this.scheduleReconnect(code);
+        return;
+      }
 
       if (!shouldReconnect({
         autoReconnect: this.autoReconnect,

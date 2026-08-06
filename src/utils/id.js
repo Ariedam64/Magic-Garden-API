@@ -26,8 +26,8 @@ export function generatePlayerId() {
 }
 
 /**
- * Génère un roomId aléatoire (lowercase, 8 chars).
+ * Génère un roomId aléatoire (10 chars base58).
  */
 export function generateRoomId() {
-  return crypto.randomBytes(4).toString("hex").toLowerCase();
+  return randomBase58(10);
 }

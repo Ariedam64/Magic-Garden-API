@@ -89,8 +89,10 @@ export const CloseCodes = {
    * Mismatch de version client/serveur.
    *
    * Déclenché quand: Client se connecte avec version obsolète
-   * Comportement client: Déclenche export sprite et redémarrage serveur
-   * Auto-reconnexion: Interdite (requiert mise à jour version)
+   * Comportement client: Déclenche export sprite + rotation vers une room neuve
+   * Auto-reconnexion: Autorisée (gérée explicitement par MagicGardenConnection,
+   *   pas via NO_RECONNECT_CODES — la room et la version sont rafraîchies avant
+   *   de rejouer)
    * API action: Lance synchronisation automatique des sprites
    *
    * @type {number}
@@ -101,10 +103,11 @@ export const CloseCodes = {
    * Version du jeu expirée (mise à jour du jeu détectée).
    *
    * Déclenché quand: Serveur détecte que client utilise version obsolète
-   * Comportement client: Déclenche export sprite et redémarrage serveur
-   * Auto-reconnexion: Interdite (version du serveur non compatible)
+   * Comportement client: Déclenche export sprite + rotation vers une room neuve
+   * Auto-reconnexion: Autorisée (gérée explicitement par MagicGardenConnection,
+   *   pas via NO_RECONNECT_CODES — la room et la version sont rafraîchies avant
+   *   de rejouer)
    * API action: Lance synchronisation automatique des sprites
-   * Remarque: Version du serveur non compatible, client doit se mettre à jour
    *
    * @type {number}
    */
@@ -129,7 +132,6 @@ export const CloseCodes = {
 export const NO_RECONNECT_CODES = new Set([
   CloseCodes.AUTHENTICATION_FAILURE,
   CloseCodes.PLAYER_KICKED,
-  CloseCodes.VERSION_EXPIRED,
 ]);
 
 /**

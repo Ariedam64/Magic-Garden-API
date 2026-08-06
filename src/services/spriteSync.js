@@ -27,6 +27,12 @@ import { joinUrl } from "../utils/url.js";
 const VERSION_MISMATCH_CODES = new Set([CloseCodes.VERSION_MISMATCH, CloseCodes.VERSION_EXPIRED]);
 
 let isSyncing = false;
+// Set when a forced resync (version mismatch) arrives while a sync is
+// already running. Without this, that request silently no-ops (see
+// checkAndSyncSprites' isSyncing guard below) and the process.exit() that's
+// supposed to pick up a fresh room/version never fires — this is what left
+// the WebSocket dead for hours after the 2026-08-05 update.
+let pendingForceResync = false;
 
 // Marge large : une resync complète forcée (30 artboards Rive rasterisés +
 // ~575 sprites redécoupés des atlas) tourne autour de 2 min, et le rendu Rive
@@ -421,14 +427,22 @@ export async function checkAndSyncSprites({ force = false } = {}) {
   } finally {
     clearTimeout(timeout);
     isSyncing = false;
+
+    if (pendingForceResync) {
+      pendingForceResync = false;
+      logger.info("Running deferred forced sprite resync (version mismatch arrived mid-sync)");
+      runForcedResyncAndExit().catch((err) =>
+        logger.error({ error: err?.message || String(err) }, "Deferred forced resync failed")
+      );
+    }
   }
 }
 
 /**
- * Handle version mismatch (old behavior - full export + restart).
- * Kept for compatibility with WebSocket close codes.
+ * Runs a forced resync and restarts the process once it succeeds, so pm2
+ * brings the process back up on the new version/room.
  */
-async function handleVersionMismatch() {
+async function runForcedResyncAndExit() {
   const result = await checkAndSyncSprites({ force: true });
 
   if (result?.success || result?.skipped) {
@@ -437,6 +451,23 @@ async function handleVersionMismatch() {
       process.exit(0);
     }, 1000);
   }
+}
+
+/**
+ * Handle version mismatch (old behavior - full export + restart).
+ * Kept for compatibility with WebSocket close codes.
+ */
+async function handleVersionMismatch() {
+  if (isSyncing) {
+    // A sync is already running (e.g. the disconnect-triggered check that
+    // fires just before this close code lands). Don't drop this request:
+    // checkAndSyncSprites' finally block will pick it up once that sync ends.
+    logger.warn("Sprite sync already in progress, deferring forced resync until it completes");
+    pendingForceResync = true;
+    return;
+  }
+
+  await runForcedResyncAndExit();
 }
 
 /**
