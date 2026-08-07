@@ -1,43 +1,50 @@
 // src/services/liveData.js
 
-import { ShopParser, WeatherParser } from "../core/parsers/index.js";
-
-// Singletons - état conservé en mémoire
-const shopParser = new ShopParser();
-const weatherParser = new WeatherParser();
+import {
+  getLiveStats,
+  getShops,
+  getShopsRaw,
+  getWeather,
+  getWeatherDetails,
+  onShopsChange,
+  onWeatherChange,
+} from "./livePoller.js";
 
 /**
- * Service pour les données live du jeu (via WebSocket).
+ * Service pour les données live du jeu.
+ *
+ * Alimenté par l'API officielle `/platform/v1/{shops,weather}` (voir
+ * `livePoller.js`). L'interface est inchangée depuis l'époque WebSocket : les
+ * routes, l'historique et `plantTransformer` la consomment telle quelle.
  */
 export const liveDataService = {
   /**
-   * Traite un message WebSocket brut.
-   * À appeler depuis le handler de messages WS.
-   */
-  handleRawMessage(raw) {
-    shopParser.handleRaw(raw);
-    weatherParser.handleRaw(raw);
-  },
-
-  /**
-   * Récupère les données des shops.
+   * Récupère les données des shops (avec `secondsUntilRestock` à jour).
    */
   getShops() {
-    return shopParser.getSlimShops();
+    return getShops();
   },
 
   /**
-   * Récupère les données brutes des shops.
+   * Récupère les données brutes des shops, telles que renvoyées par le jeu.
    */
   getShopsRaw() {
-    return shopParser.getShops();
+    return getShopsRaw();
   },
 
   /**
-   * Récupère la météo actuelle.
+   * Récupère la météo actuelle (libellé, ex. `Rain`).
    */
   getWeather() {
-    return weatherParser.getWeather();
+    return getWeather();
+  },
+
+  /**
+   * Récupère la météo actuelle détaillée (`startedAt`/`endsAt` quand l'API
+   * officielle les fournit).
+   */
+  getWeatherDetails() {
+    return getWeatherDetails();
   },
 
   /**
@@ -45,25 +52,30 @@ export const liveDataService = {
    */
   getAll() {
     return {
-      weather: weatherParser.getWeather(),
-      shops: shopParser.getSlimShops(),
+      weather: getWeather(),
+      shops: getShops(),
     };
+  },
+
+  /**
+   * Statistiques du poller (diagnostic).
+   */
+  getStats() {
+    return getLiveStats();
   },
 
   /**
    * S'abonne aux changements de shops.
    */
   onShopsChange(callback) {
-    shopParser.on("shops", callback);
-    return () => shopParser.off("shops", callback);
+    return onShopsChange(callback);
   },
 
   /**
    * S'abonne aux changements de météo.
    */
   onWeatherChange(callback) {
-    weatherParser.on("weather", callback);
-    return () => weatherParser.off("weather", callback);
+    return onWeatherChange(callback);
   },
 
   /**
@@ -71,20 +83,9 @@ export const liveDataService = {
    * Retourne null si les données du shop ne sont pas encore disponibles.
    */
   getShopSeedSpecies() {
-    const shops = shopParser.getShops();
-    if (!shops?.seed?.inventory) return null;
+    const shops = getShops();
+    if (!shops?.seed?.items) return null;
 
-    return new Set(
-      shops.seed.inventory
-        .map((item) => item.species)
-        .filter(Boolean)
-    );
-  },
-
-  /**
-   * Retourne les parsers (pour accès avancé).
-   */
-  getParsers() {
-    return { shopParser, weatherParser };
+    return new Set(shops.seed.items.map((item) => item.name).filter(Boolean));
   },
 };

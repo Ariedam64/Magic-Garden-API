@@ -68,7 +68,7 @@ export function createApp() {
   app.get("/data.tsv", dataTsvRootHandler);
   app.use("/data", dataRouter);
 
-  // Live routes (WebSocket data via SSE)
+  // Live routes (shops & weather snapshots + SSE)
   app.get("/live.csv", liveCsvRootHandler);
   app.get("/live.tsv", liveTsvRootHandler);
   app.use("/live", liveRouter);

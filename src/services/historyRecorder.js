@@ -6,16 +6,26 @@ import {
   initHistoryDB,
   recordShopRestock,
   recordWeatherChange,
+  getLastRestockInterval,
+  hasRestockNear,
   closeHistoryDB,
 } from "./historyDB.js";
 import { logShopEvent, logWeatherEvent } from "./eventLogger.js";
+import { CLOCK_SKEW_MS, snapIfNearGrid, snapToGameGrid } from "../core/platform/grid.js";
 
-const lastItemsHashByShop = new Map();
-// Last *non-empty* content seen per shop, used to recognize a WebSocket
-// disconnect/reconnect blip (shop briefly reports empty items, then the same
-// content reappears a second or two later) as a continuation of the same
-// restock window rather than a brand new one. See handleShops() below.
-const lastRealRestockByShop = new Map(); // shopType -> { hash, interval, ts }
+/**
+ * Intervalle maximal qu'on accepte pour reconstituer l'instant d'un restock à
+ * partir de `nextRestockAt`.
+ *
+ * Le plus long cycle réel est celui du shop `decor` (1 h). Au-delà, l'intervalle
+ * en base n'est pas un cycle : le shop `apology`, ouvert à la main par les
+ * opérateurs du jeu, a ainsi laissé un « intervalle » de 85 374 s (~24 h) qui
+ * antidaterait grossièrement sa réouverture. Dans ce cas on s'en tient à la
+ * grille de 5 minutes.
+ */
+const MAX_DERIVABLE_INTERVAL_SECONDS = 60 * 60;
+
+const lastWindowByShop = new Map(); // shopType -> { nextRestockAt: number|null, itemsHash: string }
 let lastWeatherObserved = null;
 let unsubShops = null;
 let unsubWeather = null;
@@ -23,91 +33,171 @@ let started = false;
 
 function hashItems(items) {
   if (!Array.isArray(items) || items.length === 0) return "";
-  const parts = items
+  return items
     .map((it) => `${it.name}:${it.stock}`)
-    .sort();
-  return parts.join("|");
+    .sort()
+    .join("|");
 }
 
-function handleShops(slim) {
-  if (!slim || typeof slim !== "object") return;
+/**
+ * Détermine l'instant exact du restock qu'on vient d'observer, et l'intervalle
+ * de la boutique.
+ *
+ * @returns {{ restockedAt: number, intervalSeconds: number|null }}
+ */
+function resolveRestockWindow({ shopType, nextRestockAt, previous, now }) {
+  // Cas normal : on avait déjà vu la fenêtre précédente. Son échéance *est*
+  // l'instant du restock courant, et l'écart entre les deux échéances donne
+  // l'intervalle — deux valeurs annoncées par le jeu, pas déduites du polling.
+  if (previous?.nextRestockAt && nextRestockAt && nextRestockAt > previous.nextRestockAt) {
+    return {
+      restockedAt: previous.nextRestockAt,
+      intervalSeconds: Math.round((nextRestockAt - previous.nextRestockAt) / 1000),
+    };
+  }
+
+  // Premier passage (démarrage du process) ou boutique d'évènement qui vient
+  // d'ouvrir : pas d'échéance précédente en mémoire. L'intervalle déjà connu en
+  // base permet de remonter à l'instant du restock, ce qui fait que redémarrer
+  // ne coûte plus une fenêtre de restock — l'insertion est idempotente
+  // (index unique sur `shop_type, restocked_at`), donc la réenregistrer est
+  // sans effet si elle est déjà là.
+  const knownInterval = getLastRestockInterval(shopType);
+  if (nextRestockAt && knownInterval && knownInterval <= MAX_DERIVABLE_INTERVAL_SECONDS) {
+    // L'intervalle connu peut porter le bruit de l'ancien enregistreur (599 s
+    // relevés pour un cycle réel de 600 s) : on recale sur la grille quand on en
+    // est à une poignée de secondes, et on redéduit l'intervalle de là.
+    const restockedAt = snapIfNearGrid(nextRestockAt - knownInterval * 1000);
+
+    // Garde-fou : si la fenêtre déduite n'encadre pas l'instant présent, c'est
+    // que l'intervalle a changé côté jeu. On retombe sur la grille plutôt que
+    // d'écrire un horodatage faux.
+    if (restockedAt <= now && now < nextRestockAt) {
+      return {
+        restockedAt,
+        intervalSeconds: Math.round((nextRestockAt - restockedAt) / 1000),
+      };
+    }
+  }
+
+  return { restockedAt: snapToGameGrid(now), intervalSeconds: knownInterval ?? null };
+}
+
+function handleShops(shops) {
+  if (!shops || typeof shops !== "object") return;
   const now = Date.now();
 
   // Itère sur tous les shops présents (pas de liste codée en dur) : un nouveau
-  // shop comme `snow` est enregistré automatiquement.
-  for (const [shopType, shop] of Object.entries(slim)) {
+  // shop ajouté par le jeu est enregistré automatiquement.
+  for (const [shopType, shop] of Object.entries(shops)) {
     if (!shop || !Array.isArray(shop.items)) continue;
 
-    const hash = hashItems(shop.items);
-    const prev = lastItemsHashByShop.get(shopType);
+    const nextRestockAt = shop.nextRestockAt ? Date.parse(shop.nextRestockAt) : null;
+    const itemsHash = hashItems(shop.items);
+    const previous = lastWindowByShop.get(shopType);
+    const isBaseline = previous === undefined;
 
-    if (hash === prev) continue;
+    if (
+      !isBaseline &&
+      previous.nextRestockAt === nextRestockAt &&
+      previous.itemsHash === itemsHash
+    ) {
+      continue;
+    }
 
-    const isBaseline = prev === undefined;
+    lastWindowByShop.set(shopType, { nextRestockAt, itemsHash });
+
     const isEmpty = shop.items.length === 0;
-    lastItemsHashByShop.set(shopType, hash);
 
-    // Always log the raw event for safety, regardless of whether it's persisted to DB.
-    const rawShops = liveDataService.getShopsRaw();
+    // Trace brute systématique, qu'on persiste ensuite ou non.
     logShopEvent({
       ts: now,
       shop_type: shopType,
-      raw: rawShops?.[shopType] ?? null,
+      raw: liveDataService.getShopsRaw()?.[shopType] ?? null,
       slim: shop,
       baseline: isBaseline,
       empty: isEmpty,
     });
 
-    if (isBaseline) {
-      logger.debug({ shopType, itemCount: shop.items.length }, "History: shop baseline captured (not persisted)");
-      if (!isEmpty) {
-        lastRealRestockByShop.set(shopType, { hash, interval: shop.secondsUntilRestock || null, ts: now });
-      }
-      continue;
-    }
-
-    // Track transition to empty in memory (so a later refill is detected as a real change),
-    // but don't persist empty restocks — nothing to record. Deliberately leave
-    // lastRealRestockByShop untouched: the game WebSocket sometimes relays a
-    // momentary empty patch (disconnect/reconnect blip) for these ephemeral
-    // event shops, and we still need the pre-blip content/countdown below to
-    // recognize the reappearance as the same window, not a fresh restock.
+    // Boutique fermée ou vide : rien à enregistrer. L'état est mémorisé pour
+    // qu'une réouverture soit bien vue comme un changement.
     if (isEmpty) {
-      logger.debug({ shopType }, "History: shop transitioned to empty (not persisted)");
+      logger.debug({ shopType }, "History: shop empty/closed (not persisted)");
       continue;
     }
 
-    const restockInterval = shop.secondsUntilRestock || null;
-    const lastReal = lastRealRestockByShop.get(shopType);
-    let isReconnectBlip = false;
-    if (lastReal && lastReal.hash === hash && restockInterval != null && lastReal.interval != null) {
-      const elapsedSeconds = (now - lastReal.ts) / 1000;
-      const expectedInterval = lastReal.interval - elapsedSeconds;
-      // Same items + the restock countdown simply kept ticking down (rather
-      // than resetting near its max) ⇒ this is the same shop window
-      // reappearing after a transient empty blip, not a genuine new restock.
-      isReconnectBlip = Math.abs(restockInterval - expectedInterval) < 15;
-    }
-
-    if (isReconnectBlip) {
-      logger.info({ shopType, restockInterval }, "History: ignoring reconnect blip (same restock window, not persisted)");
-      // Don't touch lastRealRestockByShop — it still describes this same window.
+    // Même échéance de restock, contenu différent : par construction ce n'est
+    // pas un restock, puisque c'est le jeu qui annonce les fenêtres. Ça
+    // arriverait si `stock` devenait un stock vivant décrémenté par les achats
+    // (aujourd'hui c'est le stock initial de la fenêtre, constant). On le trace
+    // sans polluer l'historique des restocks.
+    if (!isBaseline && previous.nextRestockAt !== null && previous.nextRestockAt === nextRestockAt) {
+      logger.debug(
+        { shopType },
+        "History: shop content changed inside the same restock window (not persisted)"
+      );
       continue;
     }
 
-    logger.info({ shopType, itemCount: shop.items.length }, "History: new shop restock");
+    const { restockedAt, intervalSeconds } = resolveRestockWindow({
+      shopType,
+      nextRestockAt,
+      previous,
+      now,
+    });
+
     const items = shop.items.map((it) => ({ id: it.name, stock: it.stock }));
-    lastRealRestockByShop.set(shopType, { hash, interval: restockInterval, ts: now });
+
+    // Fenêtre déjà en base à quelques secondes près (typiquement au démarrage,
+    // ou juste après la bascule depuis l'enregistreur WebSocket qui horodatait
+    // à l'observation) : ne pas la dupliquer.
+    if (hasRestockNear(shopType, restockedAt)) {
+      logger.debug(
+        { shopType, restockedAt: new Date(restockedAt).toISOString() },
+        "History: restock window already recorded, skipping"
+      );
+      continue;
+    }
 
     try {
-      recordShopRestock(shopType, items, restockInterval, now);
+      const restockId = recordShopRestock(shopType, items, intervalSeconds, restockedAt);
+
+      if (restockId === null) {
+        logger.debug(
+          { shopType, restockedAt },
+          "History: restock already recorded (idempotent no-op)"
+        );
+      } else {
+        logger.info(
+          {
+            shopType,
+            itemCount: items.length,
+            restockedAt: new Date(restockedAt).toISOString(),
+            intervalSeconds,
+            baseline: isBaseline,
+          },
+          "History: new shop restock"
+        );
+      }
     } catch (err) {
       logger.error({ err: err?.message, shopType }, "History: failed to record restock");
     }
   }
 }
 
-function handleWeather(weather) {
+/**
+ * Instant de début d'un évènement météo.
+ *
+ * On préfère l'horodatage annoncé par l'API officielle s'il existe, sinon la
+ * grille de 5 minutes du jeu.
+ */
+function resolveWeatherStart(details, now) {
+  const explicit = details?.startedAt ? Date.parse(details.startedAt) : NaN;
+  if (Number.isFinite(explicit) && explicit <= now + CLOCK_SKEW_MS) return explicit;
+  return snapToGameGrid(now);
+}
+
+function handleWeather(weather, details) {
   if (!weather || typeof weather !== "string") return;
   const now = Date.now();
 
@@ -120,11 +210,16 @@ function handleWeather(weather) {
 
   if (lastWeatherObserved === weather) return;
   lastWeatherObserved = weather;
-  logWeatherEvent({ ts: now, weather, baseline: false });
+
+  const startedAt = resolveWeatherStart(details, now);
+  logWeatherEvent({ ts: startedAt, weather, baseline: false });
 
   try {
-    recordWeatherChange(weather, now);
-    logger.info({ weather }, "History: weather change recorded");
+    recordWeatherChange(weather, startedAt);
+    logger.info(
+      { weather, startedAt: new Date(startedAt).toISOString() },
+      "History: weather change recorded"
+    );
   } catch (err) {
     logger.error({ err: err?.message, weather }, "History: failed to record weather");
   }
@@ -134,11 +229,13 @@ export function startHistoryRecorder() {
   if (started) return;
   initHistoryDB();
 
+  // Le poller peut n'avoir encore rien reçu au démarrage : dans ce cas le
+  // premier évènement émis fera office de baseline.
   const initialShops = liveDataService.getShops();
   if (initialShops) handleShops(initialShops);
 
   const initialWeather = liveDataService.getWeather();
-  if (initialWeather) handleWeather(initialWeather);
+  if (initialWeather) handleWeather(initialWeather, liveDataService.getWeatherDetails());
 
   unsubShops = liveDataService.onShopsChange(handleShops);
   unsubWeather = liveDataService.onWeatherChange(handleWeather);
@@ -153,8 +250,7 @@ export function stopHistoryRecorder() {
   try { unsubWeather?.(); } catch { /* ignore */ }
   unsubShops = null;
   unsubWeather = null;
-  lastItemsHashByShop.clear();
-  lastRealRestockByShop.clear();
+  lastWindowByShop.clear();
   lastWeatherObserved = null;
   closeHistoryDB();
   started = false;

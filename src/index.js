@@ -1,14 +1,12 @@
 // src/index.js
 // Main entry point for MG API
 
-import fs from "node:fs/promises";
 import { config } from "./config/index.js";
 import { logger } from "./logger/index.js";
 import { startApiServer } from "./api/server.js";
-import { MagicGardenConnection } from "./core/websocket/connection.js";
-import { liveDataService, startHistoryRecorder, stopHistoryRecorder } from "./services/index.js";
-import { registerSpriteSyncListener } from "./services/spriteSync.js";
-import { exportSpritesToDisk } from "./assets/sprites/exportSpritesToDisk.js";
+import { startHistoryRecorder, stopHistoryRecorder } from "./services/index.js";
+import { startLivePoller, stopLivePoller } from "./services/livePoller.js";
+import { startVersionWatcher, stopVersionWatcher } from "./services/spriteSync.js";
 
 // =====================
 // 1) Start API Server
@@ -17,21 +15,22 @@ import { exportSpritesToDisk } from "./assets/sprites/exportSpritesToDisk.js";
 const { server } = startApiServer({ port: config.server.port });
 
 // =====================
-// 2) Connect to Magic Garden WebSocket
+// 2) Live data from the game's official API
+// =====================
+//
+// Les shops et la météo viennent de `/platform/v1/{shops,weather}` : plus besoin
+// de rejoindre une room du jeu en WebSocket pour les lire.
+
+startLivePoller();
+
+// Suit la version du jeu pour resynchroniser les sprites après une mise à jour
+// (ce que signalaient auparavant les codes de fermeture WebSocket 4700/4710).
+startVersionWatcher();
+
+// =====================
+// 3) History recorder (SQLite persistence of shops/weather)
 // =====================
 
-const mg = new MagicGardenConnection({
-  origin: config.game.origin,
-  autoReconnect: config.websocket.autoReconnect,
-  maxRetries: config.websocket.maxRetries,
-  minDelay: config.websocket.minDelay,
-  maxDelay: config.websocket.maxDelay,
-});
-
-// Register sprite sync listener for version mismatch handling
-registerSpriteSyncListener(mg);
-
-// Start history recorder (SQLite persistence of shops/weather)
 if (config.history.enabled) {
   try {
     startHistoryRecorder();
@@ -40,32 +39,10 @@ if (config.history.enabled) {
   }
 }
 
-mg.on("open", (status) => {
-  logger.info({ roomId: status.roomId, version: status.version }, "Connected to Magic Garden");
-});
-
-mg.on("message", (raw) => {
-  // Feed live data service with WebSocket messages
-  liveDataService.handleRawMessage(raw);
-});
-
-mg.on("close", ({ code, reason }) => {
-  logger.warn({ code, reason }, "Magic Garden connection closed");
-});
-
-mg.on("reconnect", ({ attempt, delay, closeCode }) => {
-  logger.info({ attempt, delay, closeCode }, "Scheduling reconnect");
-});
-
-mg.on("error", (err) => {
-  logger.error({ error: err?.message }, "Magic Garden connection error");
-});
-
-// Connect
-await mg.connect();
+logger.info({ port: config.server.port }, "MG API ready");
 
 // =====================
-// 3) Graceful Shutdown
+// 4) Graceful Shutdown
 // =====================
 
 function shutdown() {
@@ -78,7 +55,13 @@ function shutdown() {
   }
 
   try {
-    mg.stop();
+    stopLivePoller();
+  } catch {
+    // Ignore
+  }
+
+  try {
+    stopVersionWatcher();
   } catch {
     // Ignore
   }
@@ -100,4 +83,4 @@ process.on("SIGTERM", shutdown);
 // Export for external use
 // =====================
 
-export { mg, server };
+export { server };

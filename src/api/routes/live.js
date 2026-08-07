@@ -70,8 +70,14 @@ liveRouter.get("/shops", (_req, res) => {
 
 // GET /live/health
 liveRouter.get("/health", (_req, res) => {
+  const poller = liveDataService.getStats();
+
   res.json({
-    ok: true,
+    // Les données live viennent du polling de l'API officielle du jeu : sans
+    // WebSocket à surveiller, l'état du poller est le seul indicateur de
+    // fraîcheur.
+    ok: poller.running && Boolean(poller.lastSuccessAt),
+    poller,
     sse: sseStats,
   });
 });

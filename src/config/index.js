@@ -36,12 +36,29 @@ export const config = {
     pageUrl: process.env.GAME_PAGE_URL || "https://magicgarden.gg/r/test",
   },
 
-  // WebSocket reconnection
-  websocket: {
-    autoReconnect: process.env.WS_AUTO_RECONNECT !== "false",
-    maxRetries: Number(process.env.WS_MAX_RETRIES) || 999,
-    minDelay: Number(process.env.WS_MIN_DELAY) || 500,
-    maxDelay: Number(process.env.WS_MAX_DELAY) || 8000,
+  // API officielle du jeu (`/platform/v1/*`), source des données live.
+  platform: {
+    // Cadence de base du polling. L'amont répond `public, max-age=30` :
+    // descendre plus bas ne donne pas de données plus fraîches. Le poller se
+    // réveille de toute façon pile sur les échéances `nextRestockAt`.
+    pollInterval: Number(process.env.PLATFORM_POLL_INTERVAL) || 15 * 1000,
+    // Cadence resserrée le temps qu'un restock annoncé apparaisse en amont.
+    fastPollInterval: Number(process.env.PLATFORM_FAST_POLL_INTERVAL) || 5 * 1000,
+    // Plafond du backoff exponentiel quand l'API officielle est injoignable.
+    maxBackoff: Number(process.env.PLATFORM_MAX_BACKOFF) || 60 * 1000,
+    timeout: Number(process.env.PLATFORM_TIMEOUT) || 8 * 1000,
+    userAgent: process.env.PLATFORM_USER_AGENT || "MG-API/2.1 (+https://mg-api.ariedam.fr)",
+  },
+
+  // Surveillance de la version du jeu : remplace les codes de fermeture
+  // WebSocket 4700/4710, qui étaient jusqu'ici notre signal de mise à jour.
+  versionWatch: {
+    enabled: process.env.VERSION_WATCH_ENABLED !== "false",
+    interval: Number(process.env.VERSION_WATCH_INTERVAL) || 60 * 1000,
+    // Un redémarrage après resync garantit un état propre (pm2 relance). Les
+    // caches sont tous indexés par version et se régénèrent seuls, donc c'est
+    // désactivable si l'on préfère ne pas couper les flux SSE en cours.
+    restartAfterSync: process.env.VERSION_WATCH_RESTART !== "false",
   },
 
   // Logging

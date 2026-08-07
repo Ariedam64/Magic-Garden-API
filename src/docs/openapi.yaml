@@ -9,7 +9,7 @@ info:
 
     This API provides two types of data:
     - **Static data**: Extracted from the game's minified bundle (plants, pets, items, etc.)
-    - **Live data**: Real-time data from the game's WebSocket (shops, weather)
+    - **Live data**: Shops and weather, tracked from the game's official platform API
 
     ## Quick Start
 
@@ -39,7 +39,8 @@ info:
     ## Key Features
 
     - **Auto-updating**: Data automatically refreshes from the game bundle
-    - **Real-time**: WebSocket connection for live shop and weather data
+    - **Live shops & weather**: Tracked from the game's official platform API, with
+      restock dates announced by the game itself
     - **Sprites included**: All data includes sprite URLs ready to use
     - **Server-Sent Events**: Real-time streaming via SSE
     - **Smart caching**: Optimized performance with automatic cache invalidation
@@ -101,17 +102,23 @@ tags:
 
   - name: Live
     description: |
-      Real-time game data from WebSocket connection.
+      Live game data, tracked from the game's official platform API.
 
-      Get current weather and shop inventories. Supports both snapshot endpoints (one-time requests) and SSE streams (real-time updates).
+      Get current weather and shop inventories. Supports both snapshot endpoints (one-time requests) and SSE streams (pushed on change).
 
       **Data sources:**
       - Weather: Current in-game weather condition
-      - Shops: Current inventory and restock timers for all shops (seed, tool, egg, decor, dawn, snow, thunder)
+      - Shops: Inventory, restock date and countdown for every shop the game exposes (seed, tool, egg, decor, dawn, snow, thunder, apology)
 
       **Update methods:**
       - Snapshot: One-time GET request for current state
-      - Stream: Server-Sent Events for real-time updates
+      - Stream: Server-Sent Events, emitted when a shop or the weather actually changes
+
+      **Freshness:** the upstream API is polled a few times a minute, and on top of
+      that right on each `nextRestockAt` the game announces — so a restock or a
+      weather change surfaces within seconds of happening. Both the game's
+      responses and ours are cached briefly, so treat sub-second precision as
+      approximate; `nextRestockAt` itself is exact.
 
   - name: Stats
     description: |
@@ -1929,27 +1936,50 @@ paths:
                     weather: "Clear Skies"
                     shops:
                       seed:
-                        secondsUntilRestock: 3600
+                        open: true
+                        nextRestockAt: "2026-08-07T16:00:00.000Z"
+                        secondsUntilRestock: 188
                         items:
                           - name: "Carrot"
-                            stock: 10
+                            displayName: "Carrot Seed"
+                            itemType: "Seed"
+                            stock: 9
                           - name: "Cabbage"
-                            stock: 15
+                            displayName: "Cabbage Seed"
+                            itemType: "Seed"
+                            stock: 2
                       tool:
-                        secondsUntilRestock: 7200
+                        open: true
+                        nextRestockAt: "2026-08-07T16:00:00.000Z"
+                        secondsUntilRestock: 188
                         items:
                           - name: "WateringCan"
-                            stock: 3
+                            displayName: "Watering Can"
+                            itemType: "Tool"
+                            stock: 5
                       egg:
-                        secondsUntilRestock: 10800
+                        open: true
+                        nextRestockAt: "2026-08-07T16:00:00.000Z"
+                        secondsUntilRestock: 188
                         items:
-                          - name: "BunnyEgg"
+                          - name: "CommonEgg"
+                            displayName: "Common Egg"
+                            itemType: "Egg"
                             stock: 2
-                    decor:
-                      secondsUntilRestock: 14400
-                      items:
-                        - name: "Fence"
-                          stock: 10
+                      decor:
+                        open: true
+                        nextRestockAt: "2026-08-07T16:00:00.000Z"
+                        secondsUntilRestock: 188
+                        items:
+                          - name: "SmallRock"
+                            displayName: "Small Garden Rock"
+                            itemType: "Decor"
+                            stock: 4
+                      dawn:
+                        open: false
+                        nextRestockAt: null
+                        secondsUntilRestock: 0
+                        items: []
 
   /live/health:
     get:
@@ -2021,14 +2051,16 @@ paths:
         - Live
       summary: Get current weather
       description: |
-        Returns the current in-game weather snapshot from the WebSocket connection.
+        Returns the current in-game weather.
 
         **Weather types:**
-        - Clear Skies
-        - Rainy
-        - Stormy
-        - Snowy
-        - Foggy
+        - `Clear Skies` — no weather event running (the game's default state)
+        - `Rain`, `Snow`, `Thunderstorm` — the `Hydro` family, one event every 40-60 min
+        - `Dawn`, `Amber Moon` — the `Lunar` family, on fixed slots every 4 h
+
+        Every event lasts 10 minutes and starts on the game's 5-minute grid. See
+        `/data/weathers` for their effects and `/data/weather-groups` for the
+        scheduling engine and drop odds.
 
         **Note:** This is a snapshot. For real-time updates, use `/live/stream` (combined) or `/live/weather/stream`.
       responses:
@@ -2045,13 +2077,13 @@ paths:
                     example: "Clear Skies"
               examples:
                 clearSkies:
-                  summary: Clear weather
+                  summary: No weather event running
                   value:
                     weather: "Clear Skies"
-                rainy:
-                  summary: Rainy weather
+                rain:
+                  summary: Rain event running
                   value:
-                    weather: "Rainy"
+                    weather: "Rain"
 
   /live/shops:
     get:
@@ -2062,14 +2094,18 @@ paths:
         Returns current shop inventory and restock timers for all shops.
 
         **Available shops:**
-        - **seed**: Seed shop (plants)
-        - **tool**: Tool shop (equipment)
-        - **egg**: Egg shop (pets)
-        - **decor**: Decoration shop (cosmetics)
+        - **seed**: Seed shop (plants) — restocks every 5 min
+        - **tool**: Tool shop (equipment, plus some decor) — every 10 min
+        - **egg**: Egg shop (pets) — every 15 min
+        - **decor**: Decoration shop (cosmetics) — every hour
+        - **dawn**, **snow**, **thunder**: event shops, open only during the matching weather
+        - **apology**: occasional compensation shop, opened by the game's operators
 
         Each shop includes:
-        - Current stock items with quantities
-        - Time until next restock (in seconds)
+        - Its inventory, with the stock offered by the current restock window
+        - `nextRestockAt`: the exact restock date announced by the game
+        - `secondsUntilRestock`: the same thing as a countdown, computed at request time
+        - `open`: `false` on an event shop outside its event (empty inventory, no restock date)
 
         **Use cases:**
         - Track shop rotations
@@ -2090,35 +2126,66 @@ paths:
                   summary: Example shop inventory
                   value:
                     seed:
-                      secondsUntilRestock: 3600
+                      open: true
+                      nextRestockAt: "2026-08-07T16:00:00.000Z"
+                      secondsUntilRestock: 188
                       items:
                         - name: "Carrot"
-                          stock: 10
+                          displayName: "Carrot Seed"
+                          itemType: "Seed"
+                          stock: 9
                         - name: "Cabbage"
-                          stock: 15
-                        - name: "Tomato"
-                          stock: 5
+                          displayName: "Cabbage Seed"
+                          itemType: "Seed"
+                          stock: 2
+                        - name: "BurrosTail"
+                          displayName: "Burro's Tail Cutting"
+                          itemType: "Seed"
+                          stock: 2
                     tool:
-                      secondsUntilRestock: 7200
+                      open: true
+                      nextRestockAt: "2026-08-07T16:00:00.000Z"
+                      secondsUntilRestock: 188
                       items:
                         - name: "WateringCan"
-                          stock: 3
-                        - name: "Fertilizer"
-                          stock: 20
+                          displayName: "Watering Can"
+                          itemType: "Tool"
+                          stock: 5
+                        - name: "FeedingTrough"
+                          displayName: "Feeding Trough"
+                          itemType: "Decor"
+                          stock: 1
                     egg:
-                      secondsUntilRestock: 10800
+                      open: true
+                      nextRestockAt: "2026-08-07T16:00:00.000Z"
+                      secondsUntilRestock: 188
                       items:
-                        - name: "BunnyEgg"
+                        - name: "CommonEgg"
+                          displayName: "Common Egg"
+                          itemType: "Egg"
                           stock: 2
-                        - name: "CatEgg"
+                        - name: "RareEgg"
+                          displayName: "Rare Egg"
+                          itemType: "Egg"
                           stock: 1
                     decor:
-                      secondsUntilRestock: 14400
+                      open: true
+                      nextRestockAt: "2026-08-07T16:00:00.000Z"
+                      secondsUntilRestock: 188
                       items:
-                        - name: "Fence"
-                          stock: 10
-                        - name: "Lamp"
-                          stock: 5
+                        - name: "SmallRock"
+                          displayName: "Small Garden Rock"
+                          itemType: "Decor"
+                          stock: 4
+                        - name: "HayBale"
+                          displayName: "Hay Bale"
+                          itemType: "Decor"
+                          stock: 2
+                    dawn:
+                      open: false
+                      nextRestockAt: null
+                      secondsUntilRestock: 0
+                      items: []
 
   /live/stream:
     get:
@@ -3448,13 +3515,15 @@ components:
 
     Shops:
       type: object
-      description: All shop inventories
+      description: |
+        All shop inventories, keyed by shop type. Shop types are not hardcoded:
+        whatever the game exposes is served, so a new shop appears on its own.
       properties:
         seed:
           description: Seed shop (plants and crops)
           $ref: '#/components/schemas/Shop'
         tool:
-          description: Tool shop (equipment and consumables)
+          description: Tool shop (equipment, consumables and some decor)
           $ref: '#/components/schemas/Shop'
         egg:
           description: Egg shop (pet eggs)
@@ -3462,41 +3531,97 @@ components:
         decor:
           description: Decoration shop (cosmetic items)
           $ref: '#/components/schemas/Shop'
+        dawn:
+          description: Event shop, open during Dawn weather
+          $ref: '#/components/schemas/Shop'
+        snow:
+          description: Event shop, open during Snow weather
+          $ref: '#/components/schemas/Shop'
+        thunder:
+          description: Event shop, open during Thunderstorm weather
+          $ref: '#/components/schemas/Shop'
+        apology:
+          description: Occasional compensation shop, opened by the game's operators
+          $ref: '#/components/schemas/Shop'
       example:
         seed:
-          secondsUntilRestock: 3600
+          open: true
+          nextRestockAt: "2026-08-07T16:00:00.000Z"
+          secondsUntilRestock: 188
           items:
             - name: "Carrot"
-              stock: 10
+              displayName: "Carrot Seed"
+              itemType: "Seed"
+              stock: 9
             - name: "Cabbage"
-              stock: 15
+              displayName: "Cabbage Seed"
+              itemType: "Seed"
+              stock: 2
+        egg:
+          open: true
+          nextRestockAt: "2026-08-07T16:00:00.000Z"
+          secondsUntilRestock: 188
+          items:
+            - name: "CommonEgg"
+              displayName: "Common Egg"
+              itemType: "Egg"
+              stock: 2
         tool:
-          secondsUntilRestock: 7200
+          open: true
+          nextRestockAt: "2026-08-07T16:00:00.000Z"
+          secondsUntilRestock: 188
           items:
             - name: "WateringCan"
-              stock: 3
-        egg:
-          secondsUntilRestock: 10800
-          items:
-            - name: "BunnyEgg"
-              stock: 2
+              displayName: "Watering Can"
+              itemType: "Tool"
+              stock: 5
+            - name: "FeedingTrough"
+              displayName: "Feeding Trough"
+              itemType: "Decor"
+              stock: 1
         decor:
-          secondsUntilRestock: 14400
+          open: true
+          nextRestockAt: "2026-08-07T16:00:00.000Z"
+          secondsUntilRestock: 188
           items:
-            - name: "Fence"
-              stock: 10
+            - name: "SmallRock"
+              displayName: "Small Garden Rock"
+              itemType: "Decor"
+              stock: 4
+        dawn:
+          open: false
+          nextRestockAt: null
+          secondsUntilRestock: 0
+          items: []
 
     Shop:
       type: object
       description: Individual shop inventory data
       properties:
+        open:
+          type: boolean
+          description: |
+            Whether the shop is currently open. Event shops (`dawn`, `snow`,
+            `thunder`, `apology`) are closed outside their event, with no
+            `nextRestockAt` and an empty inventory.
+          example: true
+        nextRestockAt:
+          type: string
+          nullable: true
+          format: date-time
+          description: |
+            Exact date of the next restock, as announced by the game, or `null`
+            on a closed shop. Restocks land on the game's 5-minute grid.
+          example: "2026-08-07T16:00:00.000Z"
         secondsUntilRestock:
           type: integer
-          description: Time remaining until shop restocks (in seconds)
-          example: 3600
+          description: |
+            Time remaining until the shop restocks (in seconds), derived from
+            `nextRestockAt` at request time. `0` on a closed shop.
+          example: 188
         items:
           type: array
-          description: Current shop inventory
+          description: Inventory of the current restock window
           items:
             type: object
             properties:
@@ -3504,17 +3629,38 @@ components:
                 type: string
                 description: Item identifier (matches data endpoints)
                 example: "Carrot"
+              displayName:
+                type: string
+                description: Human-readable name, as shown in game
+                example: "Carrot Seed"
+              itemType:
+                type: string
+                nullable: true
+                description: |
+                  Item family (`Seed`, `Egg`, `Tool`, `Decor`, ...). Shops can mix
+                  types: the `tool` shop also sells decor, and event shops sell
+                  seeds, eggs, potions and decor side by side.
+                example: "Seed"
               stock:
                 type: integer
-                description: Current stock quantity
-                example: 10
+                description: |
+                  Stock offered by this restock window. This is the window's
+                  initial stock, not a live counter: it does not decrease as
+                  players buy.
+                example: 9
       example:
-        secondsUntilRestock: 3600
+        open: true
+        nextRestockAt: "2026-08-07T16:00:00.000Z"
+        secondsUntilRestock: 188
         items:
           - name: "Carrot"
-            stock: 10
+            displayName: "Carrot Seed"
+            itemType: "Seed"
+            stock: 9
           - name: "Cabbage"
-            stock: 15
+            displayName: "Cabbage Seed"
+            itemType: "Seed"
+            stock: 2
 
     SpritesResponse:
       type: object

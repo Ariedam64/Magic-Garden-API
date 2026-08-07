@@ -3,8 +3,8 @@
 import fs from "node:fs/promises";
 import { config } from "../config/index.js";
 import { logger } from "../logger/index.js";
-import { CloseCodes } from "../core/websocket/closeCodes.js";
 import { fetchGameVersion, invalidateVersionCache } from "../core/game/version.js";
+import { invalidateAllCaches } from "../core/game/cache.js";
 import { loadStoredVersion, saveVersion } from "../core/game/versionStorage.js";
 import {
   loadStoredAtlases,
@@ -24,15 +24,16 @@ import { syncPetAnimations } from "./animationSync.js";
 import { syncRiveInventory } from "./riveSync.js";
 import { joinUrl } from "../utils/url.js";
 
-const VERSION_MISMATCH_CODES = new Set([CloseCodes.VERSION_MISMATCH, CloseCodes.VERSION_EXPIRED]);
-
 let isSyncing = false;
-// Set when a forced resync (version mismatch) arrives while a sync is
-// already running. Without this, that request silently no-ops (see
-// checkAndSyncSprites' isSyncing guard below) and the process.exit() that's
-// supposed to pick up a fresh room/version never fires — this is what left
-// the WebSocket dead for hours after the 2026-08-05 update.
+// Set when a forced resync (game update) arrives while a sync is already
+// running. Without this, that request silently no-ops (see checkAndSyncSprites'
+// isSyncing guard below) and the resync that's supposed to pick up the new
+// version never fires — this is what left the data stale for hours after the
+// 2026-08-05 update, back when the signal was a WebSocket close code.
 let pendingForceResync = false;
+
+let versionWatchTimer = null;
+let watchedVersion = null;
 
 // Marge large : une resync complète forcée (30 artboards Rive rasterisés +
 // ~575 sprites redécoupés des atlas) tourne autour de 2 min, et le rendu Rive
@@ -76,43 +77,6 @@ async function fetchJson(url) {
 
   if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${url}`);
   return res.json();
-}
-
-/**
- * Check for version change after a WebSocket disconnect and sync if needed.
- */
-async function checkSpritesAfterDisconnect(mgConnection, { code, reason } = {}) {
-  try {
-    invalidateVersionCache();
-
-    const latestVersion = await fetchGameVersion({ origin: mgConnection?.origin });
-    const previousVersion = (await loadStoredVersion()) || mgConnection?.version;
-
-    if (!latestVersion || !previousVersion) {
-      logger.debug(
-        { latestVersion, previousVersion, code, reason },
-        "Skipping sprite sync check after disconnect (missing version)"
-      );
-      return;
-    }
-
-    if (latestVersion === previousVersion) {
-      logger.debug(
-        { latestVersion, previousVersion, code, reason },
-        "Game version unchanged after disconnect, skipping sprite sync"
-      );
-      return;
-    }
-
-    logger.warn(
-      { from: previousVersion, to: latestVersion, code, reason },
-      "Game version changed after disconnect, syncing sprites"
-    );
-
-    await checkAndSyncSprites({ force: false });
-  } catch (err) {
-    logger.error({ error: err?.message || String(err), code, reason }, "Failed version check after disconnect");
-  }
 }
 
 /**
@@ -430,8 +394,8 @@ export async function checkAndSyncSprites({ force = false } = {}) {
 
     if (pendingForceResync) {
       pendingForceResync = false;
-      logger.info("Running deferred forced sprite resync (version mismatch arrived mid-sync)");
-      runForcedResyncAndExit().catch((err) =>
+      logger.info("Running deferred forced sprite resync (game update arrived mid-sync)");
+      runForcedResync().catch((err) =>
         logger.error({ error: err?.message || String(err) }, "Deferred forced resync failed")
       );
     }
@@ -439,44 +403,52 @@ export async function checkAndSyncSprites({ force = false } = {}) {
 }
 
 /**
- * Runs a forced resync and restarts the process once it succeeds, so pm2
- * brings the process back up on the new version/room.
+ * Runs a forced resync after a game update.
+ *
+ * Every cache we hold is keyed by game version (bundle URL, asset base URL,
+ * manifest), so they heal on their own — but a restart guarantees a clean state
+ * and pm2 brings the process straight back, which is the behavior this API has
+ * always had on a game update. Set VERSION_WATCH_RESTART=false to invalidate the
+ * caches in place instead and keep the SSE streams alive.
  */
-async function runForcedResyncAndExit() {
+async function runForcedResync() {
   const result = await checkAndSyncSprites({ force: true });
 
-  if (result?.success || result?.skipped) {
+  if (!result?.success && !result?.skipped) return;
+
+  if (config.versionWatch.restartAfterSync) {
     logger.info("Sprite sync completed, restarting server in 1 second...");
     setTimeout(() => {
       process.exit(0);
     }, 1000);
+    return;
   }
+
+  invalidateAllCaches();
+  logger.info("Sprite sync completed, caches invalidated (restart disabled)");
 }
 
 /**
- * Handle version mismatch (old behavior - full export + restart).
- * Kept for compatibility with WebSocket close codes.
+ * Handle a detected game update: full export, then restart.
  */
-async function handleVersionMismatch() {
+async function handleGameUpdate() {
   if (isSyncing) {
-    // A sync is already running (e.g. the disconnect-triggered check that
-    // fires just before this close code lands). Don't drop this request:
-    // checkAndSyncSprites' finally block will pick it up once that sync ends.
+    // A sync is already running. Don't drop this request: checkAndSyncSprites'
+    // finally block will pick it up once that sync ends.
     logger.warn("Sprite sync already in progress, deferring forced resync until it completes");
     pendingForceResync = true;
     return;
   }
 
-  await runForcedResyncAndExit();
+  await runForcedResync();
 }
 
 /**
- * Check sprites on connection open.
- * This is called when WebSocket connects successfully.
+ * Check sprites at startup.
  * Forces full export if sprites directory is missing or empty.
  */
-export async function checkSpritesOnConnect() {
-  logger.info("Checking sprites on connection...");
+export async function checkSpritesOnStartup() {
+  logger.info("Checking sprites on startup...");
 
   // Check if we need initial export (directory missing or empty)
   const forceExport = await needsInitialExport();
@@ -489,7 +461,7 @@ export async function checkSpritesOnConnect() {
   if (result?.success) {
     logger.info(
       { exported: result.exported, added: result.added, modified: result.modified },
-      "Sprites synced on connect"
+      "Sprites synced on startup"
     );
   }
 
@@ -497,41 +469,63 @@ export async function checkSpritesOnConnect() {
 }
 
 /**
- * Register listener for version mismatch close codes.
- * Also checks sprites on successful connection.
+ * Poll the game version and resync assets when it changes.
+ *
+ * Replaces the WebSocket close codes 4700/4710 (VERSION_MISMATCH /
+ * VERSION_EXPIRED), which used to be how we learned about a game update: the
+ * official API exposes the version directly, so we no longer need to hold a game
+ * connection open just to be told it went stale.
  */
-export function registerSpriteSyncListener(mgConnection) {
-  if (!mgConnection) {
-    logger.warn("Invalid WebSocket connection, sprite sync listener not registered");
+export function startVersionWatcher() {
+  if (versionWatchTimer) return;
+
+  if (!config.versionWatch.enabled) {
+    logger.warn("Version watcher disabled - sprites will not follow game updates");
     return;
   }
 
-  logger.info("Sprite sync listener registered - watching for version changes");
+  const interval = config.versionWatch.interval;
+  logger.info({ interval }, "Version watcher started - polling for game updates");
 
-  // Check sprites when connection opens
-  mgConnection.on("open", () => {
-    logger.debug("WebSocket open event - triggering sprite check");
-    checkSpritesOnConnect().catch((err) => {
-      logger.error({ error: err?.message }, "Error checking sprites on connect");
+  // Sync at startup, then watch for changes.
+  checkSpritesOnStartup()
+    .catch((err) => logger.error({ error: err?.message }, "Error checking sprites on startup"))
+    .finally(async () => {
+      watchedVersion = await loadStoredVersion().catch(() => null);
+      versionWatchTimer = setInterval(checkVersion, interval);
     });
-  });
+}
 
-  // Handle version mismatch on close
-  mgConnection.on("close", ({ code, reason }) => {
-    logger.debug({ code, reason }, "WebSocket close event received by sprite sync listener");
+async function checkVersion() {
+  try {
+    invalidateVersionCache();
 
-    if (VERSION_MISMATCH_CODES.has(code)) {
-      const codeName = code === CloseCodes.VERSION_MISMATCH ? "VERSION_MISMATCH (4700)" : "VERSION_EXPIRED (4710)";
-      logger.warn({ code, codeName, reason }, "VERSION MISMATCH DETECTED - Triggering sprite sync");
+    const latestVersion = await fetchGameVersion();
+    if (!latestVersion) return;
 
-      handleVersionMismatch().catch((err) => {
-        logger.error({ error: err?.message }, "Unexpected error in version mismatch handler");
-      });
+    // La version stockée est la référence : c'est celle sur laquelle nos
+    // sprites/atlas sur disque ont été produits.
+    const previousVersion = (await loadStoredVersion()) || watchedVersion;
+    if (!previousVersion) {
+      watchedVersion = latestVersion;
       return;
     }
 
-    checkSpritesAfterDisconnect(mgConnection, { code, reason }).catch((err) => {
-      logger.error({ error: err?.message }, "Unexpected error in disconnect version check");
-    });
-  });
+    if (latestVersion === previousVersion) return;
+
+    logger.warn(
+      { from: previousVersion, to: latestVersion },
+      "GAME UPDATE DETECTED - Triggering sprite sync"
+    );
+    watchedVersion = latestVersion;
+
+    await handleGameUpdate();
+  } catch (err) {
+    logger.error({ error: err?.message || String(err) }, "Version check failed");
+  }
+}
+
+export function stopVersionWatcher() {
+  if (versionWatchTimer) clearInterval(versionWatchTimer);
+  versionWatchTimer = null;
 }

@@ -15,16 +15,16 @@ Automatic extraction from the game's minified JavaScript file (`main-*.js`):
 - Special abilities
 - Weathers
 
-### **Live WebSocket** → Real-time data
-Connection to the game server to retrieve dynamic data:
-- Current shop
+### **Official platform API** → Live data
+Polling of the game's own `/platform/v1` endpoints for dynamic data:
+- Current shops (inventory, exact restock date, countdown)
 - Current weather
 
 ## Advantages
 
 - **Future-proof**: Automatically adapts to game updates
 - **No maintenance**: No need to manually update data
-- **Real-time**: WebSocket for live data
+- **Live data**: Shops and weather from the game's official API, restock dates included
 - **Sprites included**: URLs and direct sprite downloads
 - **Smart cache**: Optimal performance
 
@@ -110,7 +110,7 @@ The composed endpoint accepts a full atlas key (e.g. `sprite/tallplant/Cactus`) 
 | `GET /live` | All live data snapshot (weather + shops) |
 | `GET /live/weather` | Current weather snapshot |
 | `GET /live/shops` | Current shops snapshot |
-| `GET /live/health` | SSE connection stats |
+| `GET /live/health` | Poller freshness + SSE connection stats |
 | `GET /live/stream` | Weather + shops updates via Server-Sent Events |
 | `GET /live/weather/stream` | Weather updates via Server-Sent Events |
 | `GET /live/shops/stream` | Shop updates via Server-Sent Events |
@@ -299,8 +299,8 @@ In Google Sheets: `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")`
 ┌─────────────────────────────────────────────┐
 │           Magic Garden Game                 │
 │  ┌──────────────┐      ┌───────────────┐   │
-│  │ Bundle JS    │      │   WebSocket   │   │
-│  │ (minified)   │      │   (live game) │   │
+│  │ Bundle JS    │      │  Platform API │   │
+│  │ (minified)   │      │ /platform/v1  │   │
 │  └──────┬───────┘      └───────┬───────┘   │
 └─────────┼──────────────────────┼───────────┘
           │                      │
@@ -309,11 +309,11 @@ In Google Sheets: `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")`
 │              MG API Server                  │
 │                                             │
 │  ┌─────────────┐      ┌─────────────────┐  │
-│  │   Bundle    │      │   WebSocket     │  │
-│  │ Extraction  │      │   Connection    │  │
-│  │             │      │                 │  │
-│  │ • Resolver  │      │ • Auto-reconnect│  │
-│  │ • Extractor │      │ • Live parsing  │  │
+│  │   Bundle    │      │  Live Poller    │  │
+│  │ Extraction  │      │                 │  │
+│  │             │      │ • Shops+weather │  │
+│  │ • Resolver  │      │ • Restock-aware │  │
+│  │ • Extractor │      │ • Normalizing   │  │
 │  │ • Sandbox   │      │ • Event stream  │  │
 │  └──────┬──────┘      └────────┬────────┘  │
 │         │                      │           │
@@ -322,7 +322,7 @@ In Google Sheets: `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")`
 │  │         Cache & Services            │   │
 │  │  • Game data (5min TTL)             │   │
 │  │  • Sprite resolution                │   │
-│  │  • Live data parsing                │   │
+│  │  • Live data normalizing            │   │
 │  └──────────────┬──────────────────────┘   │
 │                 │                          │
 │                 ▼                          │
@@ -342,8 +342,9 @@ In Google Sheets: `=IMPORTDATA("https://mg-api.ariedam.fr/data/pets.csv")`
 
 - **Bundle Resolver**: Detects and downloads the game's JS bundle
 - **Extractors**: Parse data from the minified bundle (regex + VM sandbox)
-- **WebSocket Connection**: Connection to game server with auto-reconnect
-- **Parsers**: Interpret live WebSocket messages
+- **Live Poller**: Polls the game's official `/platform/v1/{shops,weather}` endpoints, and wakes up right on each `nextRestockAt` the game announces
+- **Normalizers**: Map the official payloads onto our public shape
+- **Version Watcher**: Polls `/platform/v1/version` and resyncs sprites on a game update
 - **SSE Streams**: Real-time data streaming via Server-Sent Events
 - **Sprite Sync**: Automatic sprite synchronization
 - **Cache**: Smart caching with automatic invalidation
@@ -363,11 +364,16 @@ NODE_ENV=development
 CACHE_BUNDLE_TTL=300000
 CACHE_MANIFEST_TTL=600000
 
-# WebSocket reconnection
-WS_AUTO_RECONNECT=true
-WS_MAX_RETRIES=999
-WS_MIN_DELAY=500
-WS_MAX_DELAY=8000
+# Live polling of the game's official API
+PLATFORM_POLL_INTERVAL=15000
+PLATFORM_FAST_POLL_INTERVAL=5000
+PLATFORM_MAX_BACKOFF=60000
+PLATFORM_TIMEOUT=8000
+
+# Game update detection (sprite resync)
+VERSION_WATCH_ENABLED=true
+VERSION_WATCH_INTERVAL=60000
+VERSION_WATCH_RESTART=true
 
 # CORS
 CORS_ENABLED=true

@@ -12,8 +12,7 @@
   "keywords": [
     "magic-garden",
     "api",
-    "game",
-    "websocket"
+    "game"
   ],
   "author": "Ariedam",
   "license": "ISC",
@@ -32,7 +31,6 @@
     "helmet": "^8.1.0",
     "pino": "^10.3.0",
     "sharp": "^0.34.5",
-    "ws": "^8.19.0",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {

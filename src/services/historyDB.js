@@ -86,6 +86,16 @@ export function initHistoryDB() {
       WHERE ended_at IS NULL
       ORDER BY started_at DESC LIMIT 1
     `),
+    getLastRestockInterval: db.prepare(`
+      SELECT restock_interval_seconds AS interval FROM shop_restocks
+      WHERE shop_type = ? AND restock_interval_seconds IS NOT NULL
+      ORDER BY restocked_at DESC LIMIT 1
+    `),
+    findRestockNear: db.prepare(`
+      SELECT id, restocked_at FROM shop_restocks
+      WHERE shop_type = ? AND restocked_at BETWEEN ? AND ?
+      ORDER BY restocked_at LIMIT 1
+    `),
   };
 
   const insertRestockWithItems = db.transaction(
@@ -119,6 +129,34 @@ export function initHistoryDB() {
 export function recordShopRestock(shopType, items, intervalSeconds = null, at = Date.now()) {
   if (!db) return null;
   return db._tx.insertRestockWithItems(shopType, at, intervalSeconds, items);
+}
+
+/**
+ * Dernier intervalle de restock connu pour une boutique, en secondes.
+ *
+ * Sert à retrouver l'instant d'un restock observé sans connaître l'échéance
+ * précédente (typiquement au démarrage du process) : `nextRestockAt - interval`.
+ */
+export function getLastRestockInterval(shopType) {
+  if (!db) return null;
+  const row = statements.getLastRestockInterval.get(shopType);
+  return row?.interval ?? null;
+}
+
+/**
+ * Un restock est-il déjà enregistré à `at` près de `toleranceMs` ?
+ *
+ * L'index unique `(shop_type, restocked_at)` ne suffit pas à travers la bascule
+ * WebSocket -> API officielle : l'ancien enregistreur horodatait au moment où il
+ * *observait* le restock (quelques centaines de ms après la borne), le nouveau
+ * écrit la borne exacte annoncée par le jeu. Deux lignes séparées de 700 ms
+ * décrivent alors le même restock sans se heurter à l'index. Le plus petit
+ * intervalle de restock étant de 300 s, une tolérance de l'ordre de la minute
+ * lève l'ambiguïté sans risque de confondre deux fenêtres voisines.
+ */
+export function hasRestockNear(shopType, at, toleranceMs = 90 * 1000) {
+  if (!db) return false;
+  return Boolean(statements.findRestockNear.get(shopType, at - toleranceMs, at + toleranceMs));
 }
 
 export function recordWeatherChange(nextWeather, at = Date.now()) {
