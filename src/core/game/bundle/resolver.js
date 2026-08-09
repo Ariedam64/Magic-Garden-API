@@ -2,6 +2,8 @@
 
 import { config } from "../../../config/index.js";
 import { logger } from "../../../logger/index.js";
+import { definesColorsFor } from "./colors.js";
+import { ABILITY_COLOR_NAMES, MUTATION_COLOR_NAMES, COLOR_MIN_HITS } from "./colorNames.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -55,11 +57,18 @@ export async function resolveMainFromPage(pageUrl = config.game.pageUrl) {
 // Signature stable présente dans le chunk de données du jeu
 const DATA_SIGNATURE = "secondsToHatch";
 
-// Signatures indiquant le chunk contenant les couleurs UI (switch abilities +
-// map mutations). Les deux vivent dans le même chunk depuis la maj rolldown,
-// mais on ne suppose pas que ça restera vrai — voir findChunksInGraph.
-const UI_COLOR_SIGNATURES = ["Ambershine:`rgb(", "Dawnlit:`rgb(", "Thunderstruck:`rgb("];
-const UI_COLOR_MIN_HITS = 2;
+// Les couleurs d'abilities et de mutations sont cherchées séparément : elles
+// cohabitent dans le même chunk aujourd'hui, mais elles ont déjà migré
+// indépendamment (main.js -> index.js -> chunk dédié -> chunk de localisation),
+// donc on ne suppose pas qu'elles restent ensemble.
+//
+// Le test n'est pas une signature textuelle mais l'extraction réelle : un chunk
+// n'est retenu que si on sait en tirer des couleurs. C'est ce qui rend la
+// détection insensible aux changements de syntaxe du bundle.
+const COLOR_TARGETS = [
+  { id: "abilityColors", names: ABILITY_COLOR_NAMES },
+  { id: "mutationColors", names: MUTATION_COLOR_NAMES },
+];
 
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
 const MAX_CHUNK_DEPTH = 4;
@@ -137,49 +146,52 @@ async function findChunksInGraph(entryJs, baseUrl, targets) {
   return found;
 }
 
-function countHits(content, signatures) {
-  return signatures.reduce((n, s) => n + (content.includes(s) ? 1 : 0), 0);
-}
-
 /**
- * Récupère le contenu du bundle de données du jeu, ainsi que le chunk
- * contenant les couleurs UI (abilities/mutations) si on le trouve.
+ * Récupère le contenu du bundle de données du jeu, ainsi que les chunks
+ * contenant les couleurs UI (abilities/mutations).
  *
- * Tente index.js en premier pour les données ; sinon parcourt le graphe de
- * chunks (__vite__mapDeps, potentiellement sur plusieurs niveaux) à la
- * recherche à la fois du chunk de données et du chunk de couleurs UI.
+ * Tente index.js en premier ; sinon parcourt le graphe de chunks
+ * (__vite__mapDeps, potentiellement sur plusieurs niveaux) à la recherche du
+ * chunk de données et des chunks de couleurs, en une seule traversée.
+ *
+ * `uiColorsSources` est une liste (dédupliquée) : abilities et mutations
+ * peuvent vivre dans deux chunks différents, et les extracteurs essaient
+ * chaque source à leur tour.
  */
 export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   const { indexUrl, indexJs } = await resolveMainFromPage(pageUrl);
   const baseUrl = indexUrl.replace(/assets\/[^/]+$/, "");
 
   const hasData = indexJs.includes(DATA_SIGNATURE);
-  const hasUiColors = countHits(indexJs, UI_COLOR_SIGNATURES) >= UI_COLOR_MIN_HITS;
-
-  if (hasData && hasUiColors) {
-    return { indexUrl, mainUrl: indexUrl, mainJs: indexJs, indexJs, uiColorsJs: indexJs };
-  }
-
-  logger.debug({ indexUrl, hasData, hasUiColors }, "Searching chunk graph for game data / UI colors");
+  const inIndex = COLOR_TARGETS.filter((t) => definesColorsFor(indexJs, t.names, COLOR_MIN_HITS));
 
   const targets = [];
   if (!hasData) {
     targets.push({ id: "data", test: (c) => c.includes(DATA_SIGNATURE) });
   }
-  if (!hasUiColors) {
-    targets.push({ id: "uiColors", test: (c) => countHits(c, UI_COLOR_SIGNATURES) >= UI_COLOR_MIN_HITS });
+  for (const target of COLOR_TARGETS) {
+    if (inIndex.includes(target)) continue;
+    targets.push({ id: target.id, test: (c) => definesColorsFor(c, target.names, COLOR_MIN_HITS) });
   }
 
-  const chunks = await findChunksInGraph(indexJs, baseUrl, targets);
+  const chunks = targets.length ? await findChunksInGraph(indexJs, baseUrl, targets) : new Map();
 
   const dataChunk = hasData ? { url: indexUrl, content: indexJs } : chunks.get("data");
-  const uiColorsChunk = hasUiColors ? { url: indexUrl, content: indexJs } : chunks.get("uiColors");
-
   if (!dataChunk) {
     throw new Error("Game data chunk not found in bundle graph");
   }
-  if (!uiColorsChunk) {
-    logger.warn("UI colors chunk not found in bundle graph (abilities/mutations will use default colors)");
+
+  const uiColorsSources = [];
+  const seen = new Set();
+  for (const target of COLOR_TARGETS) {
+    const chunk = inIndex.includes(target) ? { url: indexUrl, content: indexJs } : chunks.get(target.id);
+    if (!chunk) {
+      logger.error({ target: target.id }, "Color chunk not found in bundle graph (default colors will be used)");
+      continue;
+    }
+    if (seen.has(chunk.url)) continue;
+    seen.add(chunk.url);
+    uiColorsSources.push(chunk.content);
   }
 
   return {
@@ -187,6 +199,6 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     mainUrl: dataChunk.url,
     mainJs: dataChunk.content,
     indexJs,
-    uiColorsJs: uiColorsChunk?.content ?? null,
+    uiColorsSources,
   };
 }

@@ -2,6 +2,7 @@
 
 import express from "express";
 import { getCacheStats } from "../../core/game/cache.js";
+import { getColorCoverage } from "../../core/game/bundle/colors.js";
 import { isAnimationExportRunning } from "../../services/animationSync.js";
 
 export const healthRouter = express.Router();
@@ -21,6 +22,9 @@ healthRouter.get("/", (_req, res) => {
     // Le rendu des boucles de pets prend une dizaine de minutes dans un
     // processus fils : sans ça, rien ne le signale hors des logs.
     animations: { exportRunning: isAnimationExportRunning() },
+    // Couverture des couleurs extraites du bundle (abilities/mutations).
+    // `matched: 0` = le bloc de couleurs a encore bougé côté jeu.
+    colors: getColorCoverage(),
   });
 });
 
