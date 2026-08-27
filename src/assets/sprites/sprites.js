@@ -1,8 +1,6 @@
 import { getBaseUrl } from "../../assets/assets.js";
-import { loadManifest, getBundleByName } from "../../assets/manifest.js";
+import { loadManifest, getBundleByName, extractJsonFiles } from "../../assets/manifest.js";
 import { joinUrl } from "../../utils/url.js";
-
-const MANIFEST_FILENAME = "manifest.json";
 
 const state = {
   ready: false,
@@ -73,26 +71,6 @@ function getCategory(key, sourceJson = "") {
   }
 }
 
-function extractJsonFilesFromBundle(bundle) {
-  const out = [];
-  const seen = new Set();
-
-  for (const asset of bundle.assets || []) {
-    for (const src of asset.src || []) {
-      if (typeof src !== "string") continue;
-      if (!src.endsWith(".json")) continue;
-      if (src === MANIFEST_FILENAME) continue;
-
-      if (!seen.has(src)) {
-        seen.add(src);
-        out.push(src); // ✅ ordre conservé
-      }
-    }
-  }
-
-  return out;
-}
-
 function resolveMetaImageSrc(sourceJson, metaImage) {
   if (!sourceJson || !metaImage) return null;
 
@@ -121,7 +99,7 @@ export async function initSprites() {
     state.all = [];
     state.ready = false;
 
-    const jsonFiles = extractJsonFilesFromBundle(bundle);
+    const jsonFiles = extractJsonFiles(bundle);
     const loaded = new Set(); // évite les doubles loads (multi-pack inclus)
 
     async function loadAtlas(jsonSrc, { optional = false } = {}) {
