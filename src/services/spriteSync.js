@@ -12,7 +12,12 @@ import {
   updateStoredAtlases,
 } from "../core/game/atlasStorage.js";
 import { getBaseUrl } from "../assets/assets.js";
-import { loadManifest, getBundleByName, extractJsonFiles } from "../assets/manifest.js";
+import {
+  loadManifest,
+  getBundleByName,
+  extractJsonFiles,
+  extractAllSources,
+} from "../assets/manifest.js";
 import { exportSpritesToDisk } from "../assets/sprites/exportSpritesToDisk.js";
 import {
   exportPetsFromRive,
@@ -77,24 +82,6 @@ async function fetchJson(url) {
 
   if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${url}`);
   return res.json();
-}
-
-/**
- * Extract all asset source files from a bundle.
- */
-function extractAllSources(bundle) {
-  if (!bundle || !Array.isArray(bundle.assets)) return [];
-
-  const sources = new Set();
-  for (const asset of bundle.assets) {
-    const srcs = Array.isArray(asset?.src) ? asset.src : [];
-    for (const src of srcs) {
-      if (typeof src === "string") {
-        sources.add(src);
-      }
-    }
-  }
-  return Array.from(sources);
 }
 
 /**
