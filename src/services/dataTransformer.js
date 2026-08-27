@@ -4,7 +4,7 @@
  * into serving URLs (e.g. "/assets/sprites/seeds/Carrot.png").
  */
 
-import { resolveSpritePath } from "../utils/spritePathResolver.js";
+import { resolveSpritePath, resolveSpritePathsDeep } from "../utils/spritePathResolver.js";
 import { logger } from "../logger/index.js";
 
 /**
@@ -18,6 +18,30 @@ function resolveSpriteField(value, spriteVersion) {
 }
 
 /**
+ * Sprite d'un décor, déduit de son champ `art`.
+ *
+ * Les décors sont la seule catégorie sans champ `sprite` : leur image est dans
+ * `art`, sous deux formes. Un path d'atlas pour la cinquantaine de décors
+ * fixes, et un `{ artboardName }` pour les huit qui sont des artboards Rive
+ * animés. Ces huit-là ont malgré tout un PNG d'atlas, mais rangé sous le nom de
+ * l'artboard et non sous l'identifiant de données — `StoneBirdBath` contre
+ * `StoneBirdbath` — d'où le passage par `artboardName` plutôt que par la clé.
+ */
+function spriteFromDecorArt(art, spriteVersion) {
+  if (typeof art === "string") {
+    return resolveSpritePath(art, { version: spriteVersion });
+  }
+
+  if (art && typeof art === "object" && typeof art.artboardName === "string") {
+    return resolveSpritePath(`sprite/decor/${art.artboardName}`, {
+      version: spriteVersion,
+    });
+  }
+
+  return null;
+}
+
+/**
  * Transform a single data item: convert sprite paths to URLs.
  */
 function transformItem(itemKey, itemData, spriteVersion, category) {
@@ -25,7 +49,7 @@ function transformItem(itemKey, itemData, spriteVersion, category) {
     return itemData;
   }
 
-  const transformed = { ...itemData };
+  const transformed = resolveSpritePathsDeep(itemData, { version: spriteVersion });
 
   if (transformed.sprite !== undefined) {
     transformed.sprite = resolveSpriteField(transformed.sprite, spriteVersion);
@@ -42,6 +66,16 @@ function transformItem(itemKey, itemData, spriteVersion, category) {
     });
   }
 
+  // Les décors n'ont pas de `sprite` à eux : on le dérive de `art`, qui garde
+  // son path brut. `sprite` en tête, comme dans les autres catégories.
+  if (category === "decor" && transformed.sprite == null) {
+    const fromArt = spriteFromDecorArt(itemData.art, spriteVersion);
+    if (fromArt) {
+      const { sprite: _absent, ...rest } = transformed;
+      return { sprite: fromArt, ...rest };
+    }
+  }
+
   return transformed;
 }
 
@@ -53,10 +87,10 @@ function transformWeather(weatherKey, weatherData, spriteVersion) {
     return weatherData;
   }
 
-  const transformed = { ...weatherData };
+  const transformed = resolveSpritePathsDeep(weatherData, { version: spriteVersion });
 
   if ("iconSpriteKey" in transformed) {
-    transformed.sprite = resolveSpriteField(transformed.iconSpriteKey, spriteVersion);
+    transformed.sprite = resolveSpriteField(weatherData.iconSpriteKey, spriteVersion);
     delete transformed.iconSpriteKey;
   }
 

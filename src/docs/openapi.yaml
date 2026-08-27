@@ -644,6 +644,12 @@ paths:
         - Category/type
         - Sprite URL
 
+        A decoration carries its image twice: `sprite` is the ready-to-use PNG
+        URL, `art` the raw atlas path the game itself uses. Decorations that can
+        be rotated also carry a `rotationVariants` map, whose entries have their
+        own `sprite` (and sometimes `flipH`); upgradable ones carry `upgrades`,
+        where a tier that changes the look brings its own `sprite` too.
+
         **Use cases:**
         - Display decoration shop
         - Build decoration catalogs
@@ -672,16 +678,25 @@ paths:
                 decorData:
                   summary: Example decorations
                   value:
-                    Fence:
-                      name: "Wooden Fence"
-                      coinPrice: 50
-                      category: "boundary"
-                      sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/Fence.png"
-                    Lamp:
-                      name: "Garden Lamp"
-                      coinPrice: 100
-                      category: "lighting"
-                      sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/Lamp.png"
+                    SmallRock:
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/SmallRock.png?v=1019"
+                      art: "sprite/decor/SmallRock"
+                      name: "Small Garden Rock"
+                      eligibleShops: ["Decor"]
+                      coinPrice: 1000
+                      creditPrice: 2
+                      rarity: "Common"
+                      isOneTimePurchase: false
+                    HayBale:
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/HayBale.png?v=1019"
+                      art: "sprite/decor/HayBale"
+                      name: "Hay Bale"
+                      coinPrice: 6000
+                      rarity: "Common"
+                      rotationVariants:
+                        "90":
+                          sprite: "https://mg-api.ariedam.fr/assets/sprites/decor/HayBaleSideways.png?v=1019"
+                          flipH: true
 
   /data/eggs:
     get:

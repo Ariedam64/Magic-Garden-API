@@ -12,6 +12,7 @@ import {
   transformDataWithSprites,
   transformWeathersWithSprites,
 } from "../../services/dataTransformer.js";
+import { resolveSpritePathsDeep } from "../../utils/spritePathResolver.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 import {
   jsonToCsv, combinedJsonToCsv, sendCsv,
@@ -25,6 +26,16 @@ export const dataRouter = express.Router();
 // =====================
 
 const DATA_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=60";
+
+/**
+ * Les capacités n'ont pas de transformer à elles, mais elles portent bien des
+ * sprites : la tuile d'activation des célestes vit au fond de
+ * `baseParameters.activationSprite`.
+ */
+const getAbilitiesWithSprites = (spriteVersion) =>
+  gameDataService
+    .getAbilities()
+    .then((data) => resolveSpritePathsDeep(data, { version: spriteVersion }));
 
 const transformedCache = {
   bundleUrl: null,
@@ -154,7 +165,9 @@ dataRouter.get(
             transformDataWithSprites(data, "mutations", { spriteVersion })
           )
         ),
-        getOrBuildCached("abilities", spriteVersion, () => gameDataService.getAbilities()),
+        getOrBuildCached("abilities", spriteVersion, () =>
+          getAbilitiesWithSprites(spriteVersion)
+        ),
         getOrBuildCached("weathers", spriteVersion, () =>
           gameDataService.getWeathers().then((data) =>
             transformWeathersWithSprites(data, { spriteVersion })
@@ -267,7 +280,7 @@ dataRouter.get(
     const data = await getOrBuildCached(
       "abilities",
       spriteVersion,
-      () => gameDataService.getAbilities()
+      () => getAbilitiesWithSprites(spriteVersion)
     );
     setDataCacheHeaders(res, "abilities", spriteVersion);
     res.json(data);
@@ -350,7 +363,7 @@ const CATEGORY_DEFS = [
   ["items", "items", (sv) => gameDataService.getItems().then((d) => transformDataWithSprites(d, "items", { spriteVersion: sv }))],
   ["decors", "decor", (sv) => getTransformedDecor({ spriteVersion: sv })],
   ["eggs", "eggs", (sv) => gameDataService.getEggs().then((d) => transformDataWithSprites(d, "eggs", { spriteVersion: sv }))],
-  ["abilities", "abilities", () => gameDataService.getAbilities()],
+  ["abilities", "abilities", (sv) => getAbilitiesWithSprites(sv)],
   ["mutations", "mutations", (sv) => gameDataService.getMutations().then((d) => transformDataWithSprites(d, "mutations", { spriteVersion: sv }))],
   ["weathers", "weathers", (sv) => gameDataService.getWeathers().then((d) => transformWeathersWithSprites(d, { spriteVersion: sv }))],
   ["weather-groups", "weatherGroups", () => gameDataService.getWeatherGroups()],

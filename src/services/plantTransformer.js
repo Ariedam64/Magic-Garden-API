@@ -3,44 +3,22 @@
 import { logger } from "../logger/index.js";
 import { gameDataService } from "./gameData.js";
 import { liveDataService } from "./liveData.js";
-import { resolveSpritePath } from "../utils/spritePathResolver.js";
-
-/**
- * Convertit un champ sprite path en URL si c'est un path du bundle.
- */
-function resolveSpriteField(value, spriteVersion) {
-  if (typeof value === "string" && value.startsWith("sprite/")) {
-    return resolveSpritePath(value, { version: spriteVersion });
-  }
-  return value ?? null;
-}
+import { resolveSpritePathsDeep } from "../utils/spritePathResolver.js";
 
 /**
  * Transform a plant part (seed, plant, or crop).
- * Converts sprite paths to URLs for: sprite, immatureSprite,
- * topmostLayerSprite, activeState.sprite.
+ *
+ * Les sprites d'une plante sont éparpillés — `sprite`, `immatureSprite`,
+ * `topmostLayerSprite`, `activeState.sprite` chez les célestes — et le jeu en
+ * ajoute au fil des mises à jour. On résout donc sur la valeur plutôt que sur
+ * une liste de champs à tenir à jour.
  */
 function transformPlantPart(partData, spriteVersion) {
   if (!partData || typeof partData !== "object") {
     return partData;
   }
 
-  const transformed = { ...partData };
-
-  for (const field of ["sprite", "immatureSprite", "topmostLayerSprite"]) {
-    if (transformed[field] !== undefined) {
-      transformed[field] = resolveSpriteField(transformed[field], spriteVersion);
-    }
-  }
-
-  if (transformed.activeState?.sprite !== undefined) {
-    transformed.activeState = {
-      ...transformed.activeState,
-      sprite: resolveSpriteField(transformed.activeState.sprite, spriteVersion),
-    };
-  }
-
-  return transformed;
+  return resolveSpritePathsDeep(partData, { version: spriteVersion });
 }
 
 /**
