@@ -58,6 +58,20 @@ function scanStringEnumIIFEs(mainJs) {
   return results;
 }
 
+/**
+ * Retourne un enum du bundle sous forme { clé: valeur canonique }.
+ * Utile quand le bundle référence l'enum par sa clé (`F.Mythic`) alors que le
+ * reste de l'API expose la valeur (`"Mythical"`).
+ */
+export function findStringEnumMap(mainJs, requiredKeys) {
+  const found = scanStringEnumIIFEs(mainJs).find((entries) => {
+    const keys = entries.map(([key]) => key);
+    return requiredKeys.every((required) => keys.includes(required));
+  });
+
+  return found ? Object.fromEntries(found) : null;
+}
+
 function valueShapeMatches(values, shape) {
   if (!shape) return true;
   if (shape === "lowercase") return values.every((v) => /^[a-z]/.test(v));

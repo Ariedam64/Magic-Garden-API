@@ -3,6 +3,7 @@
 import { config } from "../../../config/index.js";
 import { logger } from "../../../logger/index.js";
 import { definesColorsFor } from "./colors.js";
+import { definesAbilityDescriptions } from "../../extractors/abilityText.js";
 import { ABILITY_COLOR_NAMES, MUTATION_COLOR_NAMES, COLOR_MIN_HITS } from "./colorNames.js";
 
 /**
@@ -69,6 +70,14 @@ const COLOR_TARGETS = [
   { id: "abilityColors", names: ABILITY_COLOR_NAMES },
   { id: "mutationColors", names: MUTATION_COLOR_NAMES },
 ];
+
+// Les textes de tooltip des abilities vivent dans le chunk UI, encore ailleurs
+// que les données et que les couleurs. Même principe de détection : on ne
+// retient un chunk que si on sait y localiser le bloc des descriptions.
+const ABILITY_TEXT_TARGET = {
+  id: "abilityText",
+  test: (content) => definesAbilityDescriptions(content),
+};
 
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
 // Le jeu ajoute régulièrement un niveau d'indirection à l'entrée (v950 a inséré
@@ -243,6 +252,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
       id: t.id,
       test: (c) => definesColorsFor(c, t.names, COLOR_MIN_HITS),
     })),
+    ABILITY_TEXT_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -282,11 +292,20 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     uiColorsSources.push(chunk.content);
   }
 
+  const abilityTextChunk = found.get(ABILITY_TEXT_TARGET.id);
+  if (!abilityTextChunk) {
+    logger.error(
+      { target: ABILITY_TEXT_TARGET.id },
+      "Ability text chunk not found in bundle graph (descriptions will be null)"
+    );
+  }
+
   return {
     indexUrl,
     mainUrl: dataChunk.url,
     mainJs: dataChunk.content,
     indexJs,
     uiColorsSources,
+    abilityTextSource: abilityTextChunk?.content ?? null,
   };
 }

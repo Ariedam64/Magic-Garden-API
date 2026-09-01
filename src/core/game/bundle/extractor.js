@@ -3,14 +3,15 @@
 import vm from "node:vm";
 
 /**
- * Extrait un bloc équilibré de braces "{...}" en respectant les strings.
+ * Extrait un bloc délimité équilibré en respectant les strings.
+ * Retourne null si le bloc n'est pas refermé.
  */
-export function extractBalancedBraces(text, startBraceIndex) {
+export function extractBalanced(text, startIndex, open, close) {
   let depth = 0;
   let inStr = null;
   let esc = false;
 
-  for (let i = startBraceIndex; i < text.length; i++) {
+  for (let i = startIndex; i < text.length; i++) {
     const ch = text[i];
 
     if (inStr) {
@@ -31,53 +32,36 @@ export function extractBalancedBraces(text, startBraceIndex) {
       continue;
     }
 
-    if (ch === "{") depth++;
-    else if (ch === "}") {
+    if (ch === open) depth++;
+    else if (ch === close) {
       depth--;
-      if (depth === 0) return text.slice(startBraceIndex, i + 1);
+      if (depth === 0) return text.slice(startIndex, i + 1);
     }
   }
 
-  throw new Error("Brace matching failed (object literal not fully extracted)");
+  return null;
+}
+
+/**
+ * Extrait un bloc équilibré de braces "{...}" en respectant les strings.
+ */
+export function extractBalancedBraces(text, startBraceIndex) {
+  const block = extractBalanced(text, startBraceIndex, "{", "}");
+  if (block === null) {
+    throw new Error("Brace matching failed (object literal not fully extracted)");
+  }
+  return block;
 }
 
 /**
  * Extrait un bloc équilibré de parenthèses "(...)" en respectant les strings.
  */
 export function extractBalancedParens(text, startParenIndex) {
-  let depth = 0;
-  let inStr = null;
-  let esc = false;
-
-  for (let i = startParenIndex; i < text.length; i++) {
-    const ch = text[i];
-
-    if (inStr) {
-      if (esc) {
-        esc = false;
-        continue;
-      }
-      if (ch === "\\") {
-        esc = true;
-        continue;
-      }
-      if (ch === inStr) inStr = null;
-      continue;
-    }
-
-    if (ch === "'" || ch === '"' || ch === "`") {
-      inStr = ch;
-      continue;
-    }
-
-    if (ch === "(") depth++;
-    else if (ch === ")") {
-      depth--;
-      if (depth === 0) return text.slice(startParenIndex, i + 1);
-    }
+  const block = extractBalanced(text, startParenIndex, "(", ")");
+  if (block === null) {
+    throw new Error("Paren matching failed");
   }
-
-  throw new Error("Paren matching failed");
+  return block;
 }
 
 /**

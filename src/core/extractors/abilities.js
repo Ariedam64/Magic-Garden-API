@@ -4,6 +4,7 @@ import { extractCategoryWithSandbox } from "../game/bundle/extractor.js";
 import { extractColorMapping, applyColors } from "../game/bundle/colors.js";
 import { ABILITY_COLOR_NAMES, COLOR_MIN_HITS } from "../game/bundle/colorNames.js";
 import { buildBaseSandbox } from "./sandbox.js";
+import { extractAbilityDescriptions } from "./abilityText.js";
 import { logger } from "../../logger/index.js";
 
 /**
@@ -50,8 +51,12 @@ function extractCelestialAbilities(mainJs) {
  * le build) qui a déjà changé de chunk et de forme plusieurs fois : la
  * localisation et le parsing sont délégués à `bundle/colors.js`, tolérant aux
  * deux dimensions. Voir ce module pour l'historique des formes rencontrées.
+ *
+ * Les descriptions viennent encore d'ailleurs (le chunk UI qui construit les
+ * tooltips) et sont déléguées à `abilityText.js`. Leur absence laisse
+ * `description` à null sans casser le reste.
  */
-export function extractAbilities(mainJs, indexJs, uiColorsSources) {
+export function extractAbilities(mainJs, indexJs, uiColorsSources, abilityTextSource) {
   const abilities = extractCategoryWithSandbox(mainJs, "abilities", SIGNATURES, buildBaseSandbox).data;
   const celestial = extractCelestialAbilities(mainJs);
   Object.assign(abilities, celestial);
@@ -63,5 +68,15 @@ export function extractAbilities(mainJs, indexJs, uiColorsSources) {
     label: "abilities",
   });
 
-  return applyColors(abilities, colors, defaultColor?.solid ?? DEFAULT_ABILITY_COLOR, "abilities");
+  applyColors(abilities, colors, defaultColor?.solid ?? DEFAULT_ABILITY_COLOR, "abilities");
+
+  const descriptions = extractAbilityDescriptions(abilityTextSource ?? indexJs ?? mainJs, mainJs);
+
+  for (const [key, ability] of Object.entries(abilities)) {
+    const text = descriptions[key];
+    ability.description = text?.description ?? null;
+    ability.descriptionTokens = text?.descriptionTokens ?? [];
+  }
+
+  return abilities;
 }

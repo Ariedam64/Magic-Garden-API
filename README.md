@@ -70,10 +70,34 @@ The server starts on `http://localhost:3000`
 | `GET /data/decors` | Decorations with sprites |
 | `GET /data/mutations` | Plant mutations with sprites |
 | `GET /data/eggs` | Animal eggs with sprites |
-| `GET /data/abilities` | Special abilities |
+| `GET /data/abilities` | Special abilities (with tooltip descriptions) |
 | `GET /data/weathers` | Weather definitions with sprites |
 | `GET /data/weather-groups` | Weather scheduling engine: duration, time slots and weighted drop table per group (Hydro, Lunar) |
 | `GET /data/enums` | Canonical game enums (rarity, currency, eligibleShops, itemType, weather, mutationTierOrder) |
+
+#### Ability descriptions
+
+`/data/abilities` exposes the in-game tooltip text as `description`, in English.
+Placeholders `<0/>`, `<1/>`, ... stand for icons; `descriptionTokens` says what
+each one is, in order:
+
+```json
+"MoonKisser": {
+  "name": "Amberbinder",
+  "color": "#FAA623",
+  "description": "Chance to replace <0/> with <1/> mutation on surrounding crops during Amber Moon",
+  "descriptionTokens": [
+    { "type": "mutation", "id": "Ambershine" },
+    { "type": "mutation", "id": "Ambercharged" }
+  ]
+}
+```
+
+A token `type` is `mutation`, `item`, `crop`, `currency`, `rarity` or `unknown`,
+and its `id` points at the matching `/data/*` entry (or enum value). Replace each
+placeholder with the token's icon, or with its `id` for plain text. The numbers
+(probability, cooldown) are not in the sentence - read them from
+`baseProbability` / `baseParameters`.
 
 ### CSV / TSV Export
 

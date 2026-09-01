@@ -760,6 +760,28 @@ paths:
         - `gradient`: only on multicolour abilities (GoldGranter,
           RainbowGranter). Carries the full ramp — `angleDegrees` plus ordered
           `colorStops` of `{color, offset}`, `offset` in `0..1`.
+        - `description` / `descriptionTokens`: the in-game tooltip sentence.
+
+        **Descriptions**
+
+        `description` is the tooltip text the game shows, in English, and is
+        `null` when the game ships none. It may contain positional placeholders
+        `<0/>`, `<1/>`, ... which the game renders as icons. `descriptionTokens`
+        gives what each placeholder stands for, in the same order:
+
+        | `type` | `id` refers to |
+        |---|---|
+        | `mutation` | a `/data/mutations` entry |
+        | `item` | a `/data/items` entry |
+        | `crop` | a `/data/plants` entry |
+        | `currency` | a value of the `currency` enum |
+        | `rarity` | a value of the `rarity` enum |
+        | `unknown` | unresolved (`id` is `null`) |
+
+        Substitute each placeholder with the token's icon, or with its `id` for
+        a plain-text rendering. Numeric values (probability, cooldown) are not
+        part of the sentence — they come from `baseProbability` /
+        `baseParameters`.
 
         **Use cases:**
         - Build pet ability guides
@@ -786,6 +808,10 @@ paths:
                       baseParameters:
                         baseMaxCoinsFindable: 120000
                       color: "#B49600"
+                      description: "Chance to find <0/> coins"
+                      descriptionTokens:
+                        - type: "currency"
+                          id: "Coins"
                     GoldGranter:
                       name: "Gold Granter"
                       trigger: "continuous"
@@ -805,6 +831,10 @@ paths:
                             offset: 0.7
                           - color: "#C8AF1E"
                             offset: 1
+                      description: "Chance to grant <0/> mutation to a garden crop"
+                      descriptionTokens:
+                        - type: "mutation"
+                          id: "Gold"
                     PlantGrowthBoostIII:
                       name: "Plant Growth Boost III"
                       trigger: "continuous"
@@ -812,6 +842,8 @@ paths:
                       baseParameters:
                         plantGrowthReductionMinutes: 7
                       color: "#969696"
+                      description: "Chance to reduce growth time of garden plants"
+                      descriptionTokens: []
 
   /data/mutations:
     get:
