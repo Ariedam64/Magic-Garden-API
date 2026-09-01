@@ -1,8 +1,16 @@
 // src/services/historyQueries.js
 
 import { getDB } from "./historyDB.js";
+import { gameDataService } from "./gameData.js";
+import { liveDataService } from "./liveData.js";
+import { logger } from "../logger/index.js";
 
-export const SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn", "snow", "thunder"];
+// Amorce utilisée tant qu'aucune source dynamique n'a répondu (démarrage à froid
+// sans bundle ni données live).
+const FALLBACK_SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn", "snow", "thunder"];
+
+let cachedShopTypes = null;
+
 export const BUCKETS = ["hour", "day", "week"];
 
 const MS = {
@@ -60,9 +68,40 @@ export function resolveBucket(bucket, { from, to }) {
   return { bucket: b, ms };
 }
 
-export function validateShop(shop) {
-  if (!SHOP_TYPES.includes(shop)) {
-    const err = new Error(`shop must be one of ${SHOP_TYPES.join(", ")}`);
+/**
+ * Liste des shops interrogeables : aucune liste codée en dur, un nouveau shop
+ * côté jeu est accepté sans modification de code.
+ *
+ * Deux sources complémentaires, unies :
+ * - l'enum `eligibleShops` du bundle (même source que `/data/enums`) ;
+ * - les clés réellement renvoyées par l'API live, disponibles même si le bundle
+ *   est temporairement inaccessible.
+ *
+ * L'union est cumulative : un shop retiré du jeu reste interrogeable, son
+ * historique existe toujours en base.
+ */
+export async function getShopTypes() {
+  const shopTypes = new Set(cachedShopTypes ?? FALLBACK_SHOP_TYPES);
+
+  try {
+    const { eligibleShops } = await gameDataService.getEnums();
+    for (const shop of eligibleShops ?? []) shopTypes.add(String(shop).toLowerCase());
+  } catch (err) {
+    logger.warn({ err: err?.message }, "Shop types: enums unavailable, using live shops only");
+  }
+
+  for (const shop of Object.keys(liveDataService.getShops() ?? {})) {
+    shopTypes.add(shop.toLowerCase());
+  }
+
+  cachedShopTypes = [...shopTypes];
+  return cachedShopTypes;
+}
+
+export async function validateShop(shop) {
+  const shopTypes = await getShopTypes();
+  if (!shopTypes.includes(shop)) {
+    const err = new Error(`shop must be one of ${shopTypes.join(", ")}`);
     err.code = "BAD_SHOP";
     throw err;
   }

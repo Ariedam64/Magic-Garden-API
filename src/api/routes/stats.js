@@ -34,9 +34,9 @@ function handleValidationError(err, res) {
 }
 
 // GET /stats/items/timeseries?shop=seed&ids=Carrot,Strawberry&from=...&to=...&bucket=day
-statsRouter.get("/items/timeseries", (req, res) => {
+statsRouter.get("/items/timeseries", async (req, res) => {
   try {
-    const shop = validateShop(String(req.query.shop || ""));
+    const shop = await validateShop(String(req.query.shop || ""));
     const ids = parseIds(req.query.ids);
     const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
     const { bucket, ms } = resolveBucket(req.query.bucket, { from, to });
@@ -52,9 +52,9 @@ statsRouter.get("/items/timeseries", (req, res) => {
 // GET /stats/items/events?shop=seed&ids=A,B&from=...&to=...&limit=5000&order=asc
 // Raw per-appearance events (one row per item in each restock). Used by the
 // shop history chart when zoomed in tight enough that aggregation hides detail.
-statsRouter.get("/items/events", (req, res) => {
+statsRouter.get("/items/events", async (req, res) => {
   try {
-    const shop = validateShop(String(req.query.shop || ""));
+    const shop = await validateShop(String(req.query.shop || ""));
     const ids = parseIds(req.query.ids);
     const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
     const limit = resolveEventsLimit(req.query.limit);
@@ -73,9 +73,9 @@ statsRouter.get("/items/events", (req, res) => {
 });
 
 // GET /stats/items?shop=seed&from=...&to=...&sort=appearances&order=asc
-statsRouter.get("/items", (req, res) => {
+statsRouter.get("/items", async (req, res) => {
   try {
-    const shop = validateShop(String(req.query.shop || ""));
+    const shop = await validateShop(String(req.query.shop || ""));
     const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
     const sort = req.query.sort ? String(req.query.sort) : "appearances";
     const order = req.query.order ? String(req.query.order) : "asc";
@@ -131,9 +131,9 @@ statsRouter.get("/weather/events", (req, res) => {
 });
 
 // GET /stats/shops/restocks?shop=seed&ids=A,B&from=...&to=...&limit=100&order=desc
-statsRouter.get("/shops/restocks", (req, res) => {
+statsRouter.get("/shops/restocks", async (req, res) => {
   try {
-    const shop = validateShop(String(req.query.shop || ""));
+    const shop = await validateShop(String(req.query.shop || ""));
     const { from, to } = resolveRange({ from: req.query.from, to: req.query.to });
     const limit = resolveLimit(req.query.limit);
     const order = req.query.order ? String(req.query.order) : "desc";

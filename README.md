@@ -129,7 +129,7 @@ Backed by a local SQLite history of every shop restock and weather transition ob
 | `GET /stats/shops/restocks` | Raw shop restock timeline with embedded items (supports `ids` filter) |
 
 **Common query parameters:**
-- `shop` (required for `/stats/items*` and `/stats/shops/restocks`): one of `seed`, `tool`, `egg`, `decor`, `dawn`
+- `shop` (required for `/stats/items*` and `/stats/shops/restocks`): any shop id listed by `/data/enums` -> `eligibleShops` (`seed`, `tool`, `egg`, `decor`, `rain`, `dawn`, `amber`, `snow`, `thunder`, ...)
 - `from` / `to`: epoch ms or ISO 8601 (default: last 30 days)
 - `bucket` (timeseries only): `hour`, `day`, `week` (UTC-aligned, hard cap 10 000 buckets per response)
 - `ids` (optional, comma-separated): restrict `/stats/items/timeseries` and `/stats/shops/restocks` to specific item ids

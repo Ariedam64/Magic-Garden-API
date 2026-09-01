@@ -108,7 +108,7 @@ tags:
 
       **Data sources:**
       - Weather: Current in-game weather condition
-      - Shops: Inventory, restock date and countdown for every shop the game exposes (seed, tool, egg, decor, dawn, snow, thunder, apology)
+      - Shops: Inventory, restock date and countdown for every shop the game exposes (see `/data/enums` -> `eligibleShops`)
 
       **Update methods:**
       - Snapshot: One-time GET request for current state
@@ -1040,7 +1040,7 @@ paths:
                   value:
                     rarity: ["Common", "Uncommon", "Rare", "Legendary", "Mythical", "Divine", "Celestial"]
                     currency: ["coins", "credits", "magicDust"]
-                    eligibleShops: ["seed", "egg", "tool", "decor", "dawn", "snow", "thunder"]
+                    eligibleShops: ["seed", "egg", "tool", "decor", "rain", "dawn", "amber", "snow", "thunder", "apology"]
                     itemType: ["Seed", "Produce", "Plant", "Tool", "Pet", "Egg", "Decor"]
                     weather: ["Rain", "Frost", "Thunderstorm", "Dawn", "AmberMoon"]
                     mutationTierOrder: ["Wet", "Chilled", "Frozen", "Thunderstruck", "Dawnlit", "Ambershine", "Dawncharged", "Ambercharged"]
@@ -1966,7 +1966,7 @@ paths:
 
         **Includes:**
         - Current weather condition
-        - All shop inventories (seed, tool, egg, decor, dawn, snow, thunder)
+        - All shop inventories (see `/data/enums` -> `eligibleShops` for the current list)
         - Restock timers for each shop
 
         **Use cases:**
@@ -2160,7 +2160,7 @@ paths:
         - **tool**: Tool shop (equipment, plus some decor) — every 10 min
         - **egg**: Egg shop (pets) — every 15 min
         - **decor**: Decoration shop (cosmetics) — every hour
-        - **dawn**, **snow**, **thunder**: event shops, open only during the matching weather
+        - **rain**, **dawn**, **amber**, **snow**, **thunder**: event shops, open only during the matching weather
         - **apology**: occasional compensation shop, opened by the game's operators
 
         Each shop includes:
