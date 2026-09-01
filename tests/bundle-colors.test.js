@@ -18,6 +18,8 @@ import {
   resolveColorValue,
   parseObjectEntries,
   readExpression,
+  parseGradient,
+  applyColors,
 } from "../src/core/game/bundle/colors.js";
 import {
   ABILITY_COLOR_NAMES,
@@ -121,6 +123,54 @@ for (const [label, source] of [
     }
   });
 }
+
+// --- Dégradés --------------------------------------------------------------
+//
+// Rainbow / GoldGranter / RainbowGranter sont multicolores dans le jeu. Le
+// parser gardait déjà le dégradé mais `applyColors` ne posait que le solide :
+// l'API rendait Rainbow en rouge plat. On fige donc le trajet complet, du
+// bundle jusqu'à l'entité exposée.
+
+test("parseGradient normalise l'object literal du bundle", () => {
+  // Offsets écrits en fractions et quotes en backticks : ce n'est pas du JSON.
+  const gradient = parseGradient(
+    "{angleDegrees:135,colorStops:[{color:`#D02128`,offset:0},{color:`#FC6D30`,offset:1/7},{color:`#AE53B0`,offset:1}]}"
+  );
+  assert.equal(gradient.angleDegrees, 135);
+  assert.equal(gradient.colorStops.length, 3);
+  assert.deepEqual(gradient.colorStops[0], { color: "#D02128", offset: 0 });
+  assert.equal(gradient.colorStops[1].offset, 1 / 7);
+});
+
+test("parseGradient refuse ce qui n'est pas un dégradé exploitable", () => {
+  assert.equal(parseGradient(null), null);
+  assert.equal(parseGradient("{angleDegrees:135}"), null);
+  // Référence à une variable minifiée : contexte vide => pas de couleur inventée.
+  assert.equal(parseGradient("{colorStops:Fm}"), null);
+  // Stops non colorés : on ne les expose pas.
+  assert.equal(parseGradient("{colorStops:[{color:`Amberlit`,offset:0}]}"), null);
+});
+
+test("applyColors expose le dégradé à côté de la couleur plate", () => {
+  const { colors, defaultColor } = extractColorMapping([MUTATION_MAP_OBJECT], {
+    names: MUTATION_COLOR_NAMES,
+    minHits: COLOR_MIN_HITS,
+  });
+  const entities = { Rainbow: { name: "Rainbow" }, Gold: { name: "Gold" }, Inconnue: { name: "?" } };
+  applyColors(entities, colors, defaultColor?.solid ?? "#969696", "test-mutations");
+
+  assert.equal(entities.Rainbow.color, "#D02128");
+  assert.equal(entities.Rainbow.gradient.angleDegrees, 135);
+  assert.deepEqual(entities.Rainbow.gradient.colorStops, [
+    { color: "#D02128", offset: 0 },
+    { color: "#AE53B0", offset: 1 },
+  ]);
+  // Une entité monochrome ne porte pas de clé `gradient` vide.
+  assert.equal(entities.Gold.color, "rgb(235, 200, 0)");
+  assert.equal("gradient" in entities.Gold, false);
+  assert.equal(entities.Inconnue.color, "#969696");
+  assert.equal("gradient" in entities.Inconnue, false);
+});
 
 // --- Robustesse ------------------------------------------------------------
 

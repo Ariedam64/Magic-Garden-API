@@ -749,9 +749,17 @@ paths:
         Returns all pet special abilities.
 
         Each ability includes:
-        - Name and description
-        - Effect type and parameters
-        - Which pets have this ability
+        - `name`: display name
+        - `trigger`: when the ability fires (`continuous`, `hatchEgg`,
+          `sellAllCrops`, `weather`, ...)
+        - `baseProbability`: chance in percent (absent on always-on triggers)
+        - `baseParameters`: the effect's own parameters, shape depends on the ability
+        - `color`: the flat colour used by the game's UI. Abilities the game
+          gives no dedicated colour to — newer tier III variants, for
+          instance — fall back to the game's own default, `#969696`.
+        - `gradient`: only on multicolour abilities (GoldGranter,
+          RainbowGranter). Carries the full ramp — `angleDegrees` plus ordered
+          `colorStops` of `{color, offset}`, `offset` in `0..1`.
 
         **Use cases:**
         - Build pet ability guides
@@ -771,21 +779,39 @@ paths:
                 abilityData:
                   summary: Example abilities
                   value:
-                    HarvestBoost:
-                      name: "Harvest Boost"
-                      description: "Increases crop yield by 10%"
-                      effectType: "yield"
-                      effectValue: 0.1
-                    LuckBoost:
-                      name: "Luck Boost"
-                      description: "Increases chance of rare drops"
-                      effectType: "luck"
-                      effectValue: 0.15
-                    FindTreasure:
-                      name: "Find Treasure"
-                      description: "Occasionally finds random items"
-                      effectType: "treasure"
-                      effectValue: 0.05
+                    CoinFinderI:
+                      name: "Coin Finder I"
+                      trigger: "continuous"
+                      baseProbability: 35
+                      baseParameters:
+                        baseMaxCoinsFindable: 120000
+                      color: "#B49600"
+                    GoldGranter:
+                      name: "Gold Granter"
+                      trigger: "continuous"
+                      baseProbability: 0.72
+                      baseParameters:
+                        grantedMutations:
+                          - "Gold"
+                      color: "#DCC846"
+                      gradient:
+                        angleDegrees: 135
+                        colorStops:
+                          - color: "#DCC846"
+                            offset: 0
+                          - color: "#D2AF05"
+                            offset: 0.4
+                          - color: "#D2B937"
+                            offset: 0.7
+                          - color: "#C8AF1E"
+                            offset: 1
+                    PlantGrowthBoostIII:
+                      name: "Plant Growth Boost III"
+                      trigger: "continuous"
+                      baseProbability: 30
+                      baseParameters:
+                        plantGrowthReductionMinutes: 7
+                      color: "#969696"
 
   /data/mutations:
     get:
@@ -800,6 +826,10 @@ paths:
         - Parent plant reference
         - Visual differences
         - Sprite URL
+        - `color`: the flat colour used by the game's UI
+        - `gradient`: only on multicolour mutations (Rainbow). Carries the full
+          ramp — `angleDegrees` plus ordered `colorStops` of `{color, offset}`,
+          `offset` in `0..1` — so it can be rendered instead of the flat `color`.
 
         **Use cases:**
         - Build mutation guides
@@ -824,6 +854,23 @@ paths:
                       coinMultiplier: 25
                       color: "rgb(235, 200, 0)"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/MutationGold.png"
+                    Rainbow:
+                      name: "Rainbow"
+                      baseChance: 0.001
+                      coinMultiplier: 50
+                      color: "#D02128"
+                      gradient:
+                        angleDegrees: 135
+                        colorStops:
+                          - color: "#D02128"
+                            offset: 0
+                          - color: "#FC6D30"
+                            offset: 0.2857142857142857
+                          - color: "#48ADF4"
+                            offset: 0.7142857142857143
+                          - color: "#AE53B0"
+                            offset: 1
+                      sprite: "https://mg-api.ariedam.fr/assets/sprites/ui/MutationRainbow.png"
                     Wet:
                       name: "Wet"
                       baseChance: 0

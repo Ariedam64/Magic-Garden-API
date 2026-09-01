@@ -25,6 +25,8 @@
 // changement de quotes ou un déplacement dans un autre chunk sont absorbés
 // sans modification de code.
 
+import vm from "node:vm";
+
 import { logger } from "../../../logger/index.js";
 
 /** Littéral de couleur CSS : #rgb(a), #rrggbb(aa), rgb()/rgba()/hsl()/hsla(). */
@@ -522,17 +524,66 @@ export function getColorCoverage() {
 }
 
 /**
+ * Normalise l'expression brute d'un dégradé vers un objet exploitable.
+ *
+ * Le bundle stocke le dégradé comme un object literal JS, pas du JSON : quotes
+ * en backticks et offsets écrits en fractions (`offset:1/7`). On l'évalue donc
+ * dans un contexte *vide* — toute référence à une variable minifiée lève une
+ * ReferenceError et on renvoie null plutôt que d'exposer une donnée douteuse.
+ *
+ * @returns {{ angleDegrees: number|null, colorStops: Array<{color: string, offset: number}> } | null}
+ */
+export function parseGradient(expr) {
+  if (!expr || typeof expr !== "string" || expr.length > MAX_VALUE_LENGTH) return null;
+
+  let raw;
+  try {
+    raw = vm.runInNewContext(`(${expr})`, Object.create(null), { timeout: 250 });
+  } catch {
+    return null;
+  }
+
+  if (!raw || typeof raw !== "object") return null;
+
+  // `Array.from` recrée le tableau dans *notre* realm : celui rendu par la vm
+  // porte un autre Array.prototype, ce qui piège toute comparaison en aval.
+  const colorStops = Array.from(Array.isArray(raw.colorStops) ? raw.colorStops : [])
+    .filter((stop) => stop && isColorLiteral(String(stop.color)) && Number.isFinite(stop.offset))
+    .map((stop) => ({ color: String(stop.color).trim(), offset: stop.offset }));
+
+  if (!colorStops.length) return null;
+
+  return {
+    angleDegrees: Number.isFinite(raw.angleDegrees) ? raw.angleDegrees : null,
+    colorStops,
+  };
+}
+
+/**
  * Applique une map de couleurs à une collection d'entités et journalise la
  * couverture — c'est ce log qui rend la prochaine casse visible immédiatement.
+ *
+ * Certaines entités (Rainbow, GoldGranter, RainbowGranter) sont multicolores
+ * dans le jeu : `color` en garde la couleur plate — c'est le contrat historique
+ * de l'API — et `gradient` expose la rampe complète pour qui veut la rendre.
  */
 export function applyColors(entities, colors, defaultColor, label) {
   const total = Object.keys(entities).length;
   let matched = 0;
+  let gradients = 0;
 
   for (const [key, entity] of Object.entries(entities)) {
     const hit = colors[key];
     if (hit) matched++;
     entity.color = hit?.solid ?? defaultColor;
+
+    const gradient = parseGradient(hit?.gradient);
+    if (gradient) {
+      entity.gradient = gradient;
+      gradients++;
+    } else {
+      delete entity.gradient;
+    }
   }
 
   // Une couverture partielle est normale : certaines entités n'ont volontairement
@@ -544,10 +595,10 @@ export function applyColors(entities, colors, defaultColor, label) {
   } else if (total && matched < total / 2) {
     logger.warn({ label, matched, total }, "Color coverage dropped: bundle color block may have changed");
   } else {
-    logger.debug({ label, matched, total }, "Colors applied");
+    logger.debug({ label, matched, total, gradients }, "Colors applied");
   }
 
-  coverage.set(label, { matched, total, extractedAt: new Date().toISOString() });
+  coverage.set(label, { matched, total, gradients, extractedAt: new Date().toISOString() });
 
   return entities;
 }
