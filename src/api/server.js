@@ -17,6 +17,7 @@ import {
   dataRouter, dataCsvRootHandler, dataTsvRootHandler,
   liveRouter, liveCsvRootHandler, liveTsvRootHandler,
   healthRouter, docsRouter, assetsRouter, statsRouter,
+  weatherStationRouter,
 } from "./routes/index.js";
 
 /**
@@ -78,6 +79,9 @@ export function createApp() {
 
   // Stats routes (aggregated history)
   app.use("/stats", statsRouter);
+
+  // Weather station (deterministic forecast: present + upcoming + accuracy)
+  app.use("/weather-station", weatherStationRouter);
 
   // Root endpoint
   app.get("/", (_req, res) => {

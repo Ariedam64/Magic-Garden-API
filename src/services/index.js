@@ -5,3 +5,4 @@ export { liveDataService } from "./liveData.js";
 export { startLivePoller, stopLivePoller, pollLiveStateNow } from "./livePoller.js";
 export { assetDataService } from "./assetData.js";
 export { startHistoryRecorder, stopHistoryRecorder } from "./historyRecorder.js";
+export { weatherStationService } from "./weatherStation.js";
