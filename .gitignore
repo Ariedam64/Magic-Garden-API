@@ -47,3 +47,4 @@ data/version.json
 # Local history exports / one-shot dumps (large data, not for git)
 export/
 dump.json
+roles.json
