@@ -10,7 +10,6 @@ import {
   extractAbilities,
   extractMutations,
   extractWeathers,
-  extractWeatherGroups,
   extractEnums,
   ExtractorRegistry,
 } from "../core/extractors/index.js";
@@ -76,13 +75,10 @@ export const gameDataService = {
     return getCategoryCached("weathers", extractWeathers);
   },
 
-  /**
-   * Récupère le moteur de scheduling météo par groupe (Hydro, Lunar):
-   * durée d'un événement, fréquence/slots fixes, et drop table pondérée.
-   */
-  async getWeatherGroups() {
-    return getCategoryCached("weatherGroups", extractWeatherGroups);
-  },
+  // Il n'y a plus de `getWeatherGroups()` ici : la v1141 du jeu (2026-09-11) a
+  // sorti le scheduler météo du bundle client (seul `durationMinutes` subsiste,
+  // les créneaux et drop tables ont disparu de tous les chunks). Le moteur est
+  // désormais modélisé dans `src/core/weather/eras.js` et servi de là.
 
   /**
    * Récupère les enums canoniques (rarity, currency, eligibleShops, itemType,

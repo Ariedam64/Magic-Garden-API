@@ -363,8 +363,16 @@ paths:
         - Abilities (special pet abilities)
         - Weathers (weather definitions and icons)
         - Weather groups (scheduling engine: duration, timing, drop odds)
+        - Enums (canonical rarity, currency, item type, shop lists)
 
         **Note:** All sprite URLs are absolute and ready to use.
+
+        **Partial responses:** a game update can move the data out from under one of
+        the extractors. When that happens the affected key is simply **absent** from
+        this response rather than the whole endpoint failing, so read defensively
+        (`data.pets?.…`) instead of assuming every key is present. `/health` lists
+        any currently unavailable category under `data.unavailable`, and the
+        per-category endpoint (e.g. `/data/pets`) still returns the error.
       responses:
         '200':
           description: All game data
@@ -399,7 +407,12 @@ paths:
                     description: All weathers data (keyed by weather ID)
                   weatherGroups:
                     type: object
-                    description: Weather scheduling engine data (keyed by group ID)
+                    description: >-
+                      Weather scheduling rules (keyed by group ID). Modelled, not
+                      extracted — see `/data/weather-groups`.
+                  enums:
+                    type: object
+                    description: Canonical game enums (rarity, currency, item type, shops)
               examples:
                 complete:
                   summary: Complete data response
@@ -958,10 +971,23 @@ paths:
         - Data
       summary: Get the weather scheduling engine (groups, timing, drop odds)
       description: |
-        Returns the deterministic weather scheduling data extracted from the bundle,
-        grouped by weather family (`Hydro`, `Lunar`). This is the engine that decides
-        *when* a weather event can start and *which* weather is picked, independently
-        of the per-weather definitions returned by `/data/weathers`.
+        Returns the deterministic weather scheduling rules, grouped by weather family
+        (`Hydro`, `Lunar`). This is the engine that decides *when* a weather event can
+        start and *which* weather is picked, independently of the per-weather
+        definitions returned by `/data/weathers`.
+
+        **Source changed on 2026-09-11.** Until game version 1141 this table was read
+        straight out of the game bundle. That version removed the scheduler from the
+        client — only `durationMinutes` survives there, and the time slots and drop
+        tables are gone from every chunk — so these rules are now **modelled**, not
+        extracted: they come from a hand-maintained ruleset registry validated against
+        recorded history. The response shape is unchanged.
+
+        Treat it as a model, not as ground truth. `/weather-station/engine` exposes the
+        registry with the date range each ruleset covers, and
+        `/weather-station/accuracy` reports how well it matches what was actually
+        recorded — that measurement is now the only way a scheduler change is detected,
+        and it only moves *after* the game has already diverged.
 
         Each group entry includes:
         - `durationMinutes`: how long a picked weather event lasts once triggered
@@ -972,6 +998,10 @@ paths:
         - `dropTable`: candidate weather IDs with their relative `weight` — the actual
           probability of a given weather is `weight / sum(weights in the same group)`
           (e.g. Rain = 50/100 = 50% chance whenever the Hydro group triggers)
+        - `deck` (Lunar, current ruleset): the fixed slots are not independent draws but
+          a deal — over `cycleDays` days each slot receives `dealtWeatherId` exactly
+          once, the rest going to `baseWeatherId`. Same long-run odds as `dropTable`,
+          different distribution.
 
         Cross-reference `weatherId` in `dropTable` with the keys of `/data/weathers`
         to get each candidate's mutator/sprite.
@@ -1008,6 +1038,11 @@ paths:
                           weight: 67
                         - weatherId: "AmberMoon"
                           weight: 33
+                      deck:
+                        cycleDays: 3
+                        dealtWeatherId: "AmberMoon"
+                        baseWeatherId: "Dawn"
+                        splits: [[2, 2, 2], [1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
         '304':
           description: Not modified (matched If-None-Match)
 

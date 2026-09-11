@@ -4,6 +4,8 @@ import express from "express";
 import { getCacheStats } from "../../core/game/cache.js";
 import { getColorCoverage } from "../../core/game/bundle/colors.js";
 import { isAnimationExportRunning } from "../../services/animationSync.js";
+import { getDataCoverage } from "./data.js";
+import { weatherStationService } from "../../services/weatherStation.js";
 
 export const healthRouter = express.Router();
 
@@ -25,6 +27,13 @@ healthRouter.get("/", (_req, res) => {
     // Couverture des couleurs extraites du bundle (abilities/mutations).
     // `matched: 0` = le bloc de couleurs a encore bougé côté jeu.
     colors: getColorCoverage(),
+    // Catégories de `/data` que le bundle courant ne permet plus de construire.
+    // Elles sont omises de l'agrégat au lieu de le faire tomber, donc sans ça
+    // une catégorie perdue ne se verrait plus que dans les logs.
+    data: getDataCoverage(),
+    // Santé du moteur de prédiction météo : une chute de `accuracy_24h.pct` ou
+    // un `drift.aligned: false` signale que le jeu a changé son scheduler.
+    weatherStation: weatherStationService.getHealthSnapshot(),
   });
 });
 
