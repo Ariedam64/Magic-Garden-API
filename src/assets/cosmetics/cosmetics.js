@@ -1,5 +1,5 @@
 import { getBaseUrl } from "../../assets/assets.js";
-import { loadManifest, getBundleByName } from "../../assets/manifest.js";
+import { loadManifest, getBundleByName, assetSourcePaths } from "../../assets/manifest.js";
 import { joinUrl } from "../../utils/url.js";
 
 const state = {
@@ -30,8 +30,7 @@ export async function initCosmetics() {
     state.all = [];
 
     for (const asset of bundle.assets || []) {
-      for (const src of asset.src || []) {
-        if (typeof src !== "string") continue;
+      for (const src of assetSourcePaths(asset)) {
         if (!/^cosmetic\/.+\.png$/i.test(src)) continue;
 
         const file = src.split("/").pop();

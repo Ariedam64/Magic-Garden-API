@@ -9,7 +9,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { extractJsonFiles, extractAllSources } from "../src/assets/manifest.js";
+import { extractJsonFiles, extractAllSources, assetSourcePaths } from "../src/assets/manifest.js";
 
 // Shape captured from https://magicgarden.gg/version/1029/assets/manifest.json
 const MULTI_RESOLUTION_BUNDLE = {
@@ -78,5 +78,38 @@ describe("extractAllSources", () => {
       sources.includes("/runtime-assets/avatar.a37070e0f510200217b1.riv"),
       "legacy string source missing from sources"
     );
+  });
+});
+
+describe("assetSourcePaths", () => {
+  // Shape captured from https://magicgarden.gg/version/1231/assets/manifest.json.
+  // The descriptor carries `progressSize` and no `resolution` — the bundles
+  // `cosmetic` and `audio` moved to it, and every extractor that filtered on
+  // `typeof src === "string"` silently returned nothing from that version on.
+  it("reads descriptors that carry progressSize instead of resolution", () => {
+    assert.deepEqual(
+      assetSourcePaths({
+        alias: ["cosmetic/Banner_Fire.png"],
+        src: [{ src: "cosmetic/Banner_Fire.png", progressSize: 4.67 }],
+      }),
+      ["cosmetic/Banner_Fire.png"]
+    );
+  });
+
+  it("keeps every variant, unlike the JSON atlas extraction", () => {
+    assert.deepEqual(assetSourcePaths(MULTI_RESOLUTION_BUNDLE.assets[0]), [
+      "atlases/sprites-1x-0.json",
+      "atlases/sprites-2x-0.json",
+    ]);
+  });
+
+  it("still reads legacy plain strings", () => {
+    assert.deepEqual(assetSourcePaths({ src: ["audio/sfx/sfx.mp3"] }), ["audio/sfx/sfx.mp3"]);
+  });
+
+  it("returns an empty list for an asset without usable sources", () => {
+    assert.deepEqual(assetSourcePaths(null), []);
+    assert.deepEqual(assetSourcePaths({}), []);
+    assert.deepEqual(assetSourcePaths({ src: [42, null, { nope: true }] }), []);
   });
 });

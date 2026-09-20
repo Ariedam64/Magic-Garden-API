@@ -66,6 +66,18 @@ function normalizeAssetSources(asset) {
 }
 
 /**
+ * Chemins déclarés par un asset, quelle que soit la forme du manifest.
+ *
+ * À lire plutôt que `asset.src` directement : le jeu y a mis des chaînes nues,
+ * puis des descripteurs `{ src, resolution }`, puis `{ src, progressSize }`
+ * (v1231). Chaque extracteur qui filtrait sur `typeof src === "string"` s'est
+ * donc vidé en silence à la bascule.
+ */
+export function assetSourcePaths(asset) {
+  return normalizeAssetSources(asset).map((entry) => entry.src);
+}
+
+/**
  * Among the variants of a single asset, keep only the highest resolution one.
  * Entries without a resolution (legacy) are all kept, since they are distinct
  * assets rather than variants of the same asset.

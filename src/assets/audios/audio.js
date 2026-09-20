@@ -1,5 +1,5 @@
 import { getBaseUrl } from "../../assets/assets.js";
-import { loadManifest, getBundleByName } from "../../assets/manifest.js";
+import { loadManifest, getBundleByName, assetSourcePaths } from "../../assets/manifest.js";
 import { joinUrl } from "../../utils/url.js";
 import { round2 } from "../../utils/roundNumbers.js";
 
@@ -95,7 +95,7 @@ export async function initAudio() {
 
     for (const asset of bundle.assets || []) {
       const aliases = Array.isArray(asset.alias) ? asset.alias : [];
-      const srcs = Array.isArray(asset.src) ? asset.src : [];
+      const srcs = assetSourcePaths(asset);
 
       // ✅ ambience/music — match on alias (src paths are now hashed)
       const aliasMatch = aliases
@@ -104,7 +104,7 @@ export async function initAudio() {
       if (aliasMatch) {
         const cat = aliasMatch[1].toLowerCase();
         const name = aliasMatch[2];
-        const rawSrc = srcs.find(s => typeof s === "string" && s.endsWith(".mp3"));
+        const rawSrc = srcs.find(s => s.endsWith(".mp3"));
         if (rawSrc) {
           const url = joinUrl(baseUrl, rawSrc);
           rememberTheme(name);
@@ -115,8 +115,6 @@ export async function initAudio() {
       }
 
       for (const src of srcs) {
-        if (typeof src !== "string") continue;
-
         // ✅ sfx audio + atlas
         // Path changed from `audio/sfx/sfx.mp3` to `/runtime-assets/sfx.<hash>.mp3`
         if (/^audio\/sfx\/sfx\.mp3$|^\/runtime-assets\/sfx\.[a-f0-9]+\.mp3$/i.test(src)) {
