@@ -2,10 +2,16 @@
 
 import express from "express";
 import { streamLimiter } from "../middleware/index.js";
+import { config } from "../../config/index.js";
 import { liveDataService } from "../../services/index.js";
 import { jsonToCsv, sendCsv, jsonToTsv, sendTsv } from "../../utils/csvConverter.js";
 
 export const liveRouter = express.Router();
+
+// Au-delà de ce retard sans poll réussi, les données servies ne valent plus
+// rien : le shop `seed` tourne toutes les 5 minutes. Large pour absorber un
+// backoff complet, mais assez court pour que la panne se voie.
+const STALE_AFTER_MS = Math.max(config.platform.maxBackoff * 3, 3 * 60 * 1000);
 
 const sseStats = {
   activeConnections: 0,
@@ -72,11 +78,22 @@ liveRouter.get("/shops", (_req, res) => {
 liveRouter.get("/health", (_req, res) => {
   const poller = liveDataService.getStats();
 
-  res.json({
-    // Les données live viennent du polling de l'API officielle du jeu : sans
-    // WebSocket à surveiller, l'état du poller est le seul indicateur de
-    // fraîcheur.
-    ok: poller.running && Boolean(poller.lastSuccessAt),
+  // Les données live viennent du polling de l'API officielle du jeu : sans
+  // WebSocket à surveiller, l'état du poller est le seul indicateur de
+  // fraîcheur.
+  //
+  // `running` ne suffit pas : c'est un simple drapeau posé au démarrage, et il
+  // est resté vrai pendant les ~13 h où la boucle était bloquée le 2026-09-20.
+  // C'est l'âge du dernier succès qui dit si `/live` sert encore du frais.
+  const lastSuccess = poller.lastSuccessAt ? Date.parse(poller.lastSuccessAt) : null;
+  const staleFor = Number.isFinite(lastSuccess) ? Date.now() - lastSuccess : null;
+  const stale = staleFor === null || staleFor > STALE_AFTER_MS;
+
+  res.status(stale ? 503 : 200).json({
+    ok: poller.running && !stale,
+    stale,
+    staleForMs: staleFor,
+    staleAfterMs: STALE_AFTER_MS,
     poller,
     sse: sseStats,
   });

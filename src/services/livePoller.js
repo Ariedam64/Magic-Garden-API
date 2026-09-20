@@ -38,6 +38,17 @@ const RESTOCK_WAKE_MARGIN = 1000;
 // peut-être erronée) pour ne pas marteler l'API officielle.
 const MAX_FAST_POLLS = 12;
 
+// Garde-fou au-dessus du timeout de `fetch`.
+//
+// `getJson` arme pourtant un `AbortSignal.timeout`, mais ça n'a pas suffi : le
+// 2026-09-20 à 07:08 UTC un tour n'a jamais rendu la main et la boucle s'est
+// arrêtée net — `scheduleNext` vit dans le `.finally` du tour, donc un poll qui
+// ne se résout jamais ne reprogramme rien. Le poller est resté `running: true`
+// avec `failures: 0` pendant ~13 h pendant que `/live` servait un shop périmé.
+// On ne dépend donc plus de la seule bonne volonté d'`undici` : passé ce délai
+// le tour est abandonné, compté en échec, et la boucle repart.
+const POLL_WATCHDOG_MARGIN = 5000;
+
 let shops = null; // normalisé, sans compte à rebours (voir shops.js)
 let shopsRaw = null; // payload officiel brut, par type de shop
 let shopsSig = null;
@@ -198,8 +209,44 @@ function scheduleNext() {
   timer = setTimeout(run, computeDelay());
 }
 
+/**
+ * Le tour de polling, borné dans le temps.
+ *
+ * `pollOnce` continue sa vie en arrière-plan si elle finit par se réveiller —
+ * on ne peut pas l'annuler — mais son résultat tardif est ignoré : seule la
+ * reprogrammation compte.
+ */
+function pollOnceWithWatchdog() {
+  const budget = config.platform.timeout + POLL_WATCHDOG_MARGIN;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const watchdog = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`Live poll stalled (no answer after ${budget}ms)`));
+    }, budget);
+
+    pollOnce().then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(watchdog);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(watchdog);
+        reject(err);
+      }
+    );
+  });
+}
+
 function run() {
-  pollOnce()
+  pollOnceWithWatchdog()
     .catch((err) => {
       failures += 1;
       stats.failures += 1;

@@ -2116,54 +2116,44 @@ paths:
         - Live
       summary: Live health & SSE stats
       description: |
-        Returns SSE connection statistics.
+        Returns the freshness of the live data and SSE connection statistics.
 
         **Includes:**
+        - Poller state (last successful poll, failures, last error)
+        - Staleness verdict: how long `/live` has been serving unrefreshed data
         - SSE connection counts (active and total)
         - Event emission stats
+
+        `ok` is driven by the **age of the last successful poll**, not by the
+        poller's `running` flag: a stalled poll loop keeps `running: true`
+        forever. Once `staleForMs` exceeds `staleAfterMs`, `stale` turns true,
+        `ok` turns false and the endpoint answers **503** — the snapshot served
+        by `/live`, `/live/shops` and `/live/weather` can no longer be trusted.
       responses:
         '200':
-          description: Live health status
+          description: Live data is fresh
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  sse:
-                    type: object
-                    properties:
-                      activeConnections:
-                        type: integer
-                        example: 42
-                      activeByStream:
-                        type: object
-                        properties:
-                          all:
-                            type: integer
-                            example: 20
-                          weather:
-                            type: integer
-                            example: 10
-                          shops:
-                            type: integer
-                            example: 12
-                      totalConnections:
-                        type: integer
-                        example: 1200
-                      eventsSent:
-                        type: integer
-                        example: 5843
-                      lastEventAt:
-                        type: string
-                        nullable: true
-                        example: "2026-01-29T19:32:25.123Z"
+                $ref: '#/components/schemas/LiveHealth'
               examples:
                 liveHealth:
                   summary: Live health example
                   value:
                     ok: true
+                    stale: false
+                    staleForMs: 4211
+                    staleAfterMs: 180000
+                    poller:
+                      startedAt: "2026-09-20T20:57:06.755Z"
+                      polls: 412
+                      failures: 0
+                      lastPollAt: "2026-09-20T22:03:21.004Z"
+                      lastSuccessAt: "2026-09-20T22:03:21.311Z"
+                      lastShopsChangeAt: "2026-09-20T22:00:01.080Z"
+                      lastWeatherChangeAt: "2026-09-20T21:40:01.061Z"
+                      lastError: null
+                      running: true
                     sse:
                       activeConnections: 42
                       activeByStream:
@@ -2173,6 +2163,41 @@ paths:
                       totalConnections: 1200
                       eventsSent: 5843
                       lastEventAt: "2026-01-29T19:32:25.123Z"
+        '503':
+          description: |
+            Live data is stale — the poller has not completed a successful poll
+            within `staleAfterMs`. The body has the same shape as the 200.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveHealth'
+              examples:
+                liveHealthStale:
+                  summary: Poll loop stalled
+                  value:
+                    ok: false
+                    stale: true
+                    staleForMs: 49525000
+                    staleAfterMs: 180000
+                    poller:
+                      startedAt: "2026-09-20T04:20:53.094Z"
+                      polls: 671
+                      failures: 0
+                      lastPollAt: "2026-09-20T07:08:33.655Z"
+                      lastSuccessAt: "2026-09-20T07:08:18.654Z"
+                      lastShopsChangeAt: "2026-09-20T07:05:01.080Z"
+                      lastWeatherChangeAt: "2026-09-20T06:35:01.061Z"
+                      lastError: null
+                      running: true
+                    sse:
+                      activeConnections: 6
+                      activeByStream:
+                        all: 4
+                        weather: 0
+                        shops: 2
+                      totalConnections: 5728
+                      eventsSent: 7653
+                      lastEventAt: "2026-09-20T20:53:26.529Z"
 
   /live/weather:
     get:
@@ -3194,6 +3219,103 @@ paths:
 
 components:
   schemas:
+    LiveHealth:
+      type: object
+      description: |
+        Freshness of the live snapshot plus SSE statistics. Returned with
+        HTTP 200 when fresh and HTTP 503 when `stale` is true.
+      properties:
+        ok:
+          type: boolean
+          description: Poller running *and* the last successful poll recent enough.
+          example: true
+        stale:
+          type: boolean
+          description: |
+            `staleForMs` exceeded `staleAfterMs` (or no poll ever succeeded).
+            The data served by `/live` must not be trusted while this is true.
+          example: false
+        staleForMs:
+          type: integer
+          nullable: true
+          description: |
+            Age of the last successful poll, in ms. `null` when the poller has
+            never completed a poll (fresh boot).
+          example: 4211
+        staleAfterMs:
+          type: integer
+          description: Age past which the snapshot is declared stale.
+          example: 180000
+        poller:
+          type: object
+          properties:
+            startedAt:
+              type: string
+              nullable: true
+              example: "2026-09-20T20:57:06.755Z"
+            polls:
+              type: integer
+              example: 412
+            failures:
+              type: integer
+              example: 0
+            lastPollAt:
+              type: string
+              nullable: true
+              description: Start of the most recent poll (successful or not).
+              example: "2026-09-20T22:03:21.004Z"
+            lastSuccessAt:
+              type: string
+              nullable: true
+              description: The freshness reference — drives `stale` and `ok`.
+              example: "2026-09-20T22:03:21.311Z"
+            lastShopsChangeAt:
+              type: string
+              nullable: true
+              example: "2026-09-20T22:00:01.080Z"
+            lastWeatherChangeAt:
+              type: string
+              nullable: true
+              example: "2026-09-20T21:40:01.061Z"
+            lastError:
+              type: string
+              nullable: true
+              example: null
+            running:
+              type: boolean
+              description: |
+                The poll loop was started and not stopped. A true value alone
+                does not mean data is fresh — use `stale`.
+              example: true
+        sse:
+          type: object
+          properties:
+            activeConnections:
+              type: integer
+              example: 42
+            activeByStream:
+              type: object
+              properties:
+                all:
+                  type: integer
+                  example: 20
+                weather:
+                  type: integer
+                  example: 10
+                shops:
+                  type: integer
+                  example: 12
+            totalConnections:
+              type: integer
+              example: 1200
+            eventsSent:
+              type: integer
+              example: 5843
+            lastEventAt:
+              type: string
+              nullable: true
+              example: "2026-01-29T19:32:25.123Z"
+
     PlantData:
       type: object
       description: Complete plant lifecycle data (seed → plant → crop)
