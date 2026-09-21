@@ -48,3 +48,7 @@ data/version.json
 export/
 dump.json
 roles.json
+
+# Python
+__pycache__/
+*.pyc
