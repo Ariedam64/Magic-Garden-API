@@ -56,19 +56,28 @@ export const Errors = {
  * Doit être monté en dernier sur l'app Express.
  */
 export function errorHandler(err, req, res, _next) {
-  // Log l'erreur
-  logger.error({
-    err: {
-      message: err.message,
-      stack: err.stack,
-      code: err.code,
-    },
-    req: {
-      method: req.method,
-      path: req.path,
-      query: req.query,
-    },
-  });
+  const requete = {
+    method: req.method,
+    path: req.path,
+    query: req.query,
+  };
+
+  // Une requête mal formée n'est pas une erreur de l'API : avertissement, sans
+  // trace. Un client extérieur qui envoyait `ids=Lunar` chaque minute (depuis
+  // le 2026-09-24) produisait 1 440 erreurs par jour, et la vraie panne de
+  // /data/weathers se perdait au milieu.
+  if (err instanceof ApiError && err.status < 500) {
+    logger.warn({ err: { message: err.message, code: err.code, status: err.status }, req: requete });
+  } else {
+    logger.error({
+      err: {
+        message: err.message,
+        stack: err.stack,
+        code: err.code,
+      },
+      req: requete,
+    });
+  }
 
   // Erreur API connue
   if (err instanceof ApiError) {
