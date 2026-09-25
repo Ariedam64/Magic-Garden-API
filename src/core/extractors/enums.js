@@ -101,9 +101,12 @@ function extractMutationTierOrder(mainJs) {
  * ordonnée des valeurs canoniques, qui correspond à ce que renvoient les
  * autres endpoints (`rarity: "Mythical"`, etc.).
  */
-export function extractEnums(mainJs) {
+export function extractEnums(mainJs, _indexJs, _uiColorsSources, _abilityTextSource, weathersSource) {
   const result = {};
-  const candidates = scanStringEnumIIFEs(mainJs);
+  // Les enums weather et eligibleShops ont suivi le catalogue météo dans son
+  // chunk (1280) : on scanne les deux quand ils diffèrent.
+  const sources = weathersSource && weathersSource !== mainJs ? [mainJs, weathersSource] : [mainJs];
+  const candidates = sources.flatMap((src) => scanStringEnumIIFEs(src));
 
   for (const shape of ENUM_SHAPES) {
     const found = candidates.find((entries) => {

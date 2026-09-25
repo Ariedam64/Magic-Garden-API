@@ -16,6 +16,7 @@ const cache = {
   indexJs: null,
   uiColorsSources: null,
   abilityTextSource: null,
+  weathersSource: null,
   fetchedAt: 0,
   categories: new Map(),
   pending: null,
@@ -29,7 +30,7 @@ export async function getMainBundle() {
   const expired = !cache.mainJs || now - cache.fetchedAt > config.cache.bundleTTL;
 
   if (!expired) {
-    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource };
+    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource };
   }
 
   // Évite les requêtes concurrentes
@@ -41,7 +42,7 @@ export async function getMainBundle() {
     try {
       const version = await fetchGameVersion();
       const pageUrl = `${config.game.origin}/version/${version}/index.html`;
-      const { mainUrl, mainJs, indexJs, uiColorsSources, abilityTextSource } = await fetchMainBundle(pageUrl);
+      const { mainUrl, mainJs, indexJs, uiColorsSources, abilityTextSource, weathersSource } = await fetchMainBundle(pageUrl);
 
       // Si la version a changé, flush les caches
       if (cache.mainUrl && cache.mainUrl !== mainUrl) {
@@ -56,9 +57,10 @@ export async function getMainBundle() {
       cache.indexJs = indexJs;
       cache.uiColorsSources = uiColorsSources;
       cache.abilityTextSource = abilityTextSource;
+      cache.weathersSource = weathersSource;
       cache.fetchedAt = Date.now();
 
-      return { mainUrl, mainJs, indexJs, uiColorsSources, abilityTextSource };
+      return { mainUrl, mainJs, indexJs, uiColorsSources, abilityTextSource, weathersSource };
     } finally {
       cache.pending = null;
     }
@@ -71,7 +73,7 @@ export async function getMainBundle() {
  * Récupère les données d'une catégorie avec cache.
  */
 export async function getCategoryCached(categoryName, extractorFn) {
-  const { mainUrl, mainJs, indexJs, uiColorsSources, abilityTextSource } = await getMainBundle();
+  const { mainUrl, mainJs, indexJs, uiColorsSources, abilityTextSource, weathersSource } = await getMainBundle();
 
   const existing = cache.categories.get(categoryName);
   if (existing && existing.mainUrl === mainUrl) {
@@ -81,7 +83,7 @@ export async function getCategoryCached(categoryName, extractorFn) {
 
   logger.debug({ category: categoryName }, "Category cache miss, extracting");
 
-  const data = extractorFn(mainJs, indexJs, uiColorsSources, abilityTextSource);
+  const data = extractorFn(mainJs, indexJs, uiColorsSources, abilityTextSource, weathersSource);
 
   cache.categories.set(categoryName, {
     mainUrl,
@@ -101,6 +103,7 @@ export function invalidateAllCaches() {
   cache.indexJs = null;
   cache.uiColorsSources = null;
   cache.abilityTextSource = null;
+  cache.weathersSource = null;
   cache.fetchedAt = 0;
   cache.categories.clear();
   clearEnumCaches();

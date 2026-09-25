@@ -5,6 +5,8 @@ import { logger } from "../../../logger/index.js";
 import { definesColorsFor } from "./colors.js";
 import { definesAbilityDescriptions } from "../../extractors/abilityText.js";
 import { ABILITY_COLOR_NAMES, MUTATION_COLOR_NAMES, COLOR_MIN_HITS } from "./colorNames.js";
+import { findObjectLiteralBySignatures } from "./extractor.js";
+import { WEATHER_SIGNATURES } from "../../extractors/weathers.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -77,6 +79,15 @@ const COLOR_TARGETS = [
 const ABILITY_TEXT_TARGET = {
   id: "abilityText",
   test: (content) => definesAbilityDescriptions(content),
+};
+
+// Le catalogue météo a quitté le chunk de données en 1280 (vers
+// `bootScreen-*`), emportant les enums weather et eligibleShops. Même principe
+// que pour les couleurs : on retient le chunk où l'on sait réellement localiser
+// le catalogue, pas celui qui porte un nom de fichier attendu.
+const WEATHER_TARGET = {
+  id: "weathers",
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, WEATHER_SIGNATURES)),
 };
 
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
@@ -253,6 +264,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
       test: (c) => definesColorsFor(c, t.names, COLOR_MIN_HITS),
     })),
     ABILITY_TEXT_TARGET,
+    WEATHER_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -300,6 +312,11 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     );
   }
 
+  const weathersChunk = found.get(WEATHER_TARGET.id);
+  if (!weathersChunk) {
+    logger.error({ target: WEATHER_TARGET.id }, "Weathers chunk not found in bundle graph (falling back to the data chunk)");
+  }
+
   return {
     indexUrl,
     mainUrl: dataChunk.url,
@@ -307,5 +324,6 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     indexJs,
     uiColorsSources,
     abilityTextSource: abilityTextChunk?.content ?? null,
+    weathersSource: weathersChunk?.content ?? null,
   };
 }
