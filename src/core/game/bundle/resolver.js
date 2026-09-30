@@ -334,11 +334,16 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   const catalogChunk = found.get(CATALOG_TARGET.id);
   if (catalogChunk && catalogChunk.content !== dataChunk.content) dataSources.push(catalogChunk.content);
 
+  // Chunks connus, par URL : un catalogue peut importer ses constantes (les
+  // dates d'expiration en 1324) depuis un autre chunk.
+  const linkedChunks = [...found.values()].map(({ url, content }) => ({ url, content }));
+
   return {
     indexUrl,
     mainUrl: dataChunk.url,
     mainJs: dataChunk.content,
     dataSources,
+    linkedChunks,
     indexJs,
     uiColorsSources,
     abilityTextSource: abilityTextChunk?.content ?? null,

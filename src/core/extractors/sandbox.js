@@ -66,6 +66,45 @@ export function applySpriteMapping(mainJs, objLiteral, sandbox) {
   }
 }
 
+// Chunks du jeu connus, par nom de fichier (`RoomConnection-xxx.js` -> source).
+let linkedChunks = new Map();
+
+export function setLinkedChunks(chunks) {
+  linkedChunks = new Map(
+    (chunks ?? []).map(({ url, content }) => [String(url).split("/").pop(), content])
+  );
+}
+
+function findDateAssignment(js, id) {
+  const escaped = id.replace(/[$]/g, "\\$&");
+  const re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escaped}=new Date\\(\`([^\`]+)\`\\)`);
+  return js.match(re)?.[1] ?? null;
+}
+
+/**
+ * Suit `import{cr as Ht}from"./Chunk.js"` jusqu'à l'export `export{Ot as cr}`
+ * de ce chunk, puis y cherche `Ot=new Date(...)`. Les noms exportés sont très
+ * courts et se répètent d'un chunk à l'autre, d'où la résolution par fichier.
+ */
+function findImportedDate(js, id) {
+  for (const m of js.matchAll(/import\{([^}]*)\}from["`]\.\/([^"`]+)["`]/g)) {
+    for (const spec of m[1].split(",")) {
+      const [exported, local = exported] = spec.trim().split(/\s+as\s+/);
+      if (local !== id) continue;
+      const target = linkedChunks.get(m[2]);
+      if (!target) return null;
+      for (const e of target.matchAll(/export\{([^}]*)\}/g)) {
+        for (const ex of e[1].split(",")) {
+          const [inner, alias = inner] = ex.trim().split(/\s+as\s+/);
+          if (alias === exported) return findDateAssignment(target, inner);
+        }
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Résout les références à des constantes Date externes au literal.
  *
@@ -81,16 +120,11 @@ export function applyDateConstants(mainJs, objLiteral, sandbox) {
   );
 
   for (const id of ids) {
-    // Cherche `<id>=new Date(`...`)` ailleurs dans le bundle.
-    // L'identifiant peut commencer par _ ou $, donc on échappe.
-    const escaped = id.replace(/[$]/g, "\\$&");
-    const re = new RegExp(
-      `(?:^|[^A-Za-z0-9_$])${escaped}=new Date\\(\`([^\`]+)\`\\)`
-    );
-    const match = mainJs.match(re);
-    if (!match) continue;
+    // Cherche `<id>=new Date(`...`)` dans le chunk, sinon dans le chunk d'où
+    // `<id>` est importé (1324 : les dates vivent dans LocalizedTextContent).
+    const iso = findDateAssignment(mainJs, id) ?? findImportedDate(mainJs, id);
+    if (!iso) continue;
 
-    const iso = match[1];
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) continue;
 
