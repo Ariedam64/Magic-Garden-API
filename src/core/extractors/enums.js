@@ -101,11 +101,13 @@ function extractMutationTierOrder(mainJs) {
  * ordonnée des valeurs canoniques, qui correspond à ce que renvoient les
  * autres endpoints (`rarity: "Mythical"`, etc.).
  */
-export function extractEnums(mainJs, _indexJs, _uiColorsSources, _abilityTextSource, weathersSource) {
+export function extractEnums(mainJs, _indexJs, _uiColorsSources, _abilityTextSource, weathersSource, dataSources) {
   const result = {};
   // Les enums weather et eligibleShops ont suivi le catalogue météo dans son
   // chunk (1280) : on scanne les deux quand ils diffèrent.
-  const sources = weathersSource && weathersSource !== mainJs ? [mainJs, weathersSource] : [mainJs];
+  // Depuis 1324 l'ordre des tiers de mutation vit dans un autre chunk de
+  // données que celui des œufs : on scanne tous les chunks de données.
+  const sources = [...new Set([mainJs, ...(dataSources ?? []), weathersSource].filter(Boolean))];
   const candidates = sources.flatMap((src) => scanStringEnumIIFEs(src));
 
   for (const shape of ENUM_SHAPES) {
@@ -123,7 +125,7 @@ export function extractEnums(mainJs, _indexJs, _uiColorsSources, _abilityTextSou
     }
   }
 
-  const tierOrder = extractMutationTierOrder(mainJs);
+  const tierOrder = sources.map((src) => extractMutationTierOrder(src)).find(Boolean);
   if (tierOrder) result.mutationTierOrder = tierOrder;
   else logger.warn("Mutation tier order not found in bundle");
 

@@ -7,6 +7,7 @@ import { definesAbilityDescriptions } from "../../extractors/abilityText.js";
 import { ABILITY_COLOR_NAMES, MUTATION_COLOR_NAMES, COLOR_MIN_HITS } from "./colorNames.js";
 import { findObjectLiteralBySignatures } from "./extractor.js";
 import { WEATHER_SIGNATURES } from "../../extractors/weathers.js";
+import { ITEM_SIGNATURES } from "../../extractors/items.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -88,6 +89,16 @@ const ABILITY_TEXT_TARGET = {
 const WEATHER_TARGET = {
   id: "weathers",
   test: (content) => Boolean(findObjectLiteralBySignatures(content, WEATHER_SIGNATURES)),
+};
+
+// En 1324 le chunk de données s'est scindé : œufs, pets et abilities sont
+// partis dans `LocalizedTextContent-*` (qui porte `secondsToHatch`), items,
+// décors, plantes, mutations et l'ordre des tiers sont restés dans
+// `RoomConnection-*`. Même principe que pour la météo : on retient le chunk
+// où l'on sait réellement localiser le catalogue des items.
+const CATALOG_TARGET = {
+  id: "catalogs",
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, ITEM_SIGNATURES)),
 };
 
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
@@ -265,6 +276,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     })),
     ABILITY_TEXT_TARGET,
     WEATHER_TARGET,
+    CATALOG_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -317,10 +329,16 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     logger.error({ target: WEATHER_TARGET.id }, "Weathers chunk not found in bundle graph (falling back to the data chunk)");
   }
 
+  // Les extracteurs essaient chaque chunk de données à leur tour.
+  const dataSources = [dataChunk.content];
+  const catalogChunk = found.get(CATALOG_TARGET.id);
+  if (catalogChunk && catalogChunk.content !== dataChunk.content) dataSources.push(catalogChunk.content);
+
   return {
     indexUrl,
     mainUrl: dataChunk.url,
     mainJs: dataChunk.content,
+    dataSources,
     indexJs,
     uiColorsSources,
     abilityTextSource: abilityTextChunk?.content ?? null,
