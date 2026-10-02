@@ -274,7 +274,9 @@ function classifyToken(node, ctx) {
   const mutation = identOf(node?.mutation);
   if (mutation) return { type: "mutation", id: mutation };
 
-  const currency = identOf(node?.currency?.currency);
+  const currency =
+    identOf(node?.currency?.currency) ||
+    (isCallNode(node?.currency) ? identOf(node.currency.args[0]) : null);
   if (currency) return { type: "currency", id: currency };
 
   const spritePath = node?.gameThing?.sprite?.__ident;
@@ -284,6 +286,16 @@ function classifyToken(node, ctx) {
 
     if (id && ctx.rarityValues.has(id)) return { type: "rarity", id };
     return { type: segments.includes("crop") ? "crop" : "item", id };
+  }
+
+  // Depuis la 1373, les jetons passent par des helpers importés d'autres
+  // chunks (`je(C.Coins)`, `be(\`Common\`, 18)`, `Ee(\`AmberCapsule\`, 18)`,
+  // `ve(\`ThunderCelestialShroomPlant\`)`) : impossibles à inliner, mais
+  // l'identifiant reste lisible en premier argument.
+  const id = isCallNode(node) ? identOf(node.args[0]) : null;
+  if (id) {
+    if (ctx.rarityValues.has(id)) return { type: "rarity", id };
+    return { type: ctx.isCrop(id) ? "crop" : "item", id };
   }
 
   return { type: "unknown", id: null };
@@ -321,7 +333,7 @@ const isTagsObject = (arg) =>
  * Retourne {} si le switch est introuvable — l'absence de descriptions ne doit
  * pas casser l'extraction des abilities.
  */
-export function extractAbilityDescriptions(uiJs, dataJs) {
+export function extractAbilityDescriptions(uiJs, dataJs, dataSources = [dataJs]) {
   if (!uiJs) return {};
 
   const found = findDescriptionSwitch(uiJs);
@@ -354,6 +366,11 @@ export function extractAbilityDescriptions(uiJs, dataJs) {
     dataJs,
     rarityMap: findStringEnumMap(dataJs, RARITY_ENUM_KEYS),
     rarityValues: new Set(extractEnums(dataJs).rarity ?? []),
+    // Une entrée du catalogue des plantes s'ouvre sur `Id:{name:`...`,seed:{`.
+    isCrop: (id) => {
+      const entry = new RegExp(`[,{]${id.replace(/[$]/g, "\\$&")}:\\{name:\`[^\`]*\`,seed:\\{`);
+      return dataSources.some((source) => source && entry.test(source));
+    },
   };
 
   const descriptions = {};

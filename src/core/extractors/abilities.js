@@ -56,7 +56,7 @@ function extractCelestialAbilities(mainJs) {
  * tooltips) et sont déléguées à `abilityText.js`. Leur absence laisse
  * `description` à null sans casser le reste.
  */
-export function extractAbilities(mainJs, indexJs, uiColorsSources, abilityTextSource) {
+export function extractAbilities(mainJs, indexJs, uiColorsSources, abilityTextSource, _weathersSource, dataSources) {
   const abilities = extractCategoryWithSandbox(mainJs, "abilities", SIGNATURES, buildBaseSandbox).data;
   const celestial = extractCelestialAbilities(mainJs);
   Object.assign(abilities, celestial);
@@ -70,7 +70,11 @@ export function extractAbilities(mainJs, indexJs, uiColorsSources, abilityTextSo
 
   applyColors(abilities, colors, defaultColor?.solid ?? DEFAULT_ABILITY_COLOR, "abilities");
 
-  const descriptions = extractAbilityDescriptions(abilityTextSource ?? indexJs ?? mainJs, mainJs);
+  const descriptions = extractAbilityDescriptions(
+    abilityTextSource ?? indexJs ?? mainJs,
+    mainJs,
+    dataSources?.length ? dataSources : [mainJs]
+  );
 
   for (const [key, ability] of Object.entries(abilities)) {
     const text = descriptions[key];
