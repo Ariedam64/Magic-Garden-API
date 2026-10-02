@@ -120,7 +120,9 @@ export async function initSprites() {
       const frames = atlas?.frames || {};
       const anims = atlas?.animations || {};
       const meta = atlas?.meta || {};
-      const imageSrc = resolveMetaImageSrc(jsonSrc, meta.image);
+      // Les coordonnées des frames sont en pleine résolution (meta.size) : depuis
+      // que le jeu sert meta.image en "halfsize", il faut prendre fullSizeImage.
+      const imageSrc = resolveMetaImageSrc(jsonSrc, meta.fullSizeImage || meta.image);
       const imageUrl = imageSrc ? joinUrl(baseUrl, imageSrc) : null;
 
       // ✅ frames
