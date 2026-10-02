@@ -54,7 +54,9 @@ function parseAnimationFile(name) {
     return null;
   }
 
-  const match = /^([A-Za-z0-9-]+)_([a-z0-9]+)\.(webp|gif)$/.exec(raw);
+  // Les noms du jeu peuvent contenir un espace ("Red Fox") et les clips un
+  // tiret ("fire-on").
+  const match = /^([A-Za-z0-9][A-Za-z0-9 -]*)_([a-z0-9][a-z0-9-]*)\.(webp|gif)$/.exec(raw);
   if (!match) return null;
 
   return { file: raw, name: match[1], clip: match[2], format: match[3] };
