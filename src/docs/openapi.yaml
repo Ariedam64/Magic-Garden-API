@@ -753,6 +753,118 @@ paths:
                       hatchesInto: "Cat"
                       sprite: "https://mg-api.ariedam.fr/assets/sprites/eggs/CatEgg.png"
 
+  /data/pet-cosmetics:
+    get:
+      tags:
+        - Data
+      summary: Get pet cosmetics data
+      description: |
+        Returns every pet accessory (hats, ties, badges) with its slot, price and sprite.
+
+        Each accessory includes:
+        - `slotCategory`: where it is worn (`hat`, `tie`…)
+        - `creditPrice` and `rarity`
+        - `soldAtSpookyShop` and `expiryDate` for limited-time accessories
+          (e.g. the Halloween Wizard and Witch hats, until 2026-11-10)
+        - `sprite`: image URL
+      responses:
+        '200':
+          description: Pet cosmetics data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              example:
+                Witch:
+                  name: "Pet Witch Hat"
+                  slotCategory: "hat"
+                  sprite: "https://mg-api.ariedam.fr/assets/sprites/pet-cosmetic/Witch.png?v=1608"
+                  creditPrice: 199
+                  soldAtSpookyShop: true
+                  expiryDate: "2026-11-10T00:00:00.000Z"
+                  rarity: "Rare"
+
+  /data/avatar-cosmetics:
+    get:
+      tags:
+        - Data
+      summary: Get avatar cosmetics data
+      description: |
+        Returns every avatar outfit piece (`Top`, `Mid`, `Bottom`, `Expression`),
+        keyed like `/assets/cosmetics` (file name without extension).
+
+        Each outfit includes:
+        - `displayName` and `type`
+        - `availability`: `default`, `purchasable`, `claimable`, `quest` (a quest
+          reward) or `bundle` (only through a bundle, see `/data/bundles`)
+        - `cost`: `{ currency, amount }` when purchasable; `currency` uses the
+          values of `/data/enums` -> `currency`
+        - `drop`: the release it belongs to (e.g. `halloween2026`)
+        - `soldAtSpookyShop` and `expiryDate` for limited-time outfits
+        - `url` (and `bodyArtUrl` when the outfit also changes the body art)
+      responses:
+        '200':
+          description: Avatar cosmetics data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              example:
+                Top_Haunt:
+                  id: "Top_Haunt"
+                  filename: "Top_Haunt.png"
+                  type: "Top"
+                  availability: "purchasable"
+                  displayName: "Haunt"
+                  drop: "halloween2026"
+                  bodyArt: "Top_HauntBody.png"
+                  cost:
+                    currency: "credits"
+                    amount: 329
+                  soldAtSpookyShop: true
+                  expiryDate: "2026-11-10T00:00:00.000Z"
+                  url: "https://magicgarden.gg/version/1608/assets/cosmetic/Top_Haunt.png"
+                  bodyArtUrl: "https://magicgarden.gg/version/1608/assets/cosmetic/Top_HauntBody.png"
+
+  /data/bundles:
+    get:
+      tags:
+        - Data
+      summary: Get bundles data
+      description: |
+        Returns the bundles sold for credits (e.g. the Spooky Bundle of the
+        Halloween event), with their content and the cosmetic they grant.
+
+        `items` lists every item with a uniform `id` (seed species, tool or egg
+        id), whatever field the game uses for its type.
+      responses:
+        '200':
+          description: Bundles data
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+              example:
+                Halloween2026:
+                  id: "Halloween2026"
+                  creditPrice: 799
+                  cosmeticFilename: "Top_GothicTopHat.png"
+                  cosmeticType: "Top"
+                  expiryDate: "2026-11-10T00:00:00.000Z"
+                  items:
+                    - { itemType: "Tool", id: "CarvingKnife", quantity: 5 }
+                    - { itemType: "Seed", id: "Pumpkin", quantity: 5 }
+                    - { itemType: "Seed", id: "GhostPlant", quantity: 3 }
+                    - { itemType: "Seed", id: "Foxfire", quantity: 2 }
+                    - { itemType: "Egg", id: "SpookyEgg", quantity: 1 }
+                  cosmeticUrl: "https://magicgarden.gg/version/1608/assets/cosmetic/Top_GothicTopHat.png"
+
   /data/abilities:
     get:
       tags:
@@ -3401,6 +3513,16 @@ components:
       type: object
       description: Complete plant lifecycle data (seed → plant → crop)
       properties:
+        rareCrop:
+          type: string
+          description: |
+            Patch plants only: the rare crop species this plant can yield
+            (e.g. `Foxfire` -> `Witchfire`).
+          example: "Witchfire"
+        rareCropOf:
+          type: string
+          description: Rare crops only: the patch plant that yields it.
+          example: "Foxfire"
         seed:
           type: object
           description: Seed stage information

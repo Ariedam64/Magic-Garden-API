@@ -19,6 +19,7 @@ const cache = {
   uiColorsSources: null,
   abilityTextSource: null,
   weathersSource: null,
+  cosmeticsSources: [],
   fetchedAt: 0,
   categories: new Map(),
   pending: null,
@@ -32,7 +33,7 @@ export async function getMainBundle() {
   const expired = !cache.mainJs || now - cache.fetchedAt > config.cache.bundleTTL;
 
   if (!expired) {
-    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource };
+    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources };
   }
 
   // Évite les requêtes concurrentes
@@ -44,7 +45,7 @@ export async function getMainBundle() {
     try {
       const version = await fetchGameVersion();
       const pageUrl = `${config.game.origin}/version/${version}/index.html`;
-      const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource } = await fetchMainBundle(pageUrl);
+      const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources } = await fetchMainBundle(pageUrl);
 
       // Si la version a changé, flush les caches
       if (cache.mainUrl && cache.mainUrl !== mainUrl) {
@@ -62,9 +63,10 @@ export async function getMainBundle() {
       cache.uiColorsSources = uiColorsSources;
       cache.abilityTextSource = abilityTextSource;
       cache.weathersSource = weathersSource;
+      cache.cosmeticsSources = cosmeticsSources ?? [];
       cache.fetchedAt = Date.now();
 
-      return { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource };
+      return { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources: cache.cosmeticsSources };
     } finally {
       cache.pending = null;
     }
@@ -77,7 +79,7 @@ export async function getMainBundle() {
  * Récupère les données d'une catégorie avec cache.
  */
 export async function getCategoryCached(categoryName, extractorFn) {
-  const { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource } = await getMainBundle();
+  const { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources } = await getMainBundle();
 
   const existing = cache.categories.get(categoryName);
   if (existing && existing.mainUrl === mainUrl) {
@@ -95,7 +97,7 @@ export async function getCategoryCached(categoryName, extractorFn) {
   let firstError = null;
   for (const source of sources) {
     try {
-      data = extractorFn(source, indexJs, uiColorsSources, abilityTextSource, weathersSource, sources);
+      data = extractorFn(source, indexJs, uiColorsSources, abilityTextSource, weathersSource, sources, { cosmeticsSources });
       firstError = null;
       break;
     } catch (err) {
@@ -124,6 +126,7 @@ export function invalidateAllCaches() {
   cache.uiColorsSources = null;
   cache.abilityTextSource = null;
   cache.weathersSource = null;
+  cache.cosmeticsSources = [];
   cache.fetchedAt = 0;
   cache.categories.clear();
   clearEnumCaches();

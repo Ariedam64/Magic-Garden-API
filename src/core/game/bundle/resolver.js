@@ -101,6 +101,23 @@ const CATALOG_TARGET = {
   test: (content) => Boolean(findObjectLiteralBySignatures(content, ITEM_SIGNATURES)),
 };
 
+// Catalogues de cosmétiques (Haunt Event, 1598) : les tenues d'avatar vivent
+// dans `LocalizedTextContent-*`, les packs vendus en crédits dans
+// `installPlayerSystems-*`. Cibles **optionnelles** : un pack d'événement peut
+// disparaître du client, et une cible introuvable ne doit pas relancer le
+// parcours complet du graphe à chaque expiration du cache (voir le mémo).
+const AVATAR_COSMETICS_TARGET = {
+  id: "avatarCosmetics",
+  optional: true,
+  test: (content) => /availability:[`"']purchasable[`"']/.test(content) && /\bfilename:/.test(content),
+};
+
+const BUNDLE_OFFERS_TARGET = {
+  id: "bundleOffers",
+  optional: true,
+  test: (content) => /cosmeticFilename:[`"'][^`"']+[`"'],cosmeticType:/.test(content) && content.includes("items:[{itemType:"),
+};
+
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
 // Le jeu ajoute régulièrement un niveau d'indirection à l'entrée (v950 a inséré
 // un chunk "bootstrap" entre index.js et le reste), d'où la marge.
@@ -211,7 +228,10 @@ async function findChunksInGraph(entryUrl, entryJs, baseUrl, targets) {
 // content-hashés et servis sous /version/<n>/, donc une URL déjà résolue reste
 // valide tant que l'index ne change pas ; on la re-teste quand même, et tout
 // écart retombe sur le parcours complet.
-let memo = { indexUrl: null, urls: new Map() };
+//
+// Les cibles optionnelles introuvables sont mémorisées aussi : on ne les
+// recherche plus tant que l'index ne change pas.
+let memo = { indexUrl: null, urls: new Map(), missing: new Set() };
 
 async function fetchMemoizedChunks(indexUrl, targets, found) {
   if (memo.indexUrl !== indexUrl || !targets.length) return targets;
@@ -219,6 +239,8 @@ async function fetchMemoizedChunks(indexUrl, targets, found) {
   const remaining = [];
 
   for (const target of targets) {
+    if (target.optional && memo.missing.has(target.id)) continue;
+
     const url = memo.urls.get(target.id);
     if (!url) {
       remaining.push(target);
@@ -244,12 +266,13 @@ async function fetchMemoizedChunks(indexUrl, targets, found) {
   return remaining;
 }
 
-function memoizeChunks(indexUrl, found) {
+function memoizeChunks(indexUrl, found, targets) {
   const urls = new Map();
   for (const [id, chunk] of found) {
     if (chunk.url !== indexUrl) urls.set(id, chunk.url);
   }
-  memo = { indexUrl, urls };
+  const missing = new Set(targets.filter((t) => t.optional && !found.has(t.id)).map((t) => t.id));
+  memo = { indexUrl, urls, missing };
 }
 
 /**
@@ -324,6 +347,8 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     ABILITY_TEXT_TARGET,
     WEATHER_TARGET,
     CATALOG_TARGET,
+    AVATAR_COSMETICS_TARGET,
+    BUNDLE_OFFERS_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -343,7 +368,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     for (const [id, chunk] of chunks) found.set(id, chunk);
   }
 
-  memoizeChunks(indexUrl, found);
+  memoizeChunks(indexUrl, found, targets);
 
   const dataChunk = found.get("data");
   if (!dataChunk) {
@@ -381,6 +406,11 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   const catalogChunk = found.get(CATALOG_TARGET.id);
   if (catalogChunk && catalogChunk.content !== dataChunk.content) dataSources.push(catalogChunk.content);
 
+  // Chunks des catalogues de cosmétiques (absents d'anciens builds).
+  const cosmeticsSources = [AVATAR_COSMETICS_TARGET, BUNDLE_OFFERS_TARGET]
+    .map((t) => found.get(t.id)?.content)
+    .filter((content, i, all) => content && all.indexOf(content) === i);
+
   // Chunks connus, par URL : un catalogue peut importer ses constantes (les
   // dates d'expiration en 1324) depuis un autre chunk.
   const linkedChunks = [...found.values()].map(({ url, content }) => ({ url, content }));
@@ -396,5 +426,6 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     uiColorsSources,
     abilityTextSource: abilityTextChunk?.content ?? null,
     weathersSource: weathersChunk?.content ?? null,
+    cosmeticsSources,
   };
 }

@@ -36,6 +36,8 @@ const GROUP_SLUGS = {
   MutationOverlay: "mutation-overlay",
   Animation: "animation",
   Ui: "ui",
+  // Accessoires de pets (`D.PetCosmetic.Wizard` -> `sprite/pet-cosmetic/Wizard`).
+  PetCosmetic: "pet-cosmetic",
 };
 
 function buildFallbackMapping() {

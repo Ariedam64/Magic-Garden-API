@@ -11,6 +11,9 @@ import {
   extractMutations,
   extractWeathers,
   extractEnums,
+  extractPetCosmetics,
+  extractAvatarCosmetics,
+  extractBundleOffers,
   ExtractorRegistry,
 } from "../core/extractors/index.js";
 import { logger } from "../logger/index.js";
@@ -86,6 +89,27 @@ export const gameDataService = {
    */
   async getEnums() {
     return getCategoryCached("enums", extractEnums);
+  },
+
+  /**
+   * Accessoires de pets (chapeaux, cravates, badges).
+   */
+  async getPetCosmetics() {
+    return getCategoryCached("petCosmetics", extractPetCosmetics);
+  },
+
+  /**
+   * Tenues d'avatar (prix, disponibilité, drop, expiration).
+   */
+  async getAvatarCosmetics() {
+    return getCategoryCached("avatarCosmetics", extractAvatarCosmetics);
+  },
+
+  /**
+   * Packs vendus en crédits (contenu, prix, cosmétique offert).
+   */
+  async getBundles() {
+    return getCategoryCached("bundles", extractBundleOffers);
   },
 
   /**

@@ -9,6 +9,7 @@ import { extractAbilities } from "./abilities.js";
 import { extractMutations } from "./mutations.js";
 import { extractWeathers } from "./weathers.js";
 import { extractEnums } from "./enums.js";
+import { extractPetCosmetics, extractAvatarCosmetics, extractBundleOffers } from "./cosmetics.js";
 import {
   buildBaseSandbox,
   applyRarityEnum,
@@ -27,6 +28,9 @@ export {
   extractMutations,
   extractWeathers,
   extractEnums,
+  extractPetCosmetics,
+  extractAvatarCosmetics,
+  extractBundleOffers,
   buildBaseSandbox,
   applyRarityEnum,
   applyWeatherEnums,
@@ -47,6 +51,9 @@ export const ExtractorRegistry = {
   mutations: extractMutations,
   weathers: extractWeathers,
   enums: extractEnums,
+  petCosmetics: extractPetCosmetics,
+  avatarCosmetics: extractAvatarCosmetics,
+  bundles: extractBundleOffers,
 };
 
 /**

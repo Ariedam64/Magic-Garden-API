@@ -11,6 +11,11 @@ import { getTransformedPlants, enrichPlantsWithPurchasable } from "../../service
 import { getTransformedPets } from "../../services/petTransformer.js";
 import { getTransformedDecor } from "../../services/decorTransformer.js";
 import {
+  getTransformedPetCosmetics,
+  getTransformedAvatarCosmetics,
+  getTransformedBundles,
+} from "../../services/cosmeticsTransformer.js";
+import {
   transformDataWithSprites,
   transformWeathersWithSprites,
 } from "../../services/dataTransformer.js";
@@ -259,6 +264,25 @@ dataRouter.get(
   })
 );
 
+// Catalogues de cosmétiques : accessoires de pets, tenues d'avatar, packs.
+for (const [route, cacheKey, builder] of [
+  ["/pet-cosmetics", "petCosmetics", (spriteVersion) => getTransformedPetCosmetics({ spriteVersion })],
+  ["/avatar-cosmetics", "avatarCosmetics", () => getTransformedAvatarCosmetics()],
+  ["/bundles", "bundles", () => getTransformedBundles()],
+]) {
+  dataRouter.get(
+    route,
+    asyncHandler(async (req, res) => {
+      const spriteVersion = await getStoredVersionCached();
+      if (maybeNotModified(req, res, cacheKey, spriteVersion)) return;
+
+      const data = await getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion));
+      setDataCacheHeaders(res, cacheKey, spriteVersion);
+      res.json(data);
+    })
+  );
+}
+
 dataRouter.get(
   "/eggs",
   asyncHandler(async (req, res) => {
@@ -372,6 +396,9 @@ const CATEGORY_DEFS = [
   ["weathers", "weathers", (sv) => gameDataService.getWeathers().then((d) => transformWeathersWithSprites(d, { spriteVersion: sv }))],
   ["weather-groups", "weatherGroups", () => getWeatherGroups()],
   ["enums", "enums", () => gameDataService.getEnums()],
+  ["pet-cosmetics", "petCosmetics", (sv) => getTransformedPetCosmetics({ spriteVersion: sv })],
+  ["avatar-cosmetics", "avatarCosmetics", () => getTransformedAvatarCosmetics()],
+  ["bundles", "bundles", () => getTransformedBundles()],
 ];
 
 /**
