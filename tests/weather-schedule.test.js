@@ -175,3 +175,9 @@ test("le moteur rejoue l'historique enregistré", { skip: !existsSync(DB_PATH) &
     db.close();
   }
 });
+
+test("a weather shipped by a game update is accepted before the hand-kept table knows it", () => {
+  const meta = { BloodMoon: { name: "Blood Moon" }, Rain: { name: "Rain" } };
+  assert.deepEqual([...resolveWeatherIds("Blood Moon,rain", meta).ids], ["BloodMoon", "Rain"]);
+  assert.deepEqual(resolveWeatherIds("Blood Moon").unknown, ["Blood Moon"]);
+});

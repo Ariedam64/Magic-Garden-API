@@ -296,11 +296,19 @@ export function summarize(timeline) {
  * Résout des noms de météo fournis par un client vers des ids du moteur.
  * Accepte l'id (`AmberMoon`, `Frost`), le libellé public (`Amber Moon`, `Snow`)
  * et les variantes de casse/espaces.
+ *
+ * `meta` (voir `getWeatherMeta`) ajoute les météos du bundle : sans lui, une
+ * météo livrée par une mise à jour du jeu, absente de `WEATHER_DISPLAY`
+ * (maintenu à la main), répondait 400 « Unknown weather ».
  */
-export function resolveWeatherIds(raw) {
+export function resolveWeatherIds(raw, meta = null) {
   const lookup = new Map();
   const register = (key, id) => lookup.set(String(key).toLowerCase().replace(/[\s_-]+/g, ""), id);
 
+  for (const [id, entry] of Object.entries(meta ?? {})) {
+    register(id, id);
+    if (entry?.name) register(entry.name, id);
+  }
   for (const [id, display] of Object.entries(WEATHER_DISPLAY)) {
     register(id, id);
     register(display, id);

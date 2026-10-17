@@ -60,9 +60,10 @@ function resolveEngine(raw) {
   return id;
 }
 
-function resolveIds(raw) {
+async function resolveIds(raw) {
   if (!raw) return null;
-  const { ids, unknown } = weatherStationService.resolveWeatherIds(raw);
+  const meta = await weatherStationService.getWeatherMeta();
+  const { ids, unknown } = weatherStationService.resolveWeatherIds(raw, meta);
   if (unknown.length) throw Errors.badRequest(`Unknown weather: ${unknown.join(", ")}`);
   return ids.size ? ids : null;
 }
@@ -175,7 +176,7 @@ weatherStationRouter.get(
   "/next",
   asyncHandler(async (req, res) => {
     const engineId = resolveEngine(req.query.engine);
-    const ids = resolveIds(req.query.ids);
+    const ids = await resolveIds(req.query.ids);
     const count = resolveCount(req.query.count);
     const enrich = wantsEnrichment(req.query.enrich);
     const from = parseTimestamp(req.query.from) ?? Date.now();
@@ -204,7 +205,7 @@ weatherStationRouter.get(
 
 async function buildForecast(req) {
   const engineId = resolveEngine(req.query.engine);
-  const ids = resolveIds(req.query.ids);
+  const ids = await resolveIds(req.query.ids);
   const limit = resolveLimit(req.query.limit);
   const enrich = wantsEnrichment(req.query.enrich);
   const includeClear = req.query.include_clear === "1" || req.query.include_clear === "true";
