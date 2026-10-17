@@ -159,6 +159,17 @@ weatherStationRouter.get(
   })
 );
 
+// GET /weather-station/day-night?count=5 - phase jour/nuit, Haunts, Spooky Shop, prochaines nuits
+weatherStationRouter.get(
+  "/day-night",
+  asyncHandler(async (req, res) => {
+    const dayNight = await weatherStationService.getDayNight({ count: resolveCount(req.query.count) });
+
+    applyCacheHeaders(res, { cacheControl: "no-store" });
+    res.json(dayNight);
+  })
+);
+
 // GET /weather-station/next?ids=AmberMoon,Rain&count=5 - prochaines occurrences
 weatherStationRouter.get(
   "/next",

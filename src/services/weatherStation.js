@@ -14,6 +14,17 @@ import {
   predictDay,
   utcDayKey,
 } from "../core/weather/index.js";
+import {
+  DEFAULT_STAGE_MINUTES,
+  NOCTURNAL_STRENGTH_BONUS,
+  STAGE_ORDER,
+  dayNightAt,
+  extractStageMinutes,
+  hauntsAt,
+  nextSpookyShopOpening,
+  nightsFrom,
+} from "../core/weather/dayNight.js";
+import { getMainBundle } from "../core/game/cache.js";
 import { getStoredVersionCached } from "../core/game/versionStorage.js";
 import { gameDataService } from "./gameData.js";
 import { liveDataService } from "./liveData.js";
@@ -459,6 +470,7 @@ export function getEngineInfo() {
  */
 export async function getNow({ now = Date.now(), engineId = null, enrich = true } = {}) {
   const meta = enrich ? await getWeatherMeta() : null;
+  const { stages } = await getDayNightStages();
   const { event, clear, modeled } = stateAt(now, { engineId });
 
   const liveWeather = liveDataService.getWeather();
@@ -491,6 +503,9 @@ export async function getNow({ now = Date.now(), engineId = null, enrich = true 
         : null,
     },
     next: next.length ? serializeEvent(next[0], { meta, now, enrich }) : null,
+    // La nuit n'est pas une météo (l'API officielle l'ignore) mais change ce
+    // qui se passe en jeu : Haunts, Spooky Shop, force des pets nocturnes.
+    day_night: dayNightBlock(now, stages),
   };
 }
 
@@ -519,6 +534,7 @@ export async function getStation({ now = Date.now(), tz = "UTC", tzOffset = 0, u
       drift: checkDrift(),
     },
     now: current.now,
+    day_night: current.day_night,
     next: next.map((event) => serializeEvent(event, { meta, now, enrich })),
     today: {
       day: utcDayKey(dayStart + tzOffset),
@@ -531,6 +547,104 @@ export async function getStation({ now = Date.now(), tz = "UTC", tzOffset = 0, u
       minutes,
     },
     accuracy_24h: accuracy24h(),
+  };
+}
+
+// =====================
+// Jour & nuit
+// =====================
+
+let stagesCache = { mainUrl: null, value: null };
+
+/**
+ * Durée des phases jour/nuit, lue dans le bundle (chunk météo, sinon chunks de
+ * données) ; les valeurs connues servent de repli si le bundle est
+ * indisponible ou si la table a changé de forme.
+ */
+async function getDayNightStages() {
+  try {
+    const { mainUrl, weathersSource, dataSources } = await getMainBundle();
+    if (stagesCache.mainUrl === mainUrl && stagesCache.value) return stagesCache.value;
+
+    const found = [weathersSource, ...(dataSources ?? [])].map(extractStageMinutes).find(Boolean);
+    if (!found) logger.warn("Day/night stage table not found in the bundle, using known values");
+
+    stagesCache = {
+      mainUrl,
+      value: { stages: found ?? DEFAULT_STAGE_MINUTES, source: found ? "bundle" : "default" },
+    };
+    return stagesCache.value;
+  } catch {
+    return { stages: DEFAULT_STAGE_MINUTES, source: "default" };
+  }
+}
+
+/**
+ * Une météo est-elle active : l'observation live d'abord, le moteur sinon.
+ * Les Haunts sortent aussi pendant les météos, de jour comme de nuit.
+ */
+function isWeatherActive(now) {
+  const live = liveDataService.getWeather();
+  if (live) return canonicalWeatherKey(live) !== canonicalWeatherKey(CLEAR_SKIES);
+  return stateAt(now).clear === false;
+}
+
+function serializeNight(night) {
+  return Object.fromEntries(
+    Object.entries(night).flatMap(([key, ms]) => [[key, ms], [`${key}_iso`, iso(ms)]])
+  );
+}
+
+/**
+ * Bloc compact pour `/weather-station/now` et le tableau de bord.
+ */
+function dayNightBlock(now, stages) {
+  const state = dayNightAt(now, stages);
+  const nextStage = STAGE_ORDER[(STAGE_ORDER.indexOf(state.stage) + 1) % STAGE_ORDER.length];
+
+  return {
+    stage: state.stage,
+    is_night: state.is_night,
+    darkness: state.darkness,
+    phase: Math.round(state.phase * 10_000) / 10_000,
+    stage_started_at: state.stage_started_at,
+    stage_started_at_iso: iso(state.stage_started_at),
+    stage_ends_at: state.stage_ends_at,
+    stage_ends_at_iso: iso(state.stage_ends_at),
+    next_stage: nextStage,
+    nocturnal_strength_bonus: state.nocturnal_strength_bonus,
+    haunts: hauntsAt(now, { stage: state.stage, weatherActive: isWeatherActive(now) }),
+  };
+}
+
+/**
+ * Vue complète du cycle jour/nuit : phase courante, Haunts, Spooky Shop et
+ * prochaines nuits.
+ */
+export async function getDayNight({ now = Date.now(), count = 5 } = {}) {
+  const { stages, source } = await getDayNightStages();
+  const spookyOpensAt = nextSpookyShopOpening(now, stages);
+  const spooky = liveDataService.getShops()?.spooky ?? null;
+
+  return {
+    generated_at: now,
+    generated_at_iso: iso(now),
+    source,
+    cycle: {
+      stage_minutes: stages,
+      cycle_minutes: Object.values(stages).reduce((sum, n) => sum + n, 0),
+      order: STAGE_ORDER,
+      anchor: "unix_epoch",
+    },
+    now: dayNightBlock(now, stages),
+    nocturnal_strength_bonus: NOCTURNAL_STRENGTH_BONUS,
+    spooky_shop: {
+      open: spooky?.open ?? null,
+      closes_at: spooky?.open && spooky.nextRestockAt ? Date.parse(spooky.nextRestockAt) : null,
+      next_open_at: spookyOpensAt,
+      next_open_at_iso: spookyOpensAt ? iso(spookyOpensAt) : null,
+    },
+    nights: nightsFrom(now, count, stages).map(serializeNight),
   };
 }
 
@@ -559,6 +673,7 @@ export const weatherStationService = {
   getEngineInfo,
   getNow,
   getStation,
+  getDayNight,
   getHealthSnapshot,
   getWeatherMeta,
   serializeEvent,

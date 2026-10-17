@@ -246,3 +246,17 @@ test("snapIfNearGrid corrects interval noise but leaves off-grid cycles alone", 
   const offGrid = Date.parse("2026-08-07T16:02:13.000Z");
   assert.equal(snapIfNearGrid(offGrid), offGrid);
 });
+
+test("a closed Spooky Shop announces its next opening, at the next sunset", () => {
+  const now = Date.parse("2026-10-17T14:00:00.000Z");
+  const closed = withRestockCountdown({ spooky: { open: false, nextRestockAt: null, items: [] } }, now);
+  assert.equal(closed.spooky.nextOpenAt, "2026-10-17T17:40:00.000Z");
+
+  // Ouvert, `nextRestockAt` est sa fermeture et il n'y a pas d'ouverture à annoncer.
+  const open = withRestockCountdown(
+    { spooky: { open: true, nextRestockAt: "2026-10-17T18:10:00.000Z", items: [] } },
+    Date.parse("2026-10-17T17:45:00.000Z")
+  );
+  assert.equal(open.spooky.nextOpenAt, null);
+  assert.equal(open.spooky.secondsUntilRestock, 25 * 60);
+});

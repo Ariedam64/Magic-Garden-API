@@ -1,5 +1,7 @@
 // src/core/platform/shops.js
 
+import { nextSpookyShopOpening } from "../weather/dayNight.js";
+
 /**
  * Normalisation des shops renvoyés par `/platform/v1/shops`.
  *
@@ -100,6 +102,15 @@ export function withRestockCountdown(shops, now = Date.now()) {
       secondsUntilRestock: secondsUntilRestock(shop.nextRestockAt, now),
     };
   }
+
+  // Le Spooky Shop n'a pas de restock : il ouvre 30 minutes à chaque coucher
+  // de soleil du jeu, et son `nextRestockAt` est l'heure de **fermeture**.
+  // Fermé, l'API officielle ne dit rien de sa réouverture : on la calcule.
+  if (result.spooky) {
+    const opensAt = result.spooky.open ? null : nextSpookyShopOpening(now);
+    result.spooky.nextOpenAt = opensAt ? new Date(opensAt).toISOString() : null;
+  }
+
   return result;
 }
 
