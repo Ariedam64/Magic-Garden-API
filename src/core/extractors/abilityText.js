@@ -19,7 +19,7 @@ import vm from "node:vm";
 import { extractBalanced } from "../game/bundle/extractor.js";
 import { makeGlobalSandboxProxy } from "../game/bundle/sandbox.js";
 import { ABILITY_COLOR_NAMES, COLOR_MIN_HITS } from "../game/bundle/colorNames.js";
-import { extractEnums, findStringEnumMap } from "./enums.js";
+import { findStringEnumMap } from "./enums.js";
 import { logger } from "../../logger/index.js";
 
 // Mêmes identifiants stables que pour les couleurs : ils survivent à la
@@ -137,6 +137,19 @@ function findObjectConstSource(js, name) {
 }
 
 /**
+ * Source d'une constante définie par un appel : `Vb=Lo(\`\`,c.Ui.Size,Ib)`.
+ */
+function findCallConstSource(js, name) {
+  const escaped = name.replace(/[$]/g, "\\$&");
+  const match = new RegExp(`(?:^|[^A-Za-z0-9_$.])${escaped}=([A-Za-z_$][\\w$]*)\\(`).exec(js);
+  if (!match) return null;
+
+  const parenIndex = match.index + match[0].length - 1;
+  const args = extractBalanced(js, parenIndex, "(", ")");
+  return args === null ? null : `${match[1]}${args}`;
+}
+
+/**
  * Résout un tableau de données du chunk data à partir de sa clé.
  * Sert aux tables indexées référencées par le chunk UI (ex. les raretés de
  * chaque palier de SeedFinder : `SeedFinderI:[F.Common,F.Uncommon]`).
@@ -186,6 +199,20 @@ function resolveNode(node, ctx, depth = 0) {
       }
     }
 
+    // Constante construite par un helper (icône inline des tooltips) : on
+    // garde l'appel, dont les arguments disent ce qu'il affiche.
+    const callSource = path.includes(".") ? null : findCallConstSource(ctx.uiJs, path);
+    if (callSource) {
+      try {
+        const value = vm.runInNewContext(`(${callSource})`, makeRecordingSandbox(), {
+          timeout: VM_TIMEOUT_MS,
+        });
+        if (isCallNode(value)) return resolveNode(value, ctx, depth + 1);
+      } catch {
+        /* on retombe sur le chemin brut */
+      }
+    }
+
     // `Table.Key.0` -> tableau indexé du chunk data
     const segments = path.split(".");
     if (segments.length >= 3 && /^\d+$/.test(segments.at(-1))) {
@@ -227,10 +254,49 @@ function resolveNode(node, ctx, depth = 0) {
   return node;
 }
 
-const findDescriptor = (node) =>
-  isCallNode(node)
-    ? node.args.find((arg) => arg && typeof arg === "object" && typeof arg.message === "string")
-    : undefined;
+const isMessage = (arg) => !!arg && typeof arg === "object" && typeof arg.message === "string";
+
+/**
+ * Le descripteur `{ id, message }` d'un appel de tooltip, directement en
+ * argument, ou enveloppé avec ses valeurs par un helper importé
+ * (`V(desc, { sizeIncrease: L(...) })`, soit `{ ...desc, values }` côté jeu) —
+ * forme des Crop Size Boost, dont le message contient `{sizeIncrease}`.
+ */
+const findDescriptor = (node) => {
+  if (!isCallNode(node)) return undefined;
+
+  const direct = node.args.find(isMessage);
+  if (direct) return direct;
+
+  const wrapped = node.args.find((arg) => isCallNode(arg) && isMessage(arg.args[0]));
+  if (!wrapped) return undefined;
+
+  const values = wrapped.args[1];
+  return { ...wrapped.args[0], values: values && typeof values === "object" ? values : undefined };
+};
+
+/**
+ * Valeurs `{placeholder}` d'un message : chacune lit un paramètre de l'ability
+ * (`nn[e].baseParameters.sizeIncrease`) passé à un formateur de nombre avec ses
+ * options (`{ signDisplay: "always" }`). On publie le paramètre et le format ;
+ * la valeur réelle, propre à chaque palier (I, II, III), est substituée par
+ * l'extracteur des abilities.
+ */
+function buildValues(values) {
+  if (!values) return undefined;
+
+  const out = {};
+  for (const [key, node] of Object.entries(values)) {
+    const source = isCallNode(node) ? node.args[0] : node;
+    const path = typeof source?.__ident === "string" ? source.__ident : null;
+    const parameter = path?.match(/\.baseParameters\.([A-Za-z0-9_$]+)$/)?.[1];
+    if (!parameter) continue;
+
+    const options = isCallNode(node) && node.args[1] && typeof node.args[1] === "object" ? node.args[1] : {};
+    out[key] = { parameter, format: { ...options } };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 /**
  * Certains `case` délèguent à un helper qui construit lui-même le message
@@ -286,6 +352,14 @@ function classifyToken(node, ctx) {
 
     if (id && ctx.rarityValues.has(id)) return { type: "rarity", id };
     return { type: segments.includes("crop") ? "crop" : "item", id };
+  }
+
+  // Icône inline (`Lo(\`\`, c.Ui.Size, 18)`) : un sprite d'interface.
+  if (isCallNode(node)) {
+    for (const arg of node.args) {
+      const icon = typeof arg?.__ident === "string" ? arg.__ident.match(/(?:^|\.)Ui\.([A-Za-z0-9_]+)$/) : null;
+      if (icon) return { type: "icon", id: icon[1] };
+    }
   }
 
   // Depuis la 1373, les jetons passent par des helpers importés d'autres
@@ -361,11 +435,15 @@ export function extractAbilityDescriptions(uiJs, dataJs, dataSources = [dataJs])
   // L'enum Rarity sert à la fois à résoudre les tables indexées du chunk data
   // et à reconnaître les jetons de rareté, qui partagent la forme `gameThing`
   // avec les items et les cultures.
+  // Les valeurs sont tirées de la même table : relancer `extractEnums` sur ce
+  // seul chunk cherchait aussi weather/eligibleShops/itemType, qui vivent
+  // ailleurs, et loggait trois faux « Enum not found » à chaque extraction.
+  const rarityMap = findStringEnumMap(dataJs, RARITY_ENUM_KEYS);
   const ctx = {
     uiJs,
     dataJs,
-    rarityMap: findStringEnumMap(dataJs, RARITY_ENUM_KEYS),
-    rarityValues: new Set(extractEnums(dataJs).rarity ?? []),
+    rarityMap,
+    rarityValues: new Set(Object.values(rarityMap ?? {})),
     // Une entrée du catalogue des plantes s'ouvre sur `Id:{name:`...`,seed:{`.
     isCrop: (id) => {
       const entry = new RegExp(`[,{]${id.replace(/[$]/g, "\\$&")}:\\{name:\`[^\`]*\`,seed:\\{`);
@@ -406,9 +484,11 @@ export function extractAbilityDescriptions(uiJs, dataJs, dataSources = [dataJs])
       continue;
     }
 
+    const values = buildValues(descriptor.values);
     descriptions[name] = {
       description: descriptor.message,
       descriptionTokens: buildTokens(node.args.find(isTagsObject), ctx),
+      ...(values ? { descriptionValues: values } : {}),
     };
   }
 

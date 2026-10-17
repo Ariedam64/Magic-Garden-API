@@ -891,8 +891,10 @@ paths:
 
         `description` is the tooltip text the game shows, in English, and is
         `null` when the game ships none. It may contain positional placeholders
-        `<0/>`, `<1/>`, ... which the game renders as icons. `descriptionTokens`
-        gives what each placeholder stands for, in the same order:
+        `<0/>`, `<1/>`, ... which the game renders as icons. Numbers the game
+        computes from the ability's `baseParameters` are already filled in (Crop
+        Size Boost I: `by +4 <0/>`). `descriptionTokens` gives what each
+        placeholder stands for, in the same order:
 
         | `type` | `id` refers to |
         |---|---|
@@ -901,6 +903,7 @@ paths:
         | `crop` | a `/data/plants` entry |
         | `currency` | a value of the `currency` enum |
         | `rarity` | a value of the `rarity` enum |
+        | `icon` | an interface sprite, `/assets/sprites/ui/<id>.png` (e.g. `Size`) |
         | `unknown` | unresolved (`id` is `null`) |
 
         Substitute each placeholder with the token's icon, or with its `id` for

@@ -45,6 +45,26 @@ function extractCelestialAbilities(mainJs) {
 }
 
 /**
+ * Remplace les `{placeholder}` d'une description par la valeur du paramètre de
+ * l'ability, formatée comme le jeu (`{ signDisplay: "always" }` -> `+4`). Un
+ * paramètre introuvable laisse le placeholder en place plutôt qu'un faux nombre.
+ */
+function fillDescriptionValues(description, values, ability) {
+  if (!description || !values) return description;
+
+  return description.replace(/\{([A-Za-z0-9_]+)\}/g, (whole, key) => {
+    const spec = values[key];
+    const value = spec ? ability?.baseParameters?.[spec.parameter] : undefined;
+    if (typeof value !== "number") return whole;
+    try {
+      return new Intl.NumberFormat("en-US", spec.format).format(value);
+    } catch {
+      return String(value);
+    }
+  });
+}
+
+/**
  * Extrait les données des abilities du bundle.
  *
  * Les couleurs vivent dans un bloc UI distinct des données (switch ou map selon
@@ -78,7 +98,7 @@ export function extractAbilities(mainJs, indexJs, uiColorsSources, abilityTextSo
 
   for (const [key, ability] of Object.entries(abilities)) {
     const text = descriptions[key];
-    ability.description = text?.description ?? null;
+    ability.description = fillDescriptionValues(text?.description ?? null, text?.descriptionValues, ability);
     ability.descriptionTokens = text?.descriptionTokens ?? [];
   }
 

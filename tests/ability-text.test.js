@@ -135,3 +135,46 @@ describe("extractAbilityDescriptions", () => {
     assert.deepEqual(extractAbilityDescriptions("var x=1;", DATA_CHUNK), {});
   });
 });
+
+describe("ability descriptions with values (Crop Size Boost, 1608)", () => {
+  // Forme réelle 1608 : le message est enveloppé avec ses valeurs par un helper
+  // importé (`V(desc, values)` = `{ ...desc, values }`), le paramètre est lu
+  // dans le catalogue de l'ability, et l'icône est une constante construite
+  // par un appel (`Vb=Lo(``,c.Ui.Size,Ib)`).
+  const UI = [
+    "var Ib=18,Gb={id:`/C7193`,message:`Chance to increase size of garden crops by {sizeIncrease} <0/>`}," +
+      "Kb={id:`bkMAGm`,message:`Chance to increase size of garden crops by {sizeIncrease} <0/> during Snow`}," +
+      "Vb=Lo(``,c.Ui.Size,Ib);",
+    "function qG(e){switch(e){",
+    "case`ProduceScaleBoost`:case`ProduceScaleBoostII`:case`SnowyCropSizeBoost`:" +
+      "return Y(V(e===`SnowyCropSizeBoost`?Kb:Gb,{sizeIncrease:L(nn[e].baseParameters.sizeIncrease,{signDisplay:`always`})}),{0:Vb});",
+    "case`ProduceMutationBoost`:return Z({id:`INyz4p`,message:`Increases chance of garden crops gaining weather mutations`});",
+    "case`PetMutationBoost`:return Z({id:`wGIyjc`,message:`Increases chance of hatched pets gaining mutations`});",
+    "case`HungerRestore`:return Z({id:`LP/vSz`,message:`Restores hunger`});",
+    "case`DoubleHarvest`:return Z({id:`Wg0Nq6`,message:`Chance to harvest an extra crop`});",
+    "case`GoldGranter`:return Z({id:`P+xkUg`,message:`Chance to grant gold`});",
+    "case`RainDance`:return Z({id:`x`,message:`Rain`});",
+    "}}",
+  ].join("");
+  const DATA = "var F=function(e){return e.Common=`Common`,e.Uncommon=`Uncommon`,e.Rare=`Rare`,e}({});";
+
+  const descriptions = extractAbilityDescriptions(UI, DATA);
+
+  it("finds the message wrapped with its values, per ability", () => {
+    assert.equal(
+      descriptions.ProduceScaleBoost.description,
+      "Chance to increase size of garden crops by {sizeIncrease} <0/>"
+    );
+    assert.match(descriptions.SnowyCropSizeBoost.description, /during Snow$/);
+  });
+
+  it("publishes which parameter fills each placeholder, and its format", () => {
+    assert.deepEqual(descriptions.ProduceScaleBoostII.descriptionValues, {
+      sizeIncrease: { parameter: "sizeIncrease", format: { signDisplay: "always" } },
+    });
+  });
+
+  it("reads an icon built by a helper constant", () => {
+    assert.deepEqual(descriptions.ProduceScaleBoost.descriptionTokens, [{ type: "icon", id: "Size" }]);
+  });
+});
