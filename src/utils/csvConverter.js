@@ -17,6 +17,11 @@ function flattenObject(obj, prefix = "") {
 
     if (Array.isArray(value)) {
       result[fullKey] = JSON.stringify(value);
+    } else if (Object.prototype.toString.call(value) === "[object Date]") {
+      // Une date n'a aucune propriété propre : aplatie comme un objet, elle
+      // disparaissait du CSV (`expiryDate`). Test indépendant du realm, les
+      // données du jeu sortant d'une vm.
+      result[fullKey] = Number.isNaN(value.getTime()) ? null : value.toISOString();
     } else if (value !== null && typeof value === "object") {
       Object.assign(result, flattenObject(value, fullKey));
     } else {
