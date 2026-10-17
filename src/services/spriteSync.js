@@ -19,12 +19,10 @@ import {
   extractAllSources,
 } from "../assets/manifest.js";
 import { exportSpritesToDisk } from "../assets/sprites/exportSpritesToDisk.js";
-import {
-  exportPetsFromRive,
-  resolvePetsRiveUrl,
-} from "../assets/sprites/exportPetsFromRive.js";
+import { exportPetsFromRive } from "../assets/sprites/exportPetsFromRive.js";
+import { resolvePetsRiveFiles } from "../assets/sprites/riveManifest.js";
 import { exportDecorFromRive } from "../assets/sprites/exportDecorFromRive.js";
-import { getStoredRiveUrl, saveRiveAsset } from "../core/game/riveStorage.js";
+import { loadStoredRiveAssets, saveRiveAsset } from "../core/game/riveStorage.js";
 import { syncPetAnimations } from "./animationSync.js";
 import { syncRiveInventory } from "./riveSync.js";
 import { joinUrl } from "../utils/url.js";
@@ -157,38 +155,49 @@ async function fetchAllAtlases(baseUrl) {
  * Re-render the pet sprites from the game's Rive file when it changed.
  *
  * Les pets ne sont plus dans les atlas TexturePacker (seuls les œufs y
- * restent) : ils vivent dans `rive/pets.riv`, servi sous une URL versionnée
- * par hash. La comparaison d'atlas ne peut donc rien dire à leur sujet — on
- * suit ce fichier séparément, sinon un changement d'artwork de pet passerait
- * inaperçu (ou pire, on re-rendrait 30 artboards à chaque sync).
+ * restent) : ils vivent dans `rive/pets.riv` et, pour les pets d'événement,
+ * dans des fichiers à part (`halloween-pets.riv`), servis sous des URL
+ * versionnées par hash. La comparaison d'atlas ne peut donc rien dire à leur
+ * sujet — on suit ces fichiers séparément, sinon un changement d'artwork de
+ * pet passerait inaperçu (ou pire, on re-rendrait 30 artboards à chaque sync).
  *
- * @returns {Promise<{ exported: number, changed: boolean, riveUrl?: string, reason?: string }>}
+ * @returns {Promise<{ exported: number, changed: boolean, riveUrls?: string[], reason?: string }>}
  */
 async function syncPetSprites({ baseUrl, force = false } = {}) {
   try {
-    const riveUrl = await resolvePetsRiveUrl(baseUrl);
-    if (!riveUrl) {
+    const files = await resolvePetsRiveFiles({ baseUrl });
+    if (!files.length) {
       return { exported: 0, changed: false, reason: "rive_not_in_manifest" };
     }
 
-    const storedUrl = await getStoredRiveUrl("pets");
-    if (!force && storedUrl === riveUrl) {
-      logger.debug({ riveUrl }, "Pets Rive file unchanged, skipping pet sprite export");
-      return { exported: 0, changed: false, riveUrl, reason: "unchanged" };
+    const riveUrls = files.map((f) => f.url);
+    const stored = await loadStoredRiveAssets();
+    const changedFiles = files.filter((f) => stored[f.key]?.url !== f.url);
+    if (!force && !changedFiles.length) {
+      logger.debug({ riveUrls }, "Pets Rive files unchanged, skipping pet sprite export");
+      return { exported: 0, changed: false, riveUrls, reason: "unchanged" };
     }
 
-    logger.info({ from: storedUrl, to: riveUrl, force }, "Exporting pet sprites from Rive");
+    logger.info(
+      { changed: changedFiles.map((f) => ({ key: f.key, from: stored[f.key]?.url ?? null, to: f.url })), force },
+      "Exporting pet sprites from Rive"
+    );
 
+    // Tous les fichiers sont re-rendus ensemble : le sidecar des frames est
+    // réécrit d'un bloc, un export partiel y perdrait les autres espèces.
     const result = await exportPetsFromRive({
       outDir: config.sprites.exportDir,
-      riveUrl,
+      riveUrls,
     });
 
     if (result.exported > 0) {
-      await saveRiveAsset("pets", { url: riveUrl, names: result.names });
+      for (const file of files) {
+        const names = result.files.find((f) => f.url === file.url)?.names ?? [];
+        await saveRiveAsset(file.key, { url: file.url, names });
+      }
     }
 
-    return { exported: result.exported, changed: result.exported > 0, riveUrl };
+    return { exported: result.exported, changed: result.exported > 0, riveUrls };
   } catch (err) {
     // Un échec de rendu Rive ne doit pas faire tomber la sync des atlas :
     // les PNG de pets déjà sur disque restent servis.
@@ -263,7 +272,7 @@ export async function checkAndSyncSprites({ force = false } = {}) {
     // 2b. Animations de pets : même source (`rive/pets.riv`), mais des minutes
     // de rendu — donc un processus fils, qu'on ne suit pas. Les boucles déjà
     // sur disque restent servies pendant la regénération.
-    await syncPetAnimations({ riveUrl: petResult.riveUrl ?? null, force });
+    await syncPetAnimations({ riveUrls: petResult.riveUrls ?? [], force });
 
     // 3. Skip the atlas work if version unchanged and not forced
     if (!versionChanged && !force) {

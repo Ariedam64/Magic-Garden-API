@@ -1,7 +1,7 @@
 // src/assets/sprites/riveManifest.js
 
 import { getBaseUrl } from "../assets.js";
-import { loadManifest } from "../manifest.js";
+import { loadManifest, assetSourcePaths } from "../manifest.js";
 import { joinUrl } from "../../utils/url.js";
 
 /**
@@ -49,9 +49,10 @@ export async function resolveRiveAssets({ baseUrl = null } = {}) {
 
   for (const bundle of bundles) {
     for (const asset of bundle?.assets ?? []) {
-      const src = (Array.isArray(asset?.src) ? asset.src : []).find(
-        (s) => typeof s === "string" && s.endsWith(".riv")
-      );
+      // Depuis v1231 les sources sont des `{ src, progressSize }` : filtrer
+      // sur `typeof s === "string"` vidait la liste, et plus aucun Rive
+      // n'était synchronisé (ni les pets d'Halloween, ni les mises à jour).
+      const src = assetSourcePaths(asset).find((s) => s.endsWith(".riv"));
       if (!src) continue;
 
       const key = keyFromSrc(src);
@@ -80,6 +81,33 @@ export async function resolveRiveAssets({ baseUrl = null } = {}) {
 export async function resolveRiveUrl(key, { baseUrl = null } = {}) {
   const assets = await resolveRiveAssets({ baseUrl });
   return assets.find((asset) => asset.key === key)?.url ?? null;
+}
+
+/**
+ * Les pets ne tiennent plus dans un seul fichier.
+ *
+ * Les pets d'événement arrivent dans leur propre `.riv` : Moth, Snake et Toad
+ * (Halloween, 1598) sont dans `halloween-pets.riv`, pas dans `pets.riv`. Le
+ * jeu associe chaque espèce à son fichier, nous n'avons que le nom de celui-ci :
+ * `pets`, ou `<événement>-pets`. Les silhouettes (`*-pets-silhouettes`) sont
+ * des JSON, pas des `.riv`, et ne passent donc jamais par ici.
+ */
+export function isPetsRiveKey(key) {
+  return key === "pets" || /-pets$/.test(String(key ?? ""));
+}
+
+/**
+ * Fichiers Rive de pets, `pets.riv` en tête : en cas d'artboard homonyme dans
+ * deux fichiers, c'est le fichier principal qui fait foi.
+ *
+ * @returns {Promise<Array<{ key: string, url: string }>>}
+ */
+export async function resolvePetsRiveFiles({ baseUrl = null } = {}) {
+  const assets = await resolveRiveAssets({ baseUrl });
+  return assets
+    .filter((asset) => isPetsRiveKey(asset.key))
+    .sort((a, b) => (a.key === "pets" ? -1 : b.key === "pets" ? 1 : a.key.localeCompare(b.key)))
+    .map(({ key, url }) => ({ key, url }));
 }
 
 /**

@@ -42,11 +42,11 @@ let running = null;
  * Lance l'export des animations si le .riv a changé.
  *
  * @param {object} options
- * @param {string|null} options.riveUrl - URL du .riv courant (résolue par l'appelant)
+ * @param {string[]} options.riveUrls - URLs des .riv de pets courants (résolues par l'appelant)
  * @param {boolean} options.force - Regénère même si le .riv est inchangé
  * @returns {Promise<{ started: boolean, reason?: string }>}
  */
-export async function syncPetAnimations({ riveUrl = null, force = false } = {}) {
+export async function syncPetAnimations({ riveUrls = [], force = false } = {}) {
   if (!config.animations.enabled) {
     return { started: false, reason: "disabled" };
   }
@@ -65,23 +65,23 @@ export async function syncPetAnimations({ riveUrl = null, force = false } = {}) 
   // Sans URL résolue on ne sait pas s'il y a quoi que ce soit à refaire, et le
   // fils irait la chercher pour rien : on s'abstient, comme le fait l'export
   // des PNG.
-  if (!riveUrl && !force) {
+  if (!riveUrls.length && !force) {
     return { started: false, reason: "rive_url_unknown" };
   }
 
-  if (!force && riveUrl) {
-    const { riveUrl: generatedFrom } = await getAnimations("pets");
-    if (generatedFrom === riveUrl) {
-      logger.debug({ riveUrl }, "Pet animations already generated for this Rive file");
+  if (!force && riveUrls.length) {
+    const { riveUrls: generatedFrom } = await getAnimations("pets");
+    if (sameUrls(generatedFrom, riveUrls)) {
+      logger.debug({ riveUrls }, "Pet animations already generated for these Rive files");
       return { started: false, reason: "unchanged" };
     }
   }
 
   const args = [];
   if (force) args.push("--force");
-  if (riveUrl) args.push(`--url=${riveUrl}`);
+  if (riveUrls.length) args.push(`--url=${riveUrls.join(",")}`);
 
-  logger.info({ riveUrl, force }, "Starting pet animation export in background");
+  logger.info({ riveUrls, force }, "Starting pet animation export in background");
 
   const child = fork(SCRIPT, args, {
     // Le fils écrit ses propres logs (même logger, même format) ; on hérite
@@ -121,6 +121,12 @@ export async function syncPetAnimations({ riveUrl = null, force = false } = {}) 
   });
 
   return { started: true };
+}
+
+function sameUrls(a, b) {
+  if (!Array.isArray(a) || a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((url) => set.has(url));
 }
 
 /**

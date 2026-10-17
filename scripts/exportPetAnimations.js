@@ -23,7 +23,7 @@ import { acquireLock, clearLock } from "../src/assets/sprites/animationLock.js";
 const EXPORTERS = { pets: exportPetAnimations, decor: exportDecorAnimations };
 
 function parseArgs(argv) {
-  const args = { force: false, formats: null, url: null, only: null };
+  const args = { force: false, formats: null, urls: null, only: null };
 
   for (const arg of argv) {
     if (arg === "--force") args.force = true;
@@ -33,8 +33,10 @@ function parseArgs(argv) {
         .split(",")
         .map((f) => f.trim().toLowerCase())
         .filter(Boolean);
-    } else if (arg.startsWith("--url=")) args.url = arg.slice("--url=".length);
-    else if (arg.startsWith("--only=")) args.only = arg.slice("--only=".length).trim();
+    } else if (arg.startsWith("--url=")) {
+      // Plusieurs fichiers pour une catégorie (pets + pets d'événement).
+      args.urls = arg.slice("--url=".length).split(",").map((u) => u.trim()).filter(Boolean);
+    } else if (arg.startsWith("--only=")) args.only = arg.slice("--only=".length).trim();
   }
 
   return args;
@@ -85,7 +87,7 @@ for (const category of categories) {
       outDir: config.sprites.exportDir,
       // L'URL forcée ne vaut que pour un export ciblé : deux catégories ne
       // partagent pas le même fichier.
-      riveUrl: categories.length === 1 ? args.url : null,
+      riveUrls: categories.length === 1 ? args.urls : null,
       force: args.force,
       formats: args.formats || config.animations.formats,
       onProgress: ({ done, total, name, clip }) => {

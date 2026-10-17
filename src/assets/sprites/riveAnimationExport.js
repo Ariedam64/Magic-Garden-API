@@ -125,6 +125,8 @@ async function pruneStaleFiles(destDir, animations, formats) {
  * @param {(file: object, artboardNames: string[]) => object[]} options.buildTargets
  * @param {string} options.outDir
  * @param {string|null} options.riveUrl - Résolue si absente
+ * @param {string[]|null} options.riveUrls - Plusieurs fichiers pour une même
+ *   catégorie (les pets d'événement ont leur propre `.riv`). Prime sur `riveUrl`.
  * @param {boolean} options.force
  * @param {string[]} options.formats
  * @param {(progress: object) => void} options.onProgress
@@ -136,14 +138,16 @@ export async function exportRiveAnimations({
   buildTargets,
   outDir = "./export",
   riveUrl = null,
+  riveUrls = null,
   force = false,
   formats = config.animations.formats,
   onProgress = null,
 } = {}) {
-  const url = riveUrl || (await resolveRiveUrl(riveKey));
+  const urls = riveUrls?.length ? riveUrls : [riveUrl || (await resolveRiveUrl(riveKey))].filter(Boolean);
+  const url = urls[0] ?? null;
   if (!url) {
     logger.warn({ riveKey }, "Rive file not found in manifest, skipping animation export");
-    return { exported: 0, skipped: 0, failed: 0, bytes: 0, riveUrl: null };
+    return { exported: 0, skipped: 0, failed: 0, bytes: 0, riveUrl: null, riveUrls: [] };
   }
 
   // Aucun format demandé : on s'arrête avant d'écrire quoi que ce soit. Sans
@@ -151,7 +155,7 @@ export async function exportRiveAnimations({
   // supprimerait toutes les animations déjà générées.
   if (!formats.length) {
     logger.warn({ riveKey }, "No animation format configured, skipping animation export");
-    return { exported: 0, skipped: 0, failed: 0, bytes: 0, riveUrl: url };
+    return { exported: 0, skipped: 0, failed: 0, bytes: 0, riveUrl: url, riveUrls: urls };
   }
 
   const destDir = path.join(outDir, "animation", category);
@@ -165,9 +169,22 @@ export async function exportRiveAnimations({
   // sans être réencodé.
   const reusable = force ? {} : previous?.animations || {};
 
-  const bytes = await downloadBuffer(url);
-  const { file, artboardNames } = await loadRiveFile(bytes);
-  const targets = buildTargets(file, artboardNames);
+  // Toutes les cibles de la catégorie, quel que soit leur fichier : le sidecar
+  // et le nettoyage des orphelins portent sur la catégorie entière, deux
+  // exports séparés s'effaceraient l'un l'autre. À nom égal, le premier
+  // fichier fait foi.
+  const targets = [];
+  const seen = new Set();
+  for (const source of urls) {
+    const bytes = await downloadBuffer(source);
+    const { file, artboardNames } = await loadRiveFile(bytes);
+    for (const target of buildTargets(file, artboardNames)) {
+      const id = `${target.name}|${target.clip.id}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      targets.push({ ...target, file });
+    }
+  }
 
   const animations = {};
   let exported = 0;
@@ -190,7 +207,7 @@ export async function exportRiveAnimations({
 
       // Repérage d'abord : il donne le cadrage *et* l'empreinte du cycle, pour
       // quelques secondes contre ~40 pour un rendu complet.
-      const probe = await probeArtboardAnimation(file, target.artboard, probeOptions);
+      const probe = await probeArtboardAnimation(target.file, target.artboard, probeOptions);
       if (!probe) {
         logger.debug(
           { artboard: target.artboard, timeline: target.clip.timeline },
@@ -215,7 +232,7 @@ export async function exportRiveAnimations({
         continue;
       }
 
-      const capture = await renderArtboardAnimation(file, target.artboard, {
+      const capture = await renderArtboardAnimation(target.file, target.artboard, {
         ...probeOptions,
         height: config.animations.height,
         probe,
@@ -279,6 +296,7 @@ export async function exportRiveAnimations({
     JSON.stringify(
       {
         riveUrl: url,
+        riveUrls: urls,
         generatedAt: new Date().toISOString(),
         formats,
         height: config.animations.height,
@@ -294,7 +312,7 @@ export async function exportRiveAnimations({
   logger.info(
     {
       category,
-      riveUrl: url,
+      riveUrls: urls,
       exported,
       reused: skipped,
       failed,
@@ -303,5 +321,5 @@ export async function exportRiveAnimations({
     "Animations rendered from Rive"
   );
 
-  return { exported, skipped, failed, bytes: totalBytes, riveUrl: url };
+  return { exported, skipped, failed, bytes: totalBytes, riveUrl: url, riveUrls: urls };
 }

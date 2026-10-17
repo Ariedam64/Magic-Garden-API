@@ -25,7 +25,7 @@ export const ANIMATION_CATEGORIES = ["pets", "decor"];
 
 const CACHE_TTL_MS = 60_000;
 
-const EMPTY = { riveUrl: null, generatedAt: null, animations: {} };
+const EMPTY = { riveUrl: null, riveUrls: [], generatedAt: null, animations: {} };
 
 const caches = new Map();
 
@@ -52,7 +52,7 @@ export function animationDir(category) {
  * minute).
  *
  * @param {string} category
- * @returns {Promise<{ riveUrl: string|null, generatedAt: string|null, animations: object }>}
+ * @returns {Promise<{ riveUrl: string|null, riveUrls: string[], generatedAt: string|null, animations: object }>}
  */
 export async function getAnimations(category) {
   const cache = cacheFor(category);
@@ -81,6 +81,8 @@ export async function getAnimations(category) {
     cache.mtimeMs = mtimeMs;
     cache.data = {
       riveUrl: parsed?.riveUrl ?? null,
+      // Sidecars antérieurs aux pets d'événement : un seul fichier.
+      riveUrls: parsed?.riveUrls ?? (parsed?.riveUrl ? [parsed.riveUrl] : []),
       generatedAt: parsed?.generatedAt ?? null,
       animations: parsed?.animations ?? {},
     };

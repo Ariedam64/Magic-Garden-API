@@ -6,10 +6,12 @@ import {
   ACTIVE_VARIANTS,
   PET_STATE_MACHINE,
   findContainerArtboard,
+  resolvePetsRiveUrls,
 } from "./exportPetsFromRive.js";
 
 /**
- * Export des animations de pets depuis `rive/pets.riv`.
+ * Export des animations de pets depuis `rive/pets.riv` et les fichiers des
+ * pets d'événement (`rive/halloween-pets.riv`).
  *
  * À l'inverse des PNG (`exportPetsFromRive.js`), qui figent une pose, on sort
  * ici une boucle par timeline utile. Le jeu, lui, ne produit jamais de fichier
@@ -96,8 +98,15 @@ function buildTargets(file, artboardNames) {
  * @param {object} options - Voir exportRiveAnimations
  */
 export async function exportPetAnimations(options = {}) {
+  const riveUrls = options.riveUrls?.length
+    ? options.riveUrls
+    : options.riveUrl
+      ? [options.riveUrl]
+      : await resolvePetsRiveUrls();
+
   return exportRiveAnimations({
     ...options,
+    riveUrls,
     category: ANIMATION_CATEGORY,
     riveKey: "pets",
     buildTargets,

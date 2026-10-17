@@ -2,7 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { resolveRiveUrl, findContainerArtboard } from "./riveManifest.js";
+import { resolveRiveUrl, resolvePetsRiveFiles, findContainerArtboard } from "./riveManifest.js";
 import { logger } from "../../logger/index.js";
 import { loadRiveFile, renderArtboardToPng } from "./riveRenderer.js";
 import { RIVE_FRAMES_FILE } from "./riveFrames.js";
@@ -55,6 +55,16 @@ export async function resolvePetsRiveUrl(baseUrl = null) {
   return resolveRiveUrl(PETS_RIVE_KEY, { baseUrl });
 }
 
+/**
+ * URLs de tous les .riv de pets (`pets.riv` en tête, puis les fichiers
+ * d'événement comme `halloween-pets.riv`).
+ *
+ * @returns {Promise<string[]>}
+ */
+export async function resolvePetsRiveUrls(baseUrl = null) {
+  return (await resolvePetsRiveFiles({ baseUrl })).map((file) => file.url);
+}
+
 async function downloadBuffer(url) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" },
@@ -70,22 +80,70 @@ async function downloadBuffer(url) {
  *
  * @param {object} options
  * @param {string} options.outDir - Racine d'export (celle des sprites d'atlas)
- * @param {string|null} options.riveUrl - URL du .riv (résolue si absente)
- * @returns {Promise<{ exported: number, names: string[], riveUrl: string|null, skipped: string|null }>}
+ * @param {string[]|null} options.riveUrls - URLs des .riv de pets (résolues si absentes)
+ * @returns {Promise<{ exported: number, names: string[], riveUrl: string|null, riveUrls: string[], files: Array<{ url: string, names: string[] }>, skipped: string|null }>}
  */
-export async function exportPetsFromRive({ outDir = "./export", riveUrl = null } = {}) {
-  const url = riveUrl || (await resolvePetsRiveUrl());
-  if (!url) {
+export async function exportPetsFromRive({ outDir = "./export", riveUrls = null } = {}) {
+  const urls = riveUrls?.length ? riveUrls : await resolvePetsRiveUrls();
+  if (!urls.length) {
     logger.warn("Pets Rive file not found in manifest, skipping pet sprite export");
-    return { exported: 0, names: [], riveUrl: null, skipped: null };
+    return { exported: 0, names: [], riveUrl: null, riveUrls: [], files: [], skipped: null };
   }
 
-  const bytes = await downloadBuffer(url);
-  const { file, artboardNames } = await loadRiveFile(bytes);
+  const destDir = path.join(outDir, "sprite", "pets");
+  await fs.mkdir(destDir, { recursive: true });
 
-  const containerName = findContainerArtboard(artboardNames, PETS_RIVE_KEY);
-  const petNames = artboardNames.filter((n) => n !== containerName);
+  const exportedNames = [];
+  const metadata = {};
+  const files = [];
+  let skipped = null;
 
+  for (const url of urls) {
+    const bytes = await downloadBuffer(url);
+    const { file, artboardNames } = await loadRiveFile(bytes);
+
+    // Le conteneur porte le nom du fichier (`Pets` dans `pets.riv`) ; les
+    // fichiers d'événement n'en ont pas.
+    const containerName = findContainerArtboard(artboardNames, PETS_RIVE_KEY);
+    if (containerName) skipped = containerName;
+    // Un artboard déjà rendu depuis un fichier précédent garde sa source.
+    const petNames = artboardNames.filter((n) => n !== containerName && !(`sprite/pet/${n}` in metadata));
+
+    const names = await renderPetFile(file, petNames, { url, destDir, metadata });
+    exportedNames.push(...names);
+    files.push({ url, names });
+  }
+
+  // Sidecar de métadonnées : ces sprites n'étant plus dans un atlas, c'est la
+  // seule source de taille/ancre pour la composition de mutations
+  // (`/assets/sprites/composed`). Chaque frame retient son `.riv` d'origine.
+  if (exportedNames.length) {
+    await fs.writeFile(
+      path.join(destDir, RIVE_FRAMES_FILE),
+      JSON.stringify({ riveUrl: urls[0], riveUrls: urls, frames: metadata }, null, 2)
+    );
+  }
+
+  logger.info(
+    { riveUrls: urls, exported: exportedNames.length, container: skipped },
+    "Pet sprites rendered from Rive"
+  );
+
+  return {
+    exported: exportedNames.length,
+    names: exportedNames,
+    riveUrl: urls[0],
+    riveUrls: urls,
+    files,
+    skipped,
+  };
+}
+
+/**
+ * Rend les artboards d'un fichier : pose neutre de chaque espèce, plus les
+ * variantes météo qu'il contient.
+ */
+async function renderPetFile(file, petNames, { url, destDir, metadata }) {
   const outputs = [
     // Pose neutre : le baker du jeu capture la frame 0 de `Pet_Idle`, qui
     // tombe sur un extrême du balancement. On prend la pose médiane du cycle,
@@ -107,11 +165,7 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
     })),
   ];
 
-  const destDir = path.join(outDir, "sprite", "pets");
-  await fs.mkdir(destDir, { recursive: true });
-
   const exportedNames = [];
-  const metadata = {};
 
   for (const target of outputs) {
     try {
@@ -132,6 +186,7 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
       metadata[`sprite/pet/${target.name}`] = {
         name: target.name,
         artboard: target.artboard,
+        riveUrl: url,
         sourceSize: { w: rendered.width, h: rendered.height },
         anchor: rendered.anchor,
       };
@@ -144,25 +199,5 @@ export async function exportPetsFromRive({ outDir = "./export", riveUrl = null }
     }
   }
 
-  // Sidecar de métadonnées : ces sprites n'étant plus dans un atlas, c'est la
-  // seule source de taille/ancre pour la composition de mutations
-  // (`/assets/sprites/composed`).
-  if (exportedNames.length) {
-    await fs.writeFile(
-      path.join(destDir, RIVE_FRAMES_FILE),
-      JSON.stringify({ riveUrl: url, frames: metadata }, null, 2)
-    );
-  }
-
-  logger.info(
-    { riveUrl: url, exported: exportedNames.length, container: containerName },
-    "Pet sprites rendered from Rive"
-  );
-
-  return {
-    exported: exportedNames.length,
-    names: exportedNames,
-    riveUrl: url,
-    skipped: containerName,
-  };
+  return exportedNames;
 }

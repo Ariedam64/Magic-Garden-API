@@ -13,7 +13,12 @@
 import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveRiveAssets, resolveRiveUrl } from "../src/assets/sprites/riveManifest.js";
+import {
+  resolveRiveAssets,
+  resolveRiveUrl,
+  resolvePetsRiveFiles,
+  isPetsRiveKey,
+} from "../src/assets/sprites/riveManifest.js";
 import { resolvePetsRiveUrl } from "../src/assets/sprites/exportPetsFromRive.js";
 
 describe("rive manifest resolution", () => {
@@ -62,5 +67,61 @@ describe("rive manifest resolution", () => {
     // C'est ce que consomment l'export des PNG et celui des animations.
     const pets = await resolvePetsRiveUrl();
     assert.equal(pets, await resolveRiveUrl("pets", {}));
+  });
+});
+
+describe("rive manifest resolution (offline, v1231+ sources)", () => {
+  // Depuis v1231 chaque source est un `{ src, progressSize }`. L'ancien filtre
+  // `typeof s === "string"` ne trouvait plus rien : `/assets/rive` est resté
+  // figé et Moth, Snake et Toad (dans `halloween-pets.riv`) n'ont jamais eu
+  // d'image. Manifest réduit, tiré du live 1608.
+  const baseUrl = "https://offline.test/version/1608/";
+  const manifest = {
+    bundles: [
+      {
+        name: "default",
+        assets: [
+          { alias: ["rive/pets"], src: [{ src: "/runtime-assets/pets.964225245a5dbfa6b700.riv", progressSize: 2502.07 }] },
+          { alias: ["rive/halloween-pets"], src: [{ src: "/runtime-assets/halloween-pets.a39cc61ec2cdc44cf835.riv", progressSize: 298.46 }] },
+          { alias: ["sprites"], src: [{ src: "sprites-2x-0.json", resolution: 2 }] },
+        ],
+      },
+      { name: "decor.riv", assets: [{ alias: ["rive/decor"], src: ["/runtime-assets/decor.ca73f18ee9a6a2a308f6.riv"] }] },
+    ],
+  };
+
+  let assets = [];
+  let petFiles = [];
+  before(async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify(manifest), { status: 200 });
+    try {
+      assets = await resolveRiveAssets({ baseUrl });
+      petFiles = await resolvePetsRiveFiles({ baseUrl });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("reads `{ src, progressSize }` descriptors and legacy strings alike", () => {
+    assert.deepEqual(assets.map((a) => a.key), ["decor", "halloween-pets", "pets"]);
+  });
+
+  it("builds the versioned URL of each file", () => {
+    const halloween = assets.find((a) => a.key === "halloween-pets");
+    assert.match(halloween.url, /halloween-pets\.a39cc61ec2cdc44cf835\.riv$/);
+  });
+
+  it("lists every pets file, the main one first", () => {
+    // Moth, Snake et Toad n'existent que dans `halloween-pets.riv`.
+    assert.deepEqual(petFiles.map((f) => f.key), ["pets", "halloween-pets"]);
+  });
+
+  it("only treats `pets` and `<event>-pets` files as pets", () => {
+    assert.ok(isPetsRiveKey("pets"));
+    assert.ok(isPetsRiveKey("halloween-pets"));
+    assert.ok(!isPetsRiveKey("decor"));
+    assert.ok(!isPetsRiveKey("petsy"));
+    assert.ok(!isPetsRiveKey("halloween-pets-silhouettes"));
   });
 });

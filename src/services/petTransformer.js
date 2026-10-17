@@ -10,7 +10,8 @@ import { buildSpriteUrl } from "../utils/spriteUrlBuilder.js";
 /**
  * Données de pets enrichies de tout ce que le fichier Rive apporte.
  *
- * Les pets sont le seul contenu du jeu qui soit vectoriel (`rive/pets.riv`).
+ * Les pets sont le seul contenu du jeu qui soit vectoriel (`rive/pets.riv`,
+ * plus un fichier par événement comme `rive/halloween-pets.riv`).
  * Ça donne trois compléments aux données du bundle :
  *
  * 1. `animations` — les boucles WebP pré-encodées, pour les clients qui ne
@@ -111,8 +112,11 @@ export async function getTransformedPets({ spriteVersion = null } = {}) {
     // divergent, c'est l'artboard qui adresse les fichiers.
     const artboard = boards.get(artboardKey(id)) ?? id;
     const links = buildAnimationLinks("pets", artboard, { animations, version: spriteVersion });
-    const rive = animations[artboard] || frames[`sprite/pet/${artboard}`]
-      ? buildRiveSource(artboard, riveUrl)
+    // Chaque frame retient son `.riv` : les pets d'événement (Moth, Snake,
+    // Toad) vivent dans `halloween-pets.riv`, pas dans `pets.riv`.
+    const frame = frames[`sprite/pet/${artboard}`];
+    const rive = animations[artboard] || frame
+      ? buildRiveSource(artboard, frame?.riveUrl ?? riveUrl)
       : null;
 
     if (!links && !rive) return pet;
