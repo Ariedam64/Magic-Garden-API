@@ -29,7 +29,10 @@ function transformPlant(plantData, spriteVersion) {
     return plantData;
   }
 
-  const transformed = {};
+  // Les champs de premier niveau (`name`, `rareCrop`, `rareCropOf`…) passent
+  // tels quels : seuls les trois stades portent des sprites à résoudre.
+  const { seed: _seed, plant: _plant, crop: _crop, ...rest } = plantData;
+  const transformed = { ...rest };
 
   if (plantData.seed) {
     transformed.seed = transformPlantPart(plantData.seed, spriteVersion);

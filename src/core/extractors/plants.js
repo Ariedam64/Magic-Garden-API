@@ -9,10 +9,32 @@ import { buildBaseSandbox, applyHarvestTypeEnum } from "./sandbox.js";
 const SIGNATURES = ["seed:{sprite", "plant:{sprite", "crop:{sprite"];
 
 /**
+ * Paires « plante patch -> crop rare » du jeu
+ * (`[{patchSpeciesId:"Foxfire",rareCropSpeciesId:"Witchfire"},...]`).
+ *
+ * Le crop rare est une espèce à part entière dans le catalogue, sans aucun
+ * champ qui la relie à sa plante : Witchfire (Divine, 2,5 M) n'est vendue
+ * nulle part et ne s'obtient qu'en récoltant un Foxfire. On lit les paires par
+ * leurs clés, pas par la forme du tableau qui les porte.
+ */
+export function extractRareCropPairs(mainJs) {
+  const pairs = [];
+  for (const m of mainJs.matchAll(
+    /patchSpeciesId:[`"']([\w$]+)[`"'],rareCropSpeciesId:[`"']([\w$]+)[`"']/g
+  )) {
+    pairs.push({ patch: m[1], rareCrop: m[2] });
+  }
+  return pairs;
+}
+
+/**
  * Extrait les données des plantes du bundle.
+ *
+ * Chaque plante patch reçoit `rareCrop` (son crop rare), et chaque crop rare
+ * `rareCropOf` (la plante qui le donne).
  */
 export function extractPlants(mainJs) {
-  return extractCategoryWithSandbox(
+  const plants = extractCategoryWithSandbox(
     mainJs,
     "plants",
     SIGNATURES,
@@ -22,4 +44,13 @@ export function extractPlants(mainJs) {
       return sandbox;
     }
   ).data;
+
+  for (const { patch, rareCrop } of extractRareCropPairs(mainJs)) {
+    if (plants[patch] && plants[rareCrop]) {
+      plants[patch] = { ...plants[patch], rareCrop };
+      plants[rareCrop] = { ...plants[rareCrop], rareCropOf: patch };
+    }
+  }
+
+  return plants;
 }

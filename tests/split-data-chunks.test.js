@@ -91,3 +91,15 @@ test("an expiry dates chunk already loaded is not fetched again", async () => {
   const fetched = await fetchImportedDateChunks(chunks, async () => assert.fail("should not fetch"));
   assert.deepEqual(fetched, []);
 });
+
+test("rare crop pairs are read from the game's patch table", async () => {
+  const { extractRareCropPairs } = await import("../src/core/extractors/plants.js");
+  // Forme réelle 1608.
+  const js =
+    "Ap=[{patchSpeciesId:`Daisy`,rareCropSpeciesId:`PurpleDaisy`},{patchSpeciesId:`Foxfire`,rareCropSpeciesId:`Witchfire`}]," +
+    "jp=Object.fromEntries(Ap.map(({patchSpeciesId:e,rareCropSpeciesId:t})=>[e,t]))";
+  assert.deepEqual(extractRareCropPairs(js), [
+    { patch: "Daisy", rareCrop: "PurpleDaisy" },
+    { patch: "Foxfire", rareCrop: "Witchfire" },
+  ]);
+});
