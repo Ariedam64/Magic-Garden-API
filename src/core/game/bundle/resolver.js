@@ -15,6 +15,10 @@ import { ITEM_SIGNATURES } from "../../extractors/items.js";
 export async function fetchText(url) {
   const res = await fetch(url, {
     redirect: "follow",
+    // Sans délai, une requête restée pendante (par ex. pendant un long rendu
+    // Rive qui bloque la boucle d'événements) gelait pour toujours la promesse
+    // partagée du bundle, et tout ce qui l'attend avec elle.
+    signal: AbortSignal.timeout(30_000),
     headers: {
       "user-agent": "MG-API/1.0",
       accept: "*/*",

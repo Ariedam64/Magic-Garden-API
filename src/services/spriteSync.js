@@ -45,6 +45,7 @@ let watchedVersion = null;
 // perf : le fixer trop juste transformerait une grosse maj du jeu en
 // redémarrage en boucle.
 const SYNC_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+const DECOR_EXPORT_TIMEOUT = 2 * 60 * 1000;
 
 /**
  * Check if sprites directory exists and has content.
@@ -265,7 +266,16 @@ export async function checkAndSyncSprites({ force = false } = {}) {
     // artboards aujourd'hui, donc quelques secondes : on le fait avant les
     // court-circuits ci-dessous, sinon un déploiement sur une install déjà
     // synchronisée ne les exporterait jamais.
-    await exportDecorFromRive({ outDir: config.sprites.exportDir }).catch((err) =>
+    // Borné dans le temps : au premier démarrage après la correction du
+    // manifest Rive (2026-10-17), cet export ne s'est jamais terminé et a gelé
+    // la suite (animations, atlas) jusqu'au délai de garde de 15 min. Il ne
+    // porte que deux images d'appoint ; on ne le laisse pas bloquer le reste.
+    await Promise.race([
+      exportDecorFromRive({ outDir: config.sprites.exportDir }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out after 120s")), DECOR_EXPORT_TIMEOUT).unref()
+      ),
+    ]).catch((err) =>
       logger.error({ error: err?.message || String(err) }, "Decor sprite export failed")
     );
 
