@@ -38,8 +38,15 @@ const SHOP_CATEGORIES = {
   seed:  ["/data/plants"],
   decor: ["/data/decors"],
   egg:   ["/data/eggs"],
-  tool:  ["/data/items"],
-  dawn:  ["/data/plants", "/data/eggs", "/data/items"],
+  tool:  ["/data/items", "/data/decors"],
+  // Boutiques d'évènement : graines, œufs, outils et décors mêlés.
+  dawn:    ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
+  rain:    ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
+  amber:   ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
+  snow:    ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
+  thunder: ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
+  apology: ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
+  spooky:  ["/data/plants", "/data/eggs", "/data/items", "/data/decors"],
 };
 
 async function fetchJson(url) {
