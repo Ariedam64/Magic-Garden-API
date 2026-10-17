@@ -253,6 +253,53 @@ function memoizeChunks(indexUrl, found) {
 }
 
 /**
+ * Télécharge les chunks d'où les catalogues importent leurs dates d'expiration.
+ *
+ * Depuis 1598 les dates vivent dans un petit chunk à part (`expiryDates-*.js`)
+ * que le parcours du graphe ne retient jamais : ce n'est une cible pour aucun
+ * extracteur, donc `findImportedDate` ne le trouvait pas et toutes les
+ * `expiryDate` sortaient en `{}`. On suit donc les `import{...}from"./x.js"`
+ * qui fournissent un identifiant utilisé comme `expiryDate:<id>`, sans
+ * s'appuyer sur le nom du fichier.
+ *
+ * @param {{url: string, content: string}[]} chunks chunks déjà chargés
+ * @param {(url: string) => Promise<string>} [fetcher]
+ * @returns {Promise<{url: string, content: string}[]>} chunks manquants
+ */
+export async function fetchImportedDateChunks(chunks, fetcher = fetchText) {
+  const known = new Set(chunks.map((c) => c.url));
+  const wanted = new Set();
+
+  for (const { url, content } of chunks) {
+    const ids = new Set([...content.matchAll(/\bexpiryDate:([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+    if (!ids.size) continue;
+
+    for (const [, specs, path] of content.matchAll(/import\{([^}]*)\}from["'`](\.{1,2}\/[^"'`\s]+\.js)["'`]/g)) {
+      const locals = specs.split(",").map((s) => s.trim().split(/\s+as\s+/).pop());
+      if (!locals.some((local) => ids.has(local))) continue;
+
+      let target;
+      try {
+        target = new URL(path, url).href;
+      } catch {
+        continue;
+      }
+      if (!known.has(target)) wanted.add(target);
+    }
+  }
+
+  const fetched = [];
+  for (const url of wanted) {
+    try {
+      fetched.push({ url, content: await fetcher(url) });
+    } catch (err) {
+      logger.error({ url, err: err.message }, "Expiry dates chunk could not be fetched (expiry dates will be missing)");
+    }
+  }
+  return fetched;
+}
+
+/**
  * Récupère le contenu du bundle de données du jeu, ainsi que les chunks
  * contenant les couleurs UI (abilities/mutations).
  *
@@ -337,6 +384,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
   // Chunks connus, par URL : un catalogue peut importer ses constantes (les
   // dates d'expiration en 1324) depuis un autre chunk.
   const linkedChunks = [...found.values()].map(({ url, content }) => ({ url, content }));
+  linkedChunks.push(...(await fetchImportedDateChunks(linkedChunks)));
 
   return {
     indexUrl,
