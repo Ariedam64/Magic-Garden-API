@@ -84,8 +84,20 @@ export const liveDataService = {
    */
   getShopSeedSpecies() {
     const shops = getShops();
-    if (!shops?.seed?.items) return null;
+    if (!shops) return null;
 
-    return new Set(shops.seed.items.map((item) => item.name).filter(Boolean));
+    // Toutes les boutiques ouvertes, pas seulement `seed` : les shops
+    // d'évènement vendent aussi des graines (Ghost Plant, Foxfire et Deadly
+    // Nightshade ne se trouvent qu'au Spooky Shop).
+    const species = new Set();
+    for (const [type, shop] of Object.entries(shops)) {
+      if (!shop?.open && type !== "seed") continue;
+      for (const item of shop?.items ?? []) {
+        if (item?.name && (item.itemType === "Seed" || (type === "seed" && !item.itemType))) {
+          species.add(item.name);
+        }
+      }
+    }
+    return species;
   },
 };

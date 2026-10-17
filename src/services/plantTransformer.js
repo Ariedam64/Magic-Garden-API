@@ -51,7 +51,8 @@ function transformPlant(plantData, spriteVersion) {
 
 /**
  * Enrichit les plantes transformées avec le flag `purchasable` sur chaque seed.
- * Compare les clés des plantes avec les species listées dans le shop.
+ * Compare les clés des plantes avec les graines proposées par les boutiques
+ * ouvertes (le shop `seed`, mais aussi les shops d'évènement).
  * Si les données du shop ne sont pas disponibles, `purchasable` vaut null.
  */
 export function enrichPlantsWithPurchasable(plants) {
