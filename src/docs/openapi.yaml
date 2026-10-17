@@ -1107,7 +1107,7 @@ paths:
                   value:
                     rarity: ["Common", "Uncommon", "Rare", "Legendary", "Mythical", "Divine", "Celestial"]
                     currency: ["coins", "credits", "magicDust"]
-                    eligibleShops: ["seed", "egg", "tool", "decor", "rain", "dawn", "amber", "snow", "thunder", "apology"]
+                    eligibleShops: ["seed", "egg", "tool", "decor", "rain", "dawn", "amber", "snow", "thunder", "apology", "spooky"]
                     itemType: ["Seed", "Produce", "Plant", "Tool", "Pet", "Egg", "Decor"]
                     weather: ["Rain", "Frost", "Thunderstorm", "Dawn", "AmberMoon"]
                     mutationTierOrder: ["Wet", "Chilled", "Frozen", "Thunderstruck", "Dawnlit", "Ambershine", "Dawncharged", "Ambercharged"]
@@ -1207,7 +1207,7 @@ paths:
           description: Filter by category
           schema:
             type: string
-            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "pet-cosmetic", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "pet-cosmetic", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter", "effect"]
           example: 'seeds'
         - name: flat
           in: query
@@ -1418,6 +1418,7 @@ paths:
         - `weather` - Weather effects
         - `tiles` - Ground tiles
         - `winter` - Winter seasonal sprites
+        - `effect` - Visual effects (Haunt glows, pumpkin chunks, fireflies…)
 
         **Use cases:**
         - Discover every sprite the game currently ships
@@ -1439,7 +1440,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [seeds, plants, tallPlants, mutations, pets, pet-cosmetic, decor, items, objects, ui, animations, weather, tiles, winter]
+            enum: [seeds, plants, tallPlants, mutations, pets, pet-cosmetic, decor, items, objects, ui, animations, weather, tiles, winter, effect]
           description: Only return sprites from this category
         - name: search
           in: query
@@ -1558,7 +1559,7 @@ paths:
           description: Sprite category (seeds, plants, pets, etc.)
           schema:
             type: string
-            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "pet-cosmetic", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter"]
+            enum: ["seeds", "plants", "tallPlants", "mutations", "pets", "pet-cosmetic", "decor", "items", "objects", "ui", "animations", "weather", "tiles", "winter", "effect"]
           example: "seeds"
         - name: name
           in: path
@@ -1588,7 +1589,7 @@ paths:
                   value:
                     error:
                       code: "BAD_REQUEST"
-                      message: "Invalid category 'invalid_cat'. Allowed: seeds, plants, tallPlants, mutations, pets, decor, items, objects, ui, animations, weather, tiles, winter"
+                      message: "Invalid category 'invalid_cat'. Allowed: seeds, plants, tallPlants, mutations, pets, pet-cosmetic, decor, items, objects, ui, animations, weather, tiles, winter, effect"
         '404':
           description: Sprite not found
           content:
@@ -2216,6 +2217,8 @@ paths:
         `/data/weathers` for their effects and `/data/weather-groups` for the
         scheduling engine and drop odds.
 
+        Night is not a weather and never appears here: see `/weather-station/day-night`.
+
         **Note:** This is a snapshot. For real-time updates, use `/live/stream` (combined) or `/live/weather/stream`.
       responses:
         '200':
@@ -2239,6 +2242,83 @@ paths:
                   value:
                     weather: "Rain"
 
+  /weather-station/day-night:
+    get:
+      tags:
+        - Live
+      summary: Get the day/night cycle (Haunt Event)
+      description: |
+        Returns the in-game day/night phase, which is **not a weather**: the game
+        computes it on its own clock and `/live/weather` never reports it.
+
+        The cycle lasts 600 minutes and is anchored on the Unix epoch: sunrise
+        (10 min), day (570 min), sunset (10 min), midnight (10 min), i.e. 30
+        minutes of night every 10 hours. Stage lengths are read from the game
+        bundle (`source: bundle`), with the known values as a fallback.
+
+        Night drives the Haunt Event (until 2026-11-10):
+        - the **Spooky Shop** opens from sunset to the end of sunrise
+        - **Haunts** (ghosts to photograph) show up at night, and during any weather
+          (`visible_fraction` of every 10-minute window)
+        - **nocturnal pets** (`isNocturnal` in `/data/pets`) gain strength:
+          +15 at sunset, +20 at midnight, +10 at sunrise
+
+        The same `day_night` block is included in `/weather-station` and
+        `/weather-station/now`.
+      parameters:
+        - name: count
+          in: query
+          description: Number of upcoming nights to list (the current one included), 1-50
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Current phase and upcoming nights
+          content:
+            application/json:
+              example:
+                generated_at: 1792248293388
+                generated_at_iso: "2026-10-17T14:44:53.388Z"
+                source: bundle
+                cycle:
+                  stage_minutes: { day: 570, sunset: 10, midnight: 10, sunrise: 10 }
+                  cycle_minutes: 600
+                  order: [sunrise, day, sunset, midnight]
+                  anchor: unix_epoch
+                now:
+                  stage: day
+                  is_night: false
+                  darkness: 0
+                  phase: 0.6748
+                  stage_started_at: 1792224600000
+                  stage_started_at_iso: "2026-10-17T08:10:00.000Z"
+                  stage_ends_at: 1792258800000
+                  stage_ends_at_iso: "2026-10-17T17:40:00.000Z"
+                  next_stage: sunset
+                  nocturnal_strength_bonus: 0
+                  haunts:
+                    active: false
+                    visible_fraction: 0
+                    visible_minutes_per_window: 0
+                    event: halloween2026
+                    event_ends_at: 1794268800000
+                nocturnal_strength_bonus: { day: 0, sunset: 15, midnight: 20, sunrise: 10 }
+                spooky_shop:
+                  open: false
+                  closes_at: null
+                  next_open_at: 1792258800000
+                  next_open_at_iso: "2026-10-17T17:40:00.000Z"
+                nights:
+                  - sunset_at: 1792258800000
+                    sunset_at_iso: "2026-10-17T17:40:00.000Z"
+                    midnight_at: 1792259400000
+                    midnight_at_iso: "2026-10-17T17:50:00.000Z"
+                    sunrise_at: 1792260000000
+                    sunrise_at_iso: "2026-10-17T18:00:00.000Z"
+                    ends_at: 1792260600000
+                    ends_at_iso: "2026-10-17T18:10:00.000Z"
+
   /live/shops:
     get:
       tags:
@@ -2254,6 +2334,7 @@ paths:
         - **decor**: Decoration shop (cosmetics) — every hour
         - **rain**, **dawn**, **amber**, **snow**, **thunder**: event shops, open only during the matching weather
         - **apology**: occasional compensation shop, opened by the game's operators
+        - **spooky**: Halloween shop (Haunt Event, until 2026-11-10), open 30 minutes at every in-game sunset, i.e. every 10 hours. It has no restock: while open, `nextRestockAt` is its **closing** time; while closed, `nextOpenAt` gives the next opening (see `/weather-station/day-night`)
 
         Each shop includes:
         - Its inventory, with the stock offered by the current restock window
@@ -3331,6 +3412,13 @@ components:
               type: integer
               description: Purchase price in coins
               example: 10
+            expiryDate:
+              type: string
+              format: date-time
+              description: |
+                Present only on limited-time entries: the date the game stops
+                offering it (e.g. the Halloween content leaves on 2026-11-10).
+              example: "2026-11-10T00:00:00.000Z"
             sprite:
               type: string
               format: uri
@@ -3692,6 +3780,13 @@ components:
           type: integer
           description: Purchase price in coins
           example: 100
+        expiryDate:
+          type: string
+          format: date-time
+          description: |
+            Present only on limited-time entries: the date the game stops
+            offering it (e.g. the Halloween content leaves on 2026-11-10).
+          example: "2026-11-10T00:00:00.000Z"
         sprite:
           type: string
           format: uri
@@ -3791,8 +3886,20 @@ components:
         thunder:
           description: Event shop, open during Thunderstorm weather
           $ref: '#/components/schemas/Shop'
+        rain:
+          description: Event shop, open during Rain weather
+          $ref: '#/components/schemas/Shop'
+        amber:
+          description: Event shop, open during Amber Moon weather
+          $ref: '#/components/schemas/Shop'
         apology:
           description: Occasional compensation shop, opened by the game's operators
+          $ref: '#/components/schemas/Shop'
+        spooky:
+          description: |
+            Halloween shop (Haunt Event, until 2026-11-10). Opens 30 minutes at
+            every in-game sunset; `nextRestockAt` is its closing time, and
+            `nextOpenAt` its next opening while closed.
           $ref: '#/components/schemas/Shop'
       example:
         seed:
@@ -3852,10 +3959,19 @@ components:
         open:
           type: boolean
           description: |
-            Whether the shop is currently open. Event shops (`dawn`, `snow`,
-            `thunder`, `apology`) are closed outside their event, with no
-            `nextRestockAt` and an empty inventory.
+            Whether the shop is currently open. Event shops (`rain`, `dawn`,
+            `amber`, `snow`, `thunder`, `apology`, `spooky`) are closed outside
+            their event, with no `nextRestockAt` and an empty inventory.
           example: true
+        nextOpenAt:
+          type: string
+          nullable: true
+          format: date-time
+          description: |
+            `spooky` only: next opening of the Spooky Shop (the next in-game
+            sunset) while it is closed, `null` while it is open or once the
+            event is over.
+          example: "2026-10-17T17:40:00.000Z"
         nextRestockAt:
           type: string
           nullable: true

@@ -34,6 +34,9 @@ const ALLOWED_CATEGORIES = new Set([
   "weather",
   "tiles",
   "winter",
+  // Effets visuels (lueurs des Haunts, éclats de citrouille, lucioles…) :
+  // exportés depuis les atlas mais refusés en 400 faute d'entrée ici.
+  "effect",
 ]);
 
 /**

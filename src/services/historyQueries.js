@@ -7,7 +7,9 @@ import { logger } from "../logger/index.js";
 
 // Amorce utilisée tant qu'aucune source dynamique n'a répondu (démarrage à froid
 // sans bundle ni données live).
-const FALLBACK_SHOP_TYPES = ["seed", "tool", "egg", "decor", "dawn", "snow", "thunder"];
+const FALLBACK_SHOP_TYPES = [
+  "seed", "tool", "egg", "decor", "rain", "dawn", "amber", "snow", "thunder", "apology", "spooky",
+];
 
 let cachedShopTypes = null;
 
