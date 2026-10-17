@@ -96,6 +96,14 @@ export function initHistoryDB() {
       WHERE shop_type = ? AND restocked_at BETWEEN ? AND ?
       ORDER BY restocked_at LIMIT 1
     `),
+    getLatestRestockSince: db.prepare(`
+      SELECT id, restocked_at FROM shop_restocks
+      WHERE shop_type = ? AND restocked_at >= ?
+      ORDER BY restocked_at DESC LIMIT 1
+    `),
+    getRestockItems: db.prepare(`
+      SELECT item_id, stock FROM shop_restock_items WHERE restock_id = ?
+    `),
   };
 
   const insertRestockWithItems = db.transaction(
@@ -157,6 +165,19 @@ export function getLastRestockInterval(shopType) {
 export function hasRestockNear(shopType, at, toleranceMs = 90 * 1000) {
   if (!db) return false;
   return Boolean(statements.findRestockNear.get(shopType, at - toleranceMs, at + toleranceMs));
+}
+
+/**
+ * Dernier restock d'une boutique depuis `since`, avec son contenu.
+ *
+ * @returns {{ restockedAt: number, items: Array<{ id: string, stock: number }> }|null}
+ */
+export function getLatestRestockSince(shopType, since) {
+  if (!db) return null;
+  const row = statements.getLatestRestockSince.get(shopType, since);
+  if (!row) return null;
+  const items = statements.getRestockItems.all(row.id).map((it) => ({ id: it.item_id, stock: it.stock }));
+  return { restockedAt: row.restocked_at, items };
 }
 
 export function recordWeatherChange(nextWeather, at = Date.now()) {

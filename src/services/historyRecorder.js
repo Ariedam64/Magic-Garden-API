@@ -7,6 +7,7 @@ import {
   recordShopRestock,
   recordWeatherChange,
   getLastRestockInterval,
+  getLatestRestockSince,
   hasRestockNear,
   closeHistoryDB,
 } from "./historyDB.js";
@@ -83,7 +84,25 @@ function resolveRestockWindow({ shopType, nextRestockAt, previous, now }) {
   return { restockedAt: snapToGameGrid(now), intervalSeconds: knownInterval ?? null };
 }
 
-function handleShops(shops) {
+/**
+ * Cette fenêtre d'ouverture est-elle déjà en base ?
+ *
+ * Les boutiques d'évènement (`spooky`, `rain`, `amber`) n'ont qu'une fenêtre
+ * par ouverture et jamais d'intervalle en base : leur `nextRestockAt` est leur
+ * **fermeture**. Au premier passage après un redémarrage, l'instant du restock
+ * retombe donc sur la grille autour de *maintenant*, et une ouverture déjà
+ * enregistrée à 21:40 se retrouvait doublée à 21:50. On reconnaît la fenêtre à
+ * son contenu : même boutique, même inventaire, ouverte au plus une heure
+ * avant la fermeture annoncée.
+ */
+function isOpenWindowRecorded(shopType, { nextRestockAt, itemsHash, now }) {
+  if (!nextRestockAt) return false;
+  const existing = getLatestRestockSince(shopType, nextRestockAt - MAX_DERIVABLE_INTERVAL_SECONDS * 1000);
+  if (!existing || existing.restockedAt > now) return false;
+  return hashItems(existing.items.map((it) => ({ name: it.id, stock: it.stock }))) === itemsHash;
+}
+
+export function handleShops(shops) {
   if (!shops || typeof shops !== "object") return;
   const now = Date.now();
 
@@ -147,6 +166,18 @@ function handleShops(shops) {
     });
 
     const items = shop.items.map((it) => ({ id: it.name, stock: it.stock }));
+
+    // Seulement au premier passage : en régime normal, une réouverture vue
+    // fermée puis ouverte est toujours une nouvelle fenêtre, même à contenu
+    // identique (c'est déjà arrivé à `rain` à moins d'une heure d'écart).
+    if (
+      isBaseline &&
+      intervalSeconds === null &&
+      isOpenWindowRecorded(shopType, { nextRestockAt, itemsHash, now })
+    ) {
+      logger.debug({ shopType }, "History: open window already recorded before a restart, skipping");
+      continue;
+    }
 
     // Fenêtre déjà en base à quelques secondes près (typiquement au démarrage,
     // ou juste après la bascule depuis l'enregistreur WebSocket qui horodatait
