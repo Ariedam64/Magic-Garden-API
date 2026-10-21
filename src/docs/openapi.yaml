@@ -3524,7 +3524,7 @@ components:
           example: "Witchfire"
         rareCropOf:
           type: string
-          description: Rare crops only: the patch plant that yields it.
+          description: "Rare crops only: the patch plant that yields it."
           example: "Foxfire"
         seed:
           type: object
