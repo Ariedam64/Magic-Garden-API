@@ -73,6 +73,17 @@ export const config = {
     baseUrl: process.env.SPRITES_BASE_URL || "http://localhost:3000",
   },
 
+  // Rendus Rive (PNG des pets, inventaire des .riv, boucles animées). Ils sont
+  // pilotés par l'URL des .riv, versionnée par hash de contenu : une montée de
+  // version du jeu qui ne touche pas aux .riv n'a rien à re-rendre — et un
+  // rendu complet coûte ~1 h de CPU (animations). Pour forcer quand même tout
+  // le rendu (runtime Rive mis à jour, recette de rendu modifiée), démarrer une
+  // fois avec RIVE_FORCE_RERENDER=true puis retirer la variable : tant qu'elle
+  // est posée, chaque sync re-rend tout.
+  rive: {
+    forceRerender: process.env.RIVE_FORCE_RERENDER === "true",
+  },
+
   // Animations de pets (boucles WebP/GIF rendues depuis rive/pets.riv).
   // Ces fichiers pèsent ~1 Mo par espèce et coûtent quelques minutes de CPU à
   // (re)générer : c'est un travail de fond, déclenché quand le .riv change.

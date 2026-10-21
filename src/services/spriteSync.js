@@ -1,6 +1,7 @@
 // src/services/spriteSync.js
 
 import fs from "node:fs/promises";
+import path from "node:path";
 import { config } from "../config/index.js";
 import { logger } from "../logger/index.js";
 import { fetchGameVersion, invalidateVersionCache } from "../core/game/version.js";
@@ -20,11 +21,13 @@ import {
 } from "../assets/manifest.js";
 import { exportSpritesToDisk } from "../assets/sprites/exportSpritesToDisk.js";
 import { exportPetsFromRive } from "../assets/sprites/exportPetsFromRive.js";
-import { resolvePetsRiveFiles } from "../assets/sprites/riveManifest.js";
+import { resolvePetsRiveFiles, resolveRiveUrl } from "../assets/sprites/riveManifest.js";
+import { RIVE_FRAMES_FILE } from "../assets/sprites/riveFrames.js";
 import { exportDecorFromRive } from "../assets/sprites/exportDecorFromRive.js";
 import { loadStoredRiveAssets, saveRiveAsset } from "../core/game/riveStorage.js";
 import { syncPetAnimations } from "./animationSync.js";
 import { syncRiveInventory } from "./riveSync.js";
+import { planPetSprites, planDecorSprites } from "./syncPlan.js";
 import { joinUrl } from "../utils/url.js";
 
 let isSyncing = false;
@@ -67,6 +70,19 @@ async function needsInitialExport() {
     // Directory doesn't exist
     return true;
   }
+}
+
+async function fileExists(file) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function riveSidecarPath(category) {
+  return path.join(config.sprites.exportDir, "sprite", category, RIVE_FRAMES_FILE);
 }
 
 /**
@@ -162,25 +178,33 @@ async function fetchAllAtlases(baseUrl) {
  * sujet — on suit ces fichiers séparément, sinon un changement d'artwork de
  * pet passerait inaperçu (ou pire, on re-rendrait 30 artboards à chaque sync).
  *
+ * `forceRive` est le seul moyen de sauter la comparaison d'URL. La resync qui
+ * suit une mise à jour du jeu ne le pose pas. Elle transmettait jusqu'ici son
+ * `force` (destiné aux atlas) au rendu Rive, qui refaisait les mêmes `.riv` à
+ * chaque version — ~36 s de WASM bloquant la boucle d'événements, puis ~54 min
+ * d'animations, 7 fois entre le 17 et le 21/10 sur des fichiers identiques.
+ *
  * @returns {Promise<{ exported: number, changed: boolean, riveUrls?: string[], reason?: string }>}
  */
-async function syncPetSprites({ baseUrl, force = false } = {}) {
+async function syncPetSprites({ baseUrl, forceRive = false } = {}) {
   try {
     const files = await resolvePetsRiveFiles({ baseUrl });
-    if (!files.length) {
-      return { exported: 0, changed: false, reason: "rive_not_in_manifest" };
-    }
-
     const riveUrls = files.map((f) => f.url);
     const stored = await loadStoredRiveAssets();
-    const changedFiles = files.filter((f) => stored[f.key]?.url !== f.url);
-    if (!force && !changedFiles.length) {
-      logger.debug({ riveUrls }, "Pets Rive files unchanged, skipping pet sprite export");
-      return { exported: 0, changed: false, riveUrls, reason: "unchanged" };
+    const plan = planPetSprites({
+      files,
+      stored,
+      sidecarExists: await fileExists(riveSidecarPath("pets")),
+      forceRive,
+    });
+
+    if (!plan.render) {
+      logger.debug({ riveUrls, reason: plan.reason }, "Pet sprite export not needed");
+      return { exported: 0, changed: false, riveUrls, reason: plan.reason };
     }
 
     logger.info(
-      { changed: changedFiles.map((f) => ({ key: f.key, from: stored[f.key]?.url ?? null, to: f.url })), force },
+      { changed: plan.changed, reason: plan.reason },
       "Exporting pet sprites from Rive"
     );
 
@@ -211,10 +235,56 @@ async function syncPetSprites({ baseUrl, force = false } = {}) {
 }
 
 /**
+ * Images fixes des décors que les atlas ne fournissent pas.
+ *
+ * Elles dépendent de `decor.riv` et des atlas (le PNG officiel prime) : on ne
+ * les refait que si l'un des deux a pu bouger. Jusqu'ici cet export tournait à
+ * chaque sync, démarrages compris, et rechargeait `decor.riv` dans le runtime
+ * WASM pour n'en tirer, le plus souvent, aucune image.
+ */
+async function syncDecorSprites({ baseUrl, versionChanged, forceRive = false } = {}) {
+  const currentUrl = await resolveRiveUrl("decor", { baseUrl });
+  const stored = await loadStoredRiveAssets();
+  const plan = planDecorSprites({
+    versionChanged,
+    currentUrl,
+    storedUrl: stored.decor?.url ?? null,
+    sidecarExists: await fileExists(riveSidecarPath("decor")),
+    forceRive,
+  });
+
+  if (!plan.render) {
+    logger.debug({ riveUrl: currentUrl, reason: plan.reason }, "Decor sprite export not needed");
+    return { exported: 0, reason: plan.reason };
+  }
+
+  // Borné dans le temps : au premier démarrage après la correction du
+  // manifest Rive (2026-10-17), cet export ne s'est jamais terminé et a gelé
+  // la suite (animations, atlas) jusqu'au délai de garde de 15 min. Il ne
+  // porte que deux images d'appoint ; on ne le laisse pas bloquer le reste.
+  try {
+    const result = await Promise.race([
+      exportDecorFromRive({ outDir: config.sprites.exportDir, riveUrl: currentUrl }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out after 120s")), DECOR_EXPORT_TIMEOUT).unref()
+      ),
+    ]);
+    await saveRiveAsset("decor", { url: currentUrl, names: result.names ?? [] });
+    return { exported: result.exported, reason: plan.reason };
+  } catch (err) {
+    logger.error({ error: err?.message || String(err) }, "Decor sprite export failed");
+    return { exported: 0, reason: "error" };
+  }
+}
+
+/**
  * Check if sprites need syncing and export only changed sprites.
  * Returns sync result or null if no changes needed.
  */
-export async function checkAndSyncSprites({ force = false } = {}) {
+export async function checkAndSyncSprites({
+  force = false,
+  forceRive = config.rive.forceRerender,
+} = {}) {
   if (isSyncing) {
     logger.warn("Sprite sync already in progress, ignoring duplicate request");
     return null;
@@ -239,7 +309,7 @@ export async function checkAndSyncSprites({ force = false } = {}) {
     const versionChanged = storedVersion !== currentVersion;
 
     logger.info(
-      { currentVersion, storedVersion, versionChanged, force },
+      { currentVersion, storedVersion, versionChanged, force, forceRive },
       "Version check"
     );
 
@@ -249,40 +319,29 @@ export async function checkAndSyncSprites({ force = false } = {}) {
       return null;
     }
 
-    // 2. Pets : hors atlas depuis que le jeu les a passés en Rive. Ils ont
-    // leur propre suivi (hash du .riv), donc on les traite avant tous les
-    // court-circuits ci-dessous — sinon un déploiement sur une install déjà
-    // synchronisée n'exporterait jamais les pets, faute de montée de version.
-    // 2a. Inventaire de tous les .riv du manifest (6 fichiers, 5 bundles). Peu
-    // coûteux : chaque entrée est indexée par une URL versionnée par hash, donc
-    // seuls les fichiers qui ont réellement changé sont réinspectés.
-    await syncRiveInventory({ baseUrl, force }).catch((err) =>
+    // 2. Rive : hors atlas depuis que le jeu y a passé les pets. Ces fichiers
+    // ont leur propre suivi (URL versionnée par hash du .riv), donc on les
+    // traite avant tous les court-circuits ci-dessous — sinon un déploiement
+    // sur une install déjà synchronisée n'exporterait jamais les pets, faute de
+    // montée de version. Le `force` des atlas ne les concerne pas : seul
+    // `forceRive` saute la comparaison d'URL.
+    // 2a. Inventaire de tous les .riv du manifest (10 fichiers). Peu coûteux :
+    // chaque entrée est indexée par son URL, donc seuls les fichiers qui ont
+    // réellement changé sont réinspectés.
+    await syncRiveInventory({ baseUrl, force: forceRive }).catch((err) =>
       logger.error({ error: err?.message || String(err) }, "Rive inventory sync failed")
     );
 
-    const petResult = await syncPetSprites({ baseUrl, force });
+    const petResult = await syncPetSprites({ baseUrl, forceRive });
 
-    // 2a bis. Images fixes des décors que les atlas ne fournissent pas. Deux
-    // artboards aujourd'hui, donc quelques secondes : on le fait avant les
-    // court-circuits ci-dessous, sinon un déploiement sur une install déjà
-    // synchronisée ne les exporterait jamais.
-    // Borné dans le temps : au premier démarrage après la correction du
-    // manifest Rive (2026-10-17), cet export ne s'est jamais terminé et a gelé
-    // la suite (animations, atlas) jusqu'au délai de garde de 15 min. Il ne
-    // porte que deux images d'appoint ; on ne le laisse pas bloquer le reste.
-    await Promise.race([
-      exportDecorFromRive({ outDir: config.sprites.exportDir }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timed out after 120s")), DECOR_EXPORT_TIMEOUT).unref()
-      ),
-    ]).catch((err) =>
-      logger.error({ error: err?.message || String(err) }, "Decor sprite export failed")
-    );
+    // 2a bis. Images fixes des décors que les atlas ne fournissent pas. Fait
+    // avant les court-circuits ci-dessous, pour la même raison que les pets.
+    await syncDecorSprites({ baseUrl, versionChanged, forceRive });
 
     // 2b. Animations de pets : même source (`rive/pets.riv`), mais des minutes
     // de rendu — donc un processus fils, qu'on ne suit pas. Les boucles déjà
     // sur disque restent servies pendant la regénération.
-    await syncPetAnimations({ riveUrls: petResult.riveUrls ?? [], force });
+    await syncPetAnimations({ riveUrls: petResult.riveUrls ?? [], force: forceRive });
 
     // 3. Skip the atlas work if version unchanged and not forced
     if (!versionChanged && !force) {
