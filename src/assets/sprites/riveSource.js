@@ -2,7 +2,7 @@
 
 import { config } from "../../config/index.js";
 import { getStoredRiveUrl, loadRiveInventory } from "../../core/game/riveStorage.js";
-import { PET_STATE_MACHINE } from "./exportPetsFromRive.js";
+import { PET_STATE_MACHINE } from "./riveManifest.js";
 
 /**
  * Le fichier Rive lui-même, publié comme une ressource de l'API.

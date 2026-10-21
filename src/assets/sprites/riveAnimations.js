@@ -5,7 +5,6 @@ import path from "node:path";
 import { config } from "../../config/index.js";
 import { buildAnimationUrl } from "../../utils/spriteUrlBuilder.js";
 import { getStoredVersionCached } from "../../core/game/versionStorage.js";
-import { ANIMATIONS_SIDECAR } from "./riveAnimationExport.js";
 
 /**
  * Accès en lecture aux animations rendues depuis Rive.
@@ -19,6 +18,12 @@ import { ANIMATIONS_SIDECAR } from "./riveAnimationExport.js";
  * processus fils (cf. `services/animationSync.js`), donc l'API ne peut pas
  * compter sur un signal interne pour savoir qu'il a fini.
  */
+
+// Sidecar écrit dans chaque catégorie (préfixé `_` : les routeurs n'acceptent
+// que des extensions d'image, il n'est donc jamais servi). Défini ici, côté
+// lecture, et non dans le moteur d'export : l'API lit ces sidecars sans avoir
+// à charger le runtime de rendu (Skia, Rive) dont l'export a besoin.
+export const ANIMATIONS_SIDECAR = "_rive-animations.json";
 
 // Catégories exportées, dans l'ordre où le catalogue les présente.
 export const ANIMATION_CATEGORIES = ["pets", "decor"];

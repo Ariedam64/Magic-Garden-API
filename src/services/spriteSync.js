@@ -19,15 +19,13 @@ import {
   extractJsonFiles,
   extractAllSources,
 } from "../assets/manifest.js";
-import { exportSpritesToDisk } from "../assets/sprites/exportSpritesToDisk.js";
-import { exportPetsFromRive } from "../assets/sprites/exportPetsFromRive.js";
 import { resolvePetsRiveFiles, resolveRiveUrl } from "../assets/sprites/riveManifest.js";
-import { RIVE_FRAMES_FILE } from "../assets/sprites/riveFrames.js";
-import { exportDecorFromRive } from "../assets/sprites/exportDecorFromRive.js";
+import { RIVE_FRAMES_FILE, clearRiveFramesCache } from "../assets/sprites/riveFrames.js";
 import { loadStoredRiveAssets, saveRiveAsset } from "../core/game/riveStorage.js";
 import { syncPetAnimations } from "./animationSync.js";
-import { syncRiveInventory } from "./riveSync.js";
+import { syncRiveInventory, listRiveFilesToInspect } from "./riveSync.js";
 import { planPetSprites, planDecorSprites } from "./syncPlan.js";
+import { runSyncTask, killSyncTasks } from "./syncTaskRunner.js";
 import { joinUrl } from "../utils/url.js";
 
 let isSyncing = false;
@@ -41,14 +39,21 @@ let pendingForceResync = false;
 let versionWatchTimer = null;
 let watchedVersion = null;
 
-// Marge large : une resync complète forcée (30 artboards Rive rasterisés +
-// ~575 sprites redécoupés des atlas) tourne autour de 2 min, et le rendu Rive
-// grandit avec le nombre de pets que le jeu ajoute. Ce timeout est un
-// garde-fou contre une sync bloquée (il tue le process), pas une cible de
-// perf : le fixer trop juste transformerait une grosse maj du jeu en
-// redémarrage en boucle.
-const SYNC_TIMEOUT = 15 * 60 * 1000; // 15 minutes
+// Les étapes lourdes tournent chacune dans un processus fils, tué à son délai
+// (voir syncTaskWorker.js). Durées observées en prod : inventaire ~7 s quand
+// les 10 .riv sont à inspecter, PNG de pets ~40 s, décors ~6 s, découpe des
+// atlas 4-70 s. Les délais laissent large : à nice 10 derrière l'API, sur
+// 2 vCPU, un rendu peut prendre plusieurs fois plus longtemps.
+const RIVE_INVENTORY_TIMEOUT = 4 * 60 * 1000;
+const PET_SPRITES_TIMEOUT = 5 * 60 * 1000;
 const DECOR_EXPORT_TIMEOUT = 2 * 60 * 1000;
+const ATLAS_EXPORT_TIMEOUT = 6 * 60 * 1000;
+
+// Garde-fou de dernier recours contre une sync bloquée dans l'API elle-même
+// (les fils, eux, sont bornés ci-dessus) : il tue le processus, que pm2
+// relance. Il doit couvrir la somme des délais des fils, sinon une grosse maj
+// du jeu, lente mais saine, se transformerait en redémarrage en boucle.
+const SYNC_TIMEOUT = 20 * 60 * 1000;
 
 /**
  * Check if sprites directory exists and has content.
@@ -169,6 +174,26 @@ async function fetchAllAtlases(baseUrl) {
 }
 
 /**
+ * Inventaire des .riv : ne lance le processus d'inspection (runtime Rive) que
+ * si un fichier est à (ré)inspecter ; sinon l'inventaire est rafraîchi sur
+ * place (alias, bundles), sans rien charger.
+ */
+async function syncRiveInventoryStep({ baseUrl, forceRive = false } = {}) {
+  const pending = await listRiveFilesToInspect({ baseUrl, force: forceRive });
+  if (!pending.length) return syncRiveInventory({ baseUrl, force: false });
+
+  logger.info(
+    { files: pending.map((file) => file.key), forceRive },
+    "Inspecting Rive files in a child process"
+  );
+  return runSyncTask(
+    "riveInventory",
+    { baseUrl, force: forceRive },
+    { timeoutMs: RIVE_INVENTORY_TIMEOUT }
+  );
+}
+
+/**
  * Re-render the pet sprites from the game's Rive file when it changed.
  *
  * Les pets ne sont plus dans les atlas TexturePacker (seuls les œufs y
@@ -210,10 +235,13 @@ async function syncPetSprites({ baseUrl, forceRive = false } = {}) {
 
     // Tous les fichiers sont re-rendus ensemble : le sidecar des frames est
     // réécrit d'un bloc, un export partiel y perdrait les autres espèces.
-    const result = await exportPetsFromRive({
-      outDir: config.sprites.exportDir,
-      riveUrls,
-    });
+    // Hors de l'API : ~36 s de WASM synchrone qui bloquaient sa boucle.
+    const result = await runSyncTask(
+      "petSprites",
+      { outDir: config.sprites.exportDir, riveUrls },
+      { timeoutMs: PET_SPRITES_TIMEOUT }
+    );
+    clearRiveFramesCache();
 
     if (result.exported > 0) {
       for (const file of files) {
@@ -258,17 +286,17 @@ async function syncDecorSprites({ baseUrl, versionChanged, forceRive = false } =
     return { exported: 0, reason: plan.reason };
   }
 
-  // Borné dans le temps : au premier démarrage après la correction du
-  // manifest Rive (2026-10-17), cet export ne s'est jamais terminé et a gelé
-  // la suite (animations, atlas) jusqu'au délai de garde de 15 min. Il ne
-  // porte que deux images d'appoint ; on ne le laisse pas bloquer le reste.
+  // Borné dans le temps : dans un processus déjà chaud, cet export ne se
+  // terminait plus (5 fois entre le 17 et le 21/10) et gelait la suite de la
+  // sync jusqu'au délai de garde. L'ancien `Promise.race` rendait la main sans
+  // arrêter le travail ; le fils, lui, est tué.
   try {
-    const result = await Promise.race([
-      exportDecorFromRive({ outDir: config.sprites.exportDir, riveUrl: currentUrl }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timed out after 120s")), DECOR_EXPORT_TIMEOUT).unref()
-      ),
-    ]);
+    const result = await runSyncTask(
+      "decorSprites",
+      { outDir: config.sprites.exportDir, riveUrl: currentUrl },
+      { timeoutMs: DECOR_EXPORT_TIMEOUT }
+    );
+    clearRiveFramesCache();
     await saveRiveAsset("decor", { url: currentUrl, names: result.names ?? [] });
     return { exported: result.exported, reason: plan.reason };
   } catch (err) {
@@ -294,6 +322,7 @@ export async function checkAndSyncSprites({
 
   const timeout = setTimeout(() => {
     logger.error("Sprite sync timeout after 5 minutes, forcing exit");
+    killSyncTasks();
     process.exit(1);
   }, SYNC_TIMEOUT);
 
@@ -328,7 +357,7 @@ export async function checkAndSyncSprites({
     // 2a. Inventaire de tous les .riv du manifest (10 fichiers). Peu coûteux :
     // chaque entrée est indexée par son URL, donc seuls les fichiers qui ont
     // réellement changé sont réinspectés.
-    await syncRiveInventory({ baseUrl, force: forceRive }).catch((err) =>
+    await syncRiveInventoryStep({ baseUrl, forceRive }).catch((err) =>
       logger.error({ error: err?.message || String(err) }, "Rive inventory sync failed")
     );
 
@@ -411,12 +440,19 @@ export async function checkAndSyncSprites({
       );
     }
 
+    // Dans un processus fils : chaque atlas décodé pèse jusqu'à 64 Mo, et le
+    // même export, qui prend 35 s dans un processus neuf, ne rendait plus la
+    // main dans l'API après quelques heures d'uptime.
     const startTime = Date.now();
-    const exportResult = await exportSpritesToDisk({
-      outDir: config.sprites.exportDir,
-      restoreTrim: true,
-      onlyKeys: doFullExport ? null : comparison.framesToExport,
-    });
+    const exportResult = await runSyncTask(
+      "atlasSprites",
+      {
+        outDir: config.sprites.exportDir,
+        restoreTrim: true,
+        onlyKeys: doFullExport ? null : [...comparison.framesToExport],
+      },
+      { timeoutMs: ATLAS_EXPORT_TIMEOUT }
+    );
 
     const elapsed = Date.now() - startTime;
 
@@ -593,4 +629,5 @@ async function checkVersion() {
 export function stopVersionWatcher() {
   if (versionWatchTimer) clearInterval(versionWatchTimer);
   versionWatchTimer = null;
+  killSyncTasks();
 }

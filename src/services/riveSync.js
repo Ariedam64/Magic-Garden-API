@@ -2,7 +2,6 @@
 
 import { logger } from "../logger/index.js";
 import { resolveRiveAssets } from "../assets/sprites/riveManifest.js";
-import { inspectRiveFile } from "../assets/sprites/riveInspector.js";
 import { loadRiveInventory, saveRiveInventory } from "../core/game/riveStorage.js";
 
 /**
@@ -18,6 +17,36 @@ import { loadRiveInventory, saveRiveInventory } from "../core/game/riveStorage.j
  * étape quasi gratuite en régime établi — y compris pour les fichiers dont
  * l'inspection **a échoué**, qu'on ne réessaie donc pas à chaque sync.
  */
+
+/**
+ * Une inspection passée peut-elle être reprise telle quelle ?
+ *
+ * On ne réutilise que les inspections **réussies**. Un échec ne dit pas
+ * toujours « ce fichier est illisible » : la borne de chargement est sensible
+ * à la charge machine, et `avatar.riv` a été marqué illisible pendant que deux
+ * exports saturaient les deux vCPU — puis s'est chargé sans problème une fois
+ * la machine libre. Mettre un échec en cache jusqu'au prochain changement d'URL
+ * le rendrait définitif.
+ */
+function isReusable(known, asset, force) {
+  return !force && known?.url === asset.url && Boolean(known.loadable);
+}
+
+/**
+ * Fichiers qu'une sync devrait (ré)inspecter, sans rien inspecter.
+ *
+ * L'inspection charge le runtime Rive : la sync s'en sert pour ne lancer le
+ * processus qui l'exécute que s'il y a réellement du travail.
+ *
+ * @returns {Promise<Array<{ key: string, url: string }>>}
+ */
+export async function listRiveFilesToInspect({ baseUrl = null, force = false } = {}) {
+  const assets = await resolveRiveAssets({ baseUrl });
+  const { files: previous } = await loadRiveInventory();
+  return assets
+    .filter((asset) => !isReusable(previous[asset.key], asset, force))
+    .map(({ key, url }) => ({ key, url }));
+}
 
 /**
  * @param {object} options
@@ -43,19 +72,16 @@ export async function syncRiveInventory({ baseUrl = null, force = false } = {}) 
   for (const asset of assets) {
     const known = previous[asset.key];
 
-    // On ne réutilise que les inspections **réussies**. Un échec ne dit pas
-    // toujours « ce fichier est illisible » : la borne de chargement est
-    // sensible à la charge machine, et `avatar.riv` a été marqué illisible
-    // pendant que deux exports saturaient les deux vCPU — puis s'est chargé
-    // sans problème une fois la machine libre. Mettre un échec en cache jusqu'au
-    // prochain changement d'URL le rendrait définitif.
-    if (!force && known?.url === asset.url && known.loadable) {
+    if (isReusable(known, asset, force)) {
       files[asset.key] = { ...known, aliases: asset.aliases, bundle: asset.bundle };
       reused++;
       continue;
     }
 
     logger.info({ key: asset.key, url: asset.url }, "Inspecting Rive file");
+    // Import différé : l'inspection charge Skia et le runtime Rive, inutiles
+    // tant qu'aucun fichier n'a changé — le cas de presque toutes les syncs.
+    const { inspectRiveFile } = await import("../assets/sprites/riveInspector.js");
     const described = await inspectRiveFile(asset.url, { key: asset.key });
 
     files[asset.key] = {

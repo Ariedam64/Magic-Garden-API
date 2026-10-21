@@ -19,6 +19,16 @@ import { joinUrl } from "../../utils/url.js";
  */
 
 /**
+ * State machine des artboards de pets, telle que le jeu l'instancie
+ * (`createSprite({ ..., stateMachineName: "Pet State Machine" })`).
+ *
+ * Elle vit ici, avec les autres conventions des fichiers Rive, plutôt que dans
+ * l'export des PNG : l'API la publie (riveSource.js) sans avoir à charger le
+ * moteur de rendu.
+ */
+export const PET_STATE_MACHINE = "Pet State Machine";
+
+/**
  * Clé stable d'un fichier Rive, déduite de son nom de fichier.
  *
  * Les URL sont versionnées par hash (`/runtime-assets/pets.<hash>.riv`) : on

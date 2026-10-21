@@ -12,6 +12,7 @@ import {
   encodeAnimation,
 } from "./riveAnimator.js";
 import { resolveRiveUrl } from "./riveManifest.js";
+import { ANIMATIONS_SIDECAR } from "./riveAnimations.js";
 
 /**
  * Moteur d'export des boucles animées, commun à tous les fichiers Rive.
@@ -33,9 +34,7 @@ import { resolveRiveUrl } from "./riveManifest.js";
  * réencoder en prend cinquante.
  */
 
-// Sidecar écrit dans chaque catégorie (préfixé `_` : les routeurs n'acceptent
-// que des extensions d'image, il n'est donc jamais servi).
-export const ANIMATIONS_SIDECAR = "_rive-animations.json";
+export { ANIMATIONS_SIDECAR };
 
 async function downloadBuffer(url) {
   const res = await fetch(url, {

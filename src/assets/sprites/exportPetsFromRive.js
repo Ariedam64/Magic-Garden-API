@@ -2,7 +2,12 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { resolveRiveUrl, resolvePetsRiveFiles, findContainerArtboard } from "./riveManifest.js";
+import {
+  resolveRiveUrl,
+  resolvePetsRiveFiles,
+  findContainerArtboard,
+  PET_STATE_MACHINE,
+} from "./riveManifest.js";
 import { logger } from "../../logger/index.js";
 import { loadRiveFile, renderArtboardToPng } from "./riveRenderer.js";
 import { RIVE_FRAMES_FILE } from "./riveFrames.js";
@@ -25,7 +30,7 @@ import { RIVE_FRAMES_FILE } from "./riveFrames.js";
 // par hash, ex: /runtime-assets/pets.<hash>.riv).
 const PETS_RIVE_KEY = "pets";
 
-export const PET_STATE_MACHINE = "Pet State Machine";
+export { PET_STATE_MACHINE };
 
 export { RIVE_FRAMES_FILE as PET_METADATA_FILE } from "./riveFrames.js";
 export { findContainerArtboard };
