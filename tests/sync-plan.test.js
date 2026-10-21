@@ -13,7 +13,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { planPetSprites, planDecorSprites } from "../src/services/syncPlan.js";
+import { planPetSprites, planDecorSprites, planVersionChange } from "../src/services/syncPlan.js";
 
 const PETS = { key: "pets", url: "https://x/runtime-assets/pets.aaa.riv" };
 const HALLOWEEN = { key: "halloween-pets", url: "https://x/runtime-assets/halloween-pets.bbb.riv" };
@@ -89,5 +89,40 @@ describe("planDecorSprites", () => {
 
   it("does nothing without a decor file in the manifest", () => {
     assert.equal(planDecorSprites({ currentUrl: null, forceRive: true }).render, false);
+  });
+});
+
+describe("planVersionChange", () => {
+  it("triggers a resync when the game moved past the stored version", () => {
+    assert.deepEqual(planVersionChange({ latestVersion: "1695", previousVersion: "1686" }), {
+      resync: true,
+      reason: "version_changed",
+    });
+  });
+
+  it("ignores the same update while its own sync is still running", () => {
+    // Le watcher repasse chaque minute ; la version stockée ne bouge qu'en fin
+    // de sync. Sans ce cas, chaque passage armait une seconde sync complète.
+    const plan = planVersionChange({
+      latestVersion: "1695",
+      previousVersion: "1686",
+      syncingVersion: "1695",
+    });
+    assert.deepEqual(plan, { resync: false, reason: "already_syncing" });
+  });
+
+  it("still catches a newer update that lands during a sync", () => {
+    const plan = planVersionChange({
+      latestVersion: "1696",
+      previousVersion: "1686",
+      syncingVersion: "1695",
+    });
+    assert.equal(plan.resync, true);
+  });
+
+  it("does nothing when unchanged or when there is no reference yet", () => {
+    assert.equal(planVersionChange({ latestVersion: "1695", previousVersion: "1695" }).resync, false);
+    assert.equal(planVersionChange({ latestVersion: "1695", previousVersion: null }).reason, "no_reference");
+    assert.equal(planVersionChange({ latestVersion: null, previousVersion: "1695" }).reason, "unknown_version");
   });
 });

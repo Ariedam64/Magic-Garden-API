@@ -65,3 +65,30 @@ export function planDecorSprites({
   if (versionChanged) return { render: true, reason: "version_changed" };
   return { render: false, reason: "unchanged" };
 }
+
+/**
+ * Une version détectée par le watcher appelle-t-elle une resync ?
+ *
+ * Le watcher sonde toutes les minutes, et la version stockée n'est mise à jour
+ * qu'à la fin d'une sync réussie : pendant les minutes que dure la sync, il
+ * redétecte donc la même « mise à jour » à chaque passage. Sans ce filtre,
+ * chaque passage armait une resync différée qui repartait aussitôt la sync
+ * finie — un second export complet des atlas pour rien, masqué jusqu'ici par
+ * le redémarrage qui suivait. Une version encore plus récente, elle, doit
+ * bien être rattrapée après la sync en cours.
+ *
+ * @param {object} options
+ * @param {string|null} options.latestVersion - Version annoncée par le jeu
+ * @param {string|null} options.previousVersion - Version stockée (référence des fichiers sur disque)
+ * @param {string|null} options.syncingVersion - Version en cours de sync, s'il y en a une
+ * @returns {{ resync: boolean, reason: string }}
+ */
+export function planVersionChange({ latestVersion = null, previousVersion = null, syncingVersion = null } = {}) {
+  if (!latestVersion) return { resync: false, reason: "unknown_version" };
+  if (!previousVersion) return { resync: false, reason: "no_reference" };
+  if (latestVersion === previousVersion) return { resync: false, reason: "unchanged" };
+  if (syncingVersion && syncingVersion === latestVersion) {
+    return { resync: false, reason: "already_syncing" };
+  }
+  return { resync: true, reason: "version_changed" };
+}

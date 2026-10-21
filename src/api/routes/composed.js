@@ -1,7 +1,7 @@
 // src/api/routes/composed.js
 import express from "express";
 import { asyncHandler, Errors } from "../middleware/index.js";
-import { composeSprite } from "../../assets/sprites/spriteComposer.js";
+import { composeSprite, getComposeSourceTag } from "../../assets/sprites/spriteComposer.js";
 import { buildWeakEtag, isFresh, applyCacheHeaders } from "../../utils/httpCache.js";
 
 export const composedRouter = express.Router();
@@ -34,7 +34,11 @@ composedRouter.get(
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const etag = buildWeakEtag("composed", key, rawMutations.sort().join(","));
+    // L'ETag suit les sources de la composition (version des atlas, PNG sur
+    // disque, sprites rendus depuis Rive) : sans elles, un client gardait sa
+    // copie d'avant une mise à jour du jeu, revalidée en 304 indéfiniment.
+    const sourceTag = await getComposeSourceTag();
+    const etag = buildWeakEtag("composed", sourceTag, key, rawMutations.sort().join(","));
     if (isFresh(req, etag)) {
       applyCacheHeaders(res, { etag, cacheControl: COMPOSED_CACHE_CONTROL });
       res.set("Cross-Origin-Resource-Policy", "cross-origin");

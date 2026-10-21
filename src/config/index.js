@@ -66,10 +66,12 @@ export const config = {
   versionWatch: {
     enabled: process.env.VERSION_WATCH_ENABLED !== "false",
     interval: Number(process.env.VERSION_WATCH_INTERVAL) || 60 * 1000,
-    // Un redémarrage après resync garantit un état propre (pm2 relance). Les
-    // caches sont tous indexés par version et se régénèrent seuls, donc c'est
-    // désactivable si l'on préfère ne pas couper les flux SSE en cours.
-    restartAfterSync: process.env.VERSION_WATCH_RESTART !== "false",
+    // Redémarrer après chaque resync (pm2 relance) : l'ancien comportement par
+    // défaut, qui coupait les flux SSE ~6 fois par jour. Inutile depuis que les
+    // rendus tournent dans des processus fils et que tous les caches suivent
+    // la version (voir runForcedResync) ; VERSION_WATCH_RESTART=true le
+    // rétablit.
+    restartAfterSync: process.env.VERSION_WATCH_RESTART === "true",
   },
 
   // Logging

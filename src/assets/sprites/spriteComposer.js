@@ -205,9 +205,16 @@ async function findSharedExportFiles() {
 
 /**
  * Empreinte des sources de la composition, pour l'ETag de la route.
+ *
+ * Si la version du jeu est momentanément introuvable, on garde la dernière
+ * empreinte connue plutôt que de faire échouer une revalidation.
  */
 export async function getComposeSourceTag() {
-  return (await syncSource()).tag;
+  try {
+    return (await syncSource()).tag;
+  } catch {
+    return source.tag;
+  }
 }
 
 // ─── Atlas helpers ────────────────────────────────────────────────────────────

@@ -24,11 +24,13 @@ import { RIVE_FRAMES_FILE, clearRiveFramesCache } from "../assets/sprites/riveFr
 import { loadStoredRiveAssets, saveRiveAsset } from "../core/game/riveStorage.js";
 import { syncPetAnimations } from "./animationSync.js";
 import { syncRiveInventory, listRiveFilesToInspect } from "./riveSync.js";
-import { planPetSprites, planDecorSprites } from "./syncPlan.js";
+import { planPetSprites, planDecorSprites, planVersionChange } from "./syncPlan.js";
 import { runSyncTask, killSyncTasks } from "./syncTaskRunner.js";
 import { joinUrl } from "../utils/url.js";
 
 let isSyncing = false;
+// Version que la sync en cours est en train de produire (null hors sync).
+let syncingVersion = null;
 // Set when a forced resync (game update) arrives while a sync is already
 // running. Without this, that request silently no-ops (see checkAndSyncSprites'
 // isSyncing guard below) and the resync that's supposed to pick up the new
@@ -333,6 +335,7 @@ export async function checkAndSyncSprites({
       logger.error("Failed to fetch current game version");
       return null;
     }
+    syncingVersion = currentVersion;
 
     const storedVersion = await loadStoredVersion();
     const versionChanged = storedVersion !== currentVersion;
@@ -492,6 +495,7 @@ export async function checkAndSyncSprites({
   } finally {
     clearTimeout(timeout);
     isSyncing = false;
+    syncingVersion = null;
 
     if (pendingForceResync) {
       pendingForceResync = false;
@@ -506,11 +510,23 @@ export async function checkAndSyncSprites({
 /**
  * Runs a forced resync after a game update.
  *
- * Every cache we hold is keyed by game version (bundle URL, asset base URL,
- * manifest), so they heal on their own — but a restart guarantees a clean state
- * and pm2 brings the process straight back, which is the behavior this API has
- * always had on a game update. Set VERSION_WATCH_RESTART=false to invalidate the
- * caches in place instead and keep the SSE streams alive.
+ * Par défaut, plus de redémarrage à la fin : il coupait les flux SSE et vidait
+ * les caches ~6 fois par jour (durée de vie médiane du processus : 1,1 h), et
+ * ne servait plus qu'à rattraper deux choses que la sync règle désormais
+ * elle-même :
+ *
+ * - la mémoire native laissée par les rendus (WASM, arènes libvips/Skia) :
+ *   ils tournent dans des processus fils éphémères (syncTaskRunner.js) ;
+ * - les caches : tous sont indexés par version ou revalidés sur disque —
+ *   bundle et catégories `/data` (URL du bundle), données transformées et
+ *   ETags de `/data` (URL du bundle + version stockée), index des atlas
+ *   (base URL), compositions (base URL + version stockée + sidecars Rive),
+ *   sidecars Rive et catalogues de sprites (mtime / TTL d'une minute). Les
+ *   fichiers servis par nginx sont sur disque, versionnés par `?v=`.
+ *
+ * On invalide quand même le cache du bundle pour que `/data` reflète la
+ * nouvelle version tout de suite, sans attendre son TTL de 5 min.
+ * VERSION_WATCH_RESTART=true rétablit l'ancien comportement.
  */
 async function runForcedResync() {
   const result = await checkAndSyncSprites({ force: true });
@@ -612,7 +628,13 @@ async function checkVersion() {
       return;
     }
 
-    if (latestVersion === previousVersion) return;
+    const plan = planVersionChange({ latestVersion, previousVersion, syncingVersion });
+    if (!plan.resync) {
+      if (plan.reason === "already_syncing") {
+        logger.debug({ version: latestVersion }, "Game update already being synced");
+      }
+      return;
+    }
 
     logger.warn(
       { from: previousVersion, to: latestVersion },
