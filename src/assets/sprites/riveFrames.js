@@ -86,6 +86,14 @@ export async function getRiveFrames() {
   return framesCache;
 }
 
+/**
+ * Empreinte (mtime) des sidecars lus par le dernier getRiveFrames() : change
+ * quand un export Rive a réécrit les PNG.
+ */
+export function getRiveFramesSignature() {
+  return signature;
+}
+
 export function clearRiveFramesCache() {
   framesCache = null;
   checkedAt = 0;

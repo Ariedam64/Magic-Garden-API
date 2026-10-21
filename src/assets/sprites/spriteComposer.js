@@ -1,10 +1,25 @@
 // src/assets/sprites/spriteComposer.js
 import fs from "node:fs/promises";
-import sharp from "sharp";
-import { initSprites, lookupSprite, lookupSpriteByAliases } from "./sprites.js";
+import sharp from "../sharp.js";
+import { config } from "../../config/index.js";
+import {
+  initSprites,
+  lookupSprite,
+  lookupSpriteByAliases,
+  getSpritesBaseUrl,
+  getSpritesPayload,
+} from "./sprites.js";
 import { decodeKTX2, isKTX2 } from "../ktx2Decoder.js";
 import { gameDataService } from "../../services/gameData.js";
-import { getRiveFrames, clearRiveFramesCache, riveSpritePath } from "./riveFrames.js";
+import {
+  getRiveFrames,
+  getRiveFramesSignature,
+  clearRiveFramesCache,
+  riveSpritePath,
+} from "./riveFrames.js";
+import { spriteFilePath } from "./exportSpritesToDisk.js";
+import { getStoredVersionCached } from "../../core/game/versionStorage.js";
+import { LruCache } from "../../utils/lruCache.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -103,12 +118,97 @@ async function getPlantMeta() {
 
 // ─── Caches ───────────────────────────────────────────────────────────────────
 
+const MB = 1024 * 1024;
+
+// Atlas décodés, en repli seulement (voir extractSprite) : un atlas pèse
+// jusqu'à 64 Mo de RGBA une fois décodé, contre 2,4 Mo de KTX2. Ce cache était
+// illimité et jamais vidé : un processus qui avait servi quelques compositions
+// gardait ~300 Mo d'atlas à vie, pour une poignée de requêtes par jour.
 // url → { sharpInput, sharpOptions }
-const atlasCache = new Map();
+const atlasCache = new LruCache({
+  max: config.composer.atlasCacheMax,
+  idleMs: config.composer.atlasIdleMs,
+});
+// url → Promise : deux icônes du même atlas résolues en parallèle ne doivent
+// pas le décoder deux fois.
+const pendingAtlases = new Map();
+
+// `${atlasUrl}|${key}` → sprite extrait (petit PNG + métadonnées).
+const spriteCache = new LruCache({
+  maxBytes: config.composer.spriteCacheMb * MB,
+  sizeOf: (sprite) => sprite?.buffer?.length ?? 0,
+});
 
 // cacheKey → PNG Buffer
-const composedCache = new Map();
 const COMPOSED_CACHE_MAX = 500;
+const composedCache = new LruCache({
+  max: COMPOSED_CACHE_MAX,
+  maxBytes: config.composer.composedCacheMb * MB,
+  sizeOf: (buffer) => buffer?.length ?? 0,
+});
+
+// Sources dont dépend une composition : les atlas indexés (version du jeu),
+// les PNG découpés sur disque (version stockée) et les sprites rendus depuis
+// Rive (mtime de leurs sidecars). Tous les caches ci-dessus en dérivent ; ils
+// étaient jusqu'ici indexés sans version, et seul le redémarrage qui suit
+// chaque sync les remettait d'équerre.
+let source = { tag: null, diskUsable: false, sharedFiles: new Set() };
+
+function resetCaches() {
+  composedCache.clear();
+  spriteCache.clear();
+  atlasCache.clear();
+  plantMetaCache = null;
+}
+
+async function syncSource() {
+  await initSprites();
+  await getRiveFrames();
+
+  const baseUrl = getSpritesBaseUrl();
+  const storedVersion = await getStoredVersionCached().catch(() => null);
+  const tag = `${baseUrl}|${storedVersion}|${getRiveFramesSignature()}`;
+
+  if (tag !== source.tag) {
+    resetCaches();
+    source = {
+      tag,
+      // Les PNG sur disque sont ceux de la version stockée : on ne les relit
+      // que s'ils correspondent aux atlas indexés. Entre une maj du jeu et la
+      // fin de sa sync, on découpe donc les nouveaux atlas comme avant.
+      diskUsable: Boolean(storedVersion && baseUrl?.includes(`/version/${storedVersion}/`)),
+      sharedFiles: await findSharedExportFiles(),
+    };
+  }
+
+  return source;
+}
+
+/**
+ * Fichiers d'export partagés par plusieurs frames.
+ *
+ * L'export nomme chaque PNG `sprite/<cat>/<nom>.png` : des frames homonymes
+ * (les `nine-slice/center` de chaque fenêtre de l'UI…) s'y écrasent l'une
+ * l'autre. Pour celles-là, le fichier ne dit pas de quelle frame il vient : on
+ * découpe l'atlas.
+ */
+async function findSharedExportFiles() {
+  const { items } = await getSpritesPayload({ full: true, flat: true, includeRive: false });
+  const owners = new Map();
+  for (const item of items) {
+    if (item.type !== "frame") continue;
+    const file = spriteFilePath("", item);
+    owners.set(file, (owners.get(file) ?? 0) + 1);
+  }
+  return new Set([...owners].filter(([, count]) => count > 1).map(([file]) => file));
+}
+
+/**
+ * Empreinte des sources de la composition, pour l'ETag de la route.
+ */
+export async function getComposeSourceTag() {
+  return (await syncSource()).tag;
+}
 
 // ─── Atlas helpers ────────────────────────────────────────────────────────────
 
@@ -123,29 +223,62 @@ async function downloadBuffer(url) {
 }
 
 async function getAtlasBuffer(url) {
-  if (atlasCache.has(url)) return atlasCache.get(url);
-  const raw = await downloadBuffer(url);
-  let entry;
-  if (isKTX2(url)) {
-    const decoded = await decodeKTX2(raw);
-    entry = { sharpInput: decoded.rgba, sharpOptions: { raw: { width: decoded.width, height: decoded.height, channels: 4 } } };
-  } else {
-    entry = { sharpInput: raw, sharpOptions: undefined };
+  const hit = atlasCache.get(url);
+  if (hit) return hit;
+  if (pendingAtlases.has(url)) return pendingAtlases.get(url);
+
+  const promise = (async () => {
+    const raw = await downloadBuffer(url);
+    let entry;
+    if (isKTX2(url)) {
+      const decoded = await decodeKTX2(raw);
+      entry = { sharpInput: decoded.rgba, sharpOptions: { raw: { width: decoded.width, height: decoded.height, channels: 4 } } };
+    } else {
+      entry = { sharpInput: raw, sharpOptions: undefined };
+    }
+    atlasCache.set(url, entry);
+    return entry;
+  })();
+
+  pendingAtlases.set(url, promise);
+  try {
+    return await promise;
+  } finally {
+    pendingAtlases.delete(url);
   }
-  atlasCache.set(url, entry);
-  return entry;
 }
 
-// ─── Sprite extraction ────────────────────────────────────────────────────────
+/**
+ * Dimensions d'un PNG, lues dans son en-tête IHDR (sans décoder l'image).
+ */
+function pngSize(buffer) {
+  if (!buffer || buffer.length < 24) return null;
+  if (buffer.readUInt32BE(0) !== 0x89504e47 || buffer.toString("latin1", 12, 16) !== "IHDR") return null;
+  return { w: buffer.readUInt32BE(16), h: buffer.readUInt32BE(20) };
+}
 
 /**
- * Extract a sprite from its atlas and restore trim padding.
- * Returns { buffer, width, height, anchor, isTall } or null.
+ * Le PNG que la sync a déjà découpé de l'atlas pour cette frame.
+ *
+ * C'est exactement ce que produirait la découpe ci-dessous (même recette :
+ * crop, rotation, padding de trim restauré), sans décoder 64 Mo d'atlas ni
+ * charger le transcodeur WASM. On vérifie quand même ses dimensions : un
+ * fichier d'une autre version, ou homonyme d'une autre frame, ne doit pas
+ * passer pour celle-ci.
  */
-async function extractSprite(meta) {
-  if (!meta || !meta.url || !meta.frame) return null;
+async function readExportedSprite(meta, expected) {
+  if (!source.diskUsable || source.sharedFiles.has(spriteFilePath("", meta))) return null;
+  try {
+    const buffer = await fs.readFile(spriteFilePath(config.sprites.exportDir, meta));
+    const size = pngSize(buffer);
+    return size && size.w === expected.w && size.h === expected.h ? buffer : null;
+  } catch {
+    return null;
+  }
+}
 
-  const { frame, rotated, trimmed, spriteSourceSize, sourceSize, anchor, url } = meta;
+async function cutFromAtlas(meta) {
+  const { frame, rotated, trimmed, spriteSourceSize, sourceSize, url } = meta;
 
   let atlasEntry;
   try {
@@ -162,21 +295,39 @@ async function extractSprite(meta) {
   });
   if (rotated) piece = piece.rotate(270);
 
-  let buffer;
   if (trimmed && sourceSize?.w && sourceSize?.h && spriteSourceSize?.x != null) {
     const trimBuf = await piece.png().toBuffer();
-    buffer = await sharp({
+    return sharp({
       create: { width: sourceSize.w, height: sourceSize.h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
     }).composite([{ input: trimBuf, left: spriteSourceSize.x, top: spriteSourceSize.y }]).png().toBuffer();
-  } else {
-    buffer = await piece.png().toBuffer();
   }
 
+  return piece.png().toBuffer();
+}
+
+// ─── Sprite extraction ────────────────────────────────────────────────────────
+
+/**
+ * Extract a sprite from its atlas and restore trim padding.
+ * Returns { buffer, width, height, anchor, isTall } or null.
+ */
+async function extractSprite(meta) {
+  if (!meta || !meta.url || !meta.frame) return null;
+
+  const cacheKey = `${meta.url}|${meta.key}`;
+  const cached = spriteCache.get(cacheKey);
+  if (cached) return cached;
+
+  const { frame, rotated, sourceSize, anchor } = meta;
   const w = sourceSize?.w ?? (rotated ? frame.h : frame.w);
   const h = sourceSize?.h ?? (rotated ? frame.w : frame.h);
+
+  const buffer = (await readExportedSprite(meta, { w, h })) ?? (await cutFromAtlas(meta));
+  if (!buffer) return null;
+
   const { tallSpriteNames } = await getPlantMeta();
 
-  return {
+  const sprite = {
     buffer,
     width: w,
     height: h,
@@ -184,6 +335,8 @@ async function extractSprite(meta) {
     isTall: meta.key?.startsWith("sprite/tallplant/") || tallSpriteNames.has(meta.key?.split("/").pop()),
     key: meta.key,
   };
+  spriteCache.set(cacheKey, sprite);
+  return sprite;
 }
 
 /**
@@ -462,9 +615,8 @@ function computeIconComposite(iconSprite, baseW, baseH, baseAnchor, species, isT
 // ─── Main composition ─────────────────────────────────────────────────────────
 
 export function clearComposedCache() {
-  composedCache.clear();
-  atlasCache.clear();
-  plantMetaCache = null;
+  resetCaches();
+  source = { tag: null, diskUsable: false, sharedFiles: new Set() };
   clearRiveFramesCache();
 }
 
@@ -473,12 +625,13 @@ export function clearComposedCache() {
  * Returns null if the base sprite key does not exist.
  */
 export async function composeSprite(baseKey, mutationIds = []) {
-  await initSprites();
+  await syncSource();
 
   const sorted     = sortMutations(mutationIds.map(String));
   const cacheKey   = `${baseKey}|${sorted.join(",")}`;
 
-  if (composedCache.has(cacheKey)) return composedCache.get(cacheKey);
+  const cached = composedCache.get(cacheKey);
+  if (cached) return cached;
 
   // ── Base sprite ──────────────────────────────────────────────────────────
   const baseSpriteInfo = await extractByKey(baseKey);
@@ -598,9 +751,6 @@ export async function composeSprite(baseKey, mutationIds = []) {
   }
 
   // ── Cache and return ─────────────────────────────────────────────────────
-  if (composedCache.size >= COMPOSED_CACHE_MAX) {
-    composedCache.delete(composedCache.keys().next().value);
-  }
   composedCache.set(cacheKey, canvas);
 
   return canvas;

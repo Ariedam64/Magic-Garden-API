@@ -198,6 +198,14 @@ export async function initSprites() {
 }
 
 /**
+ * Base URL (donc version du jeu) des atlas actuellement indexés, ou null avant
+ * le premier chargement. Sert à invalider ce qui en dérive.
+ */
+export function getSpritesBaseUrl() {
+  return state.ready ? state.baseUrl : null;
+}
+
+/**
  * Find a single frame entry by its atlas key.
  */
 export function lookupSprite(key) {

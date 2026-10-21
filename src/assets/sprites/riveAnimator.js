@@ -1,7 +1,7 @@
 // src/assets/sprites/riveAnimator.js
 
 import { createHash } from "node:crypto";
-import sharp from "sharp";
+import sharp from "../sharp.js";
 import { config } from "../../config/index.js";
 import { logger } from "../../logger/index.js";
 import {

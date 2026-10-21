@@ -1,6 +1,17 @@
 // src/config/index.js
 
 /**
+ * Lit un nombre dans l'environnement, 0 compris (`Number(x) || défaut` ne
+ * permettrait pas de désactiver un cache en le mettant à 0).
+ */
+function envNumber(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+/**
  * Configuration centralisée de l'API.
  * Valeurs par défaut overridées par les variables d'environnement.
  */
@@ -71,6 +82,37 @@ export const config = {
   sprites: {
     exportDir: process.env.SPRITES_EXPORT_DIR || "./sprites_dump",
     baseUrl: process.env.SPRITES_BASE_URL || "http://localhost:3000",
+  },
+
+  // Mémoire native (hors tas V8), sur une machine à 2 vCPU et 3,7 Go.
+  //
+  // Le tas JS de l'API tient en ~50 Mo ; le reste du processus (700 Mo et plus
+  // en régime établi, dont une bonne part en swap) est natif : arènes malloc
+  // de libvips (sharp) et Skia, mémoire WASM. libvips ouvre par défaut un
+  // thread par cœur et par pipeline, et chaque nouveau thread obtient sa propre
+  // arène malloc, jamais rendue au système. Rien ici n'est assez chaud pour en
+  // profiter : la composition de sprites traite quelques requêtes par jour.
+  // Voir aussi MALLOC_ARENA_MAX dans le README (à poser côté pm2).
+  native: {
+    sharpConcurrency: envNumber("SHARP_CONCURRENCY", 1),
+    // Cache d'opérations de libvips : nos pipelines (découpe d'un atlas,
+    // composition) ne se répètent jamais à l'identique, il ne fait que retenir
+    // de la mémoire. Borné plutôt que coupé, pour garder la main via l'env.
+    sharpCacheMemoryMb: envNumber("SHARP_CACHE_MEMORY_MB", 16),
+    sharpCacheItems: envNumber("SHARP_CACHE_ITEMS", 20),
+  },
+
+  // Composition de sprites (`/assets/sprites/composed`).
+  composer: {
+    // Un atlas décodé pèse 45 à 64 Mo de RGBA (4096x4096), pour 2,4 Mo de KTX2
+    // compressé. Le composer lit d'abord les PNG déjà découpés sur disque et
+    // ne décode un atlas qu'en repli ; on n'en garde alors qu'un nombre borné,
+    // et pas plus longtemps qu'une rafale de requêtes.
+    atlasCacheMax: envNumber("COMPOSER_ATLAS_CACHE_MAX", 2),
+    atlasIdleMs: envNumber("COMPOSER_ATLAS_IDLE_MS", 60 * 1000),
+    // Sprites extraits (petits PNG), et PNG composés renvoyés aux clients.
+    spriteCacheMb: envNumber("COMPOSER_SPRITE_CACHE_MB", 8),
+    composedCacheMb: envNumber("COMPOSER_CACHE_MB", 32),
   },
 
   // Rendus Rive (PNG des pets, inventaire des .riv, boucles animées). Ils sont

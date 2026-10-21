@@ -5,6 +5,12 @@ const MANIFEST_FILENAME = "manifest.json";
 const cachedManifests = new Map();   // baseUrl -> manifest
 const pendingManifests = new Map();  // baseUrl -> promise
 
+// Une entrée par version du jeu : sans borne, un processus qui ne redémarre
+// plus après chaque sync en accumulerait une par mise à jour (~6 par jour).
+// La version courante et la précédente suffisent (une sync en cours peut
+// encore lire l'ancienne).
+const MAX_CACHED_MANIFESTS = 3;
+
 async function fetchJson(url) {
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0" },
@@ -34,6 +40,9 @@ export async function loadManifest({ baseUrl } = {}) {
   try {
     const manifest = await promise;
     cachedManifests.set(resolvedBaseUrl, manifest);
+    while (cachedManifests.size > MAX_CACHED_MANIFESTS) {
+      cachedManifests.delete(cachedManifests.keys().next().value);
+    }
     return manifest;
   } finally {
     pendingManifests.delete(resolvedBaseUrl);

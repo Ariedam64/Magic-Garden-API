@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
+import sharp from "../sharp.js";
 import { getSpritesPayload } from "./sprites.js";
 import { decodeKTX2, isKTX2 } from "../ktx2Decoder.js";
 
@@ -43,6 +43,21 @@ function safeName(name) {
 function ensurePng(name) {
   const base = safeName(name).replace(/\.(png|webp|jpg|jpeg)$/i, "");
   return `${base}.png`;
+}
+
+/**
+ * Chemin disque d'une frame exportée : `outDir/sprite/<cat>/<name>.png`.
+ *
+ * Exporté pour la composition de sprites, qui relit ces PNG plutôt que de
+ * redécoder un atlas de 64 Mo : la règle de nommage ne doit vivre qu'ici.
+ */
+export function spriteFilePath(outDir, sprite) {
+  return path.join(
+    outDir,
+    "sprite",
+    safeName(sprite.cat || "misc"),
+    ensurePng(sprite.name || sprite.id || "sprite")
+  );
 }
 
 async function ensureDir(dir) {
@@ -98,16 +113,14 @@ export async function exportSpritesToDisk({
 
   await ensureDir(outDir);
 
-  const atlasCache = new Map(); // url -> { sharpInput, sharpOptions }
   let exported = 0;
 
+  // Un atlas à la fois, sans le garder une fois ses frames écrites : décodé,
+  // il pèse jusqu'à 64 Mo de RGBA, et chaque URL n'apparaît qu'une fois dans
+  // `byAtlas`. L'ancien cache local ne servait jamais, mais retenait tous les
+  // atlas jusqu'à la fin de l'export (~300 Mo pour une maj du jeu).
   for (const [atlasUrl, list] of byAtlas) {
-    let atlas = atlasCache.get(atlasUrl);
-    if (!atlas) {
-      const rawBuf = await downloadBuffer(atlasUrl);
-      atlas = await loadAtlasImage(atlasUrl, rawBuf);
-      atlasCache.set(atlasUrl, atlas);
-    }
+    const atlas = await loadAtlasImage(atlasUrl, await downloadBuffer(atlasUrl));
 
     for (const s of list) {
       const { frame, rotated, trimmed, spriteSourceSize, sourceSize } = s;
@@ -156,11 +169,8 @@ export async function exportSpritesToDisk({
         out = piece;
       }
 
-      const catDir = path.join(outDir, "sprite", safeName(s.cat || "misc"));
-      await ensureDir(catDir);
-
-      const filename = ensurePng(s.name || s.id || "sprite");
-      const dest = path.join(catDir, filename);
+      const dest = spriteFilePath(outDir, s);
+      await ensureDir(path.dirname(dest));
 
       await out.png().toFile(dest);
       exported++;
