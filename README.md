@@ -397,7 +397,7 @@ PLATFORM_TIMEOUT=8000
 # Game update detection (sprite resync)
 VERSION_WATCH_ENABLED=true
 VERSION_WATCH_INTERVAL=60000
-VERSION_WATCH_RESTART=true
+VERSION_WATCH_RESTART=false        # true = exit after each resync and let pm2 restart (old default)
 
 # CORS
 CORS_ENABLED=true
@@ -425,11 +425,40 @@ PET_ANIMATIONS_FORMATS=webp        # add ",gif" to also generate GIFs (doubles d
 PET_ANIMATIONS_HEIGHT=256          # rendered subject height, in pixels
 PET_ANIMATIONS_QUALITY=20          # WebP near-lossless level (lower = smaller)
 PET_ANIMATIONS_CLIPS=idle,walk,eat,sleep
+
+# Rive renders follow the hashed .riv URLs: a game update alone re-renders nothing.
+RIVE_FORCE_RERENDER=false          # true = re-render every Rive asset on each sync (set once, then remove)
+
+# Native memory (libvips through sharp, sprite composition)
+SHARP_CONCURRENCY=1                # libvips threads per pipeline
+SHARP_CACHE_MEMORY_MB=16           # libvips operation cache
+SHARP_CACHE_ITEMS=20
+COMPOSER_ATLAS_CACHE_MAX=2         # decoded atlases kept for /assets/sprites/composed (45-64 MB each)
+COMPOSER_ATLAS_IDLE_MS=60000       # ...and for how long once idle
+COMPOSER_SPRITE_CACHE_MB=8
+COMPOSER_CACHE_MB=32               # composed PNGs
 ```
 
 Animations are rendered at 30 fps, near-lossless, in a background child process when the game's pet file changes (~100 MB and ~50 minutes for the full set). `PET_ANIMATIONS_QUALITY` is a near-lossless level, not a lossy quality - lossy is a poor fit for this flat vector art, see `doc-rive.md` §7. Run it by hand with `npm run export:animations -- --force`.
 
+The sprite sync keeps its heavy steps out of the API process: the Rive inventory, the pet and decor PNGs and the atlas cut each run in a short-lived child process (`src/services/syncTaskWorker.js`, nice 10), killed if it overruns its timeout. Their WASM memory and malloc arenas go back to the system when they exit, and a stuck render can no longer freeze the sync. `/assets/sprites/composed` reads the PNGs that sync already cut and only decodes an atlas as a fallback.
+
 Set `CORS_ENABLED=false` or `RATE_LIMIT_ENABLED=false` to disable those features. SSE streams use a separate limiter (defaults to `RATE_LIMIT_MAX / 10` per window).
+
+## Production (pm2)
+
+The API runs under pm2 with `node --env-file=.env src/index.js`. Start it with glibc's malloc capped to two arenas: libvips and Skia otherwise open one 64 MB arena per thread that touches them and never hand it back, which is how a process with a 50 MB JS heap ended up at ~770 MB of RSS + swap.
+
+```bash
+cd /srv/Magic-Garden-API
+MALLOC_ARENA_MAX=2 pm2 restart mg-api --update-env
+pm2 save                                   # persist the env for `pm2 resurrect`
+
+# check it reached the process
+tr '\0' '\n' < /proc/$(pm2 pid mg-api)/environ | grep MALLOC_ARENA_MAX
+```
+
+`--update-env` copies the calling shell's environment into the process, so run it from a plain login shell. Child processes (sync tasks, animation export) inherit the variable.
 
 ## Limitations & Warnings
 
