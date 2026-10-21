@@ -323,7 +323,10 @@ export async function checkAndSyncSprites({
   isSyncing = true;
 
   const timeout = setTimeout(() => {
-    logger.error("Sprite sync timeout after 5 minutes, forcing exit");
+    logger.error(
+      { timeoutMs: SYNC_TIMEOUT },
+      `Sprite sync timeout after ${SYNC_TIMEOUT / 60_000} minutes, forcing exit`
+    );
     killSyncTasks();
     process.exit(1);
   }, SYNC_TIMEOUT);
