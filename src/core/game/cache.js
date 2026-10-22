@@ -23,56 +23,96 @@ const cache = {
   fetchedAt: 0,
   categories: new Map(),
   pending: null,
+  generation: 0,
 };
+
+// Plafond d'un rafraîchissement complet (~13 fetchs avec le mémo des chunks,
+// ~120 sans ; le plus lent observé a pris 82 s). Chaque fetch a son propre
+// délai, mais le 2026-10-22 la promesse partagée est quand même restée
+// pendante plus d'un quart d'heure sans la moindre erreur : tout ce qui
+// l'attendait (cycle jour/nuit, validation des shops de `/stats`) ne
+// répondait plus. À l'échéance, la promesse est libérée et un appel suivant
+// peut relancer le rafraîchissement.
+const REFRESH_DEADLINE_MS = 3 * 60 * 1000;
+
+function cachedBundle() {
+  return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources };
+}
+
+async function fetchAndStoreBundle(generation) {
+  const version = await fetchGameVersion();
+  const pageUrl = `${config.game.origin}/version/${version}/index.html`;
+  const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources } = await fetchMainBundle(pageUrl);
+
+  // Un rafraîchissement abandonné à l'échéance peut aboutir bien plus tard : il
+  // n'écrase pas ce qu'un rafraîchissement plus récent a posé entre-temps.
+  if (generation !== cache.generation) return cachedBundle();
+
+  // Si la version a changé, flush les caches
+  if (cache.mainUrl && cache.mainUrl !== mainUrl) {
+    logger.info({ oldUrl: cache.mainUrl, newUrl: mainUrl }, "Bundle version changed, clearing caches");
+    cache.categories.clear();
+    clearEnumCaches();
+    clearSpriteMappingCache();
+  }
+
+  cache.mainUrl = mainUrl;
+  cache.mainJs = mainJs;
+  cache.dataSources = dataSources;
+  setLinkedChunks(linkedChunks);
+  cache.indexJs = indexJs;
+  cache.uiColorsSources = uiColorsSources;
+  cache.abilityTextSource = abilityTextSource;
+  cache.weathersSource = weathersSource;
+  cache.cosmeticsSources = cosmeticsSources ?? [];
+  cache.fetchedAt = Date.now();
+
+  return cachedBundle();
+}
+
+function startRefresh() {
+  const generation = ++cache.generation;
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Bundle refresh still pending after ${REFRESH_DEADLINE_MS / 1000}s, giving up`)),
+      REFRESH_DEADLINE_MS
+    );
+  });
+
+  const pending = Promise.race([fetchAndStoreBundle(generation), deadline]).finally(() => {
+    clearTimeout(timer);
+    if (cache.pending === pending) cache.pending = null;
+  });
+
+  // Un rafraîchissement de fond n'a personne pour recevoir son erreur.
+  pending.catch((err) =>
+    logger.warn({ err: err?.message || String(err) }, "Bundle refresh failed")
+  );
+
+  cache.pending = pending;
+  return pending;
+}
 
 /**
  * Récupère le bundle main.js avec cache.
+ *
+ * Une fois le TTL écoulé, le bundle déjà en mémoire continue d'être servi
+ * pendant que le rafraîchissement tourne en fond : il ne change qu'aux mises
+ * à jour du jeu, et les routes qui le lisent à chaque requête n'ont pas à
+ * attendre le réseau du jeu toutes les 5 minutes. Seul un appel sans bundle
+ * (démarrage, `invalidateAllCaches`) attend le téléchargement.
  */
 export async function getMainBundle() {
   const now = Date.now();
   const expired = !cache.mainJs || now - cache.fetchedAt > config.cache.bundleTTL;
 
-  if (!expired) {
-    return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources };
-  }
+  if (!expired) return cachedBundle();
 
   // Évite les requêtes concurrentes
-  if (cache.pending) {
-    return cache.pending;
-  }
+  const pending = cache.pending ?? startRefresh();
 
-  cache.pending = (async () => {
-    try {
-      const version = await fetchGameVersion();
-      const pageUrl = `${config.game.origin}/version/${version}/index.html`;
-      const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources } = await fetchMainBundle(pageUrl);
-
-      // Si la version a changé, flush les caches
-      if (cache.mainUrl && cache.mainUrl !== mainUrl) {
-        logger.info({ oldUrl: cache.mainUrl, newUrl: mainUrl }, "Bundle version changed, clearing caches");
-        cache.categories.clear();
-        clearEnumCaches();
-        clearSpriteMappingCache();
-      }
-
-      cache.mainUrl = mainUrl;
-      cache.mainJs = mainJs;
-      cache.dataSources = dataSources;
-      setLinkedChunks(linkedChunks);
-      cache.indexJs = indexJs;
-      cache.uiColorsSources = uiColorsSources;
-      cache.abilityTextSource = abilityTextSource;
-      cache.weathersSource = weathersSource;
-      cache.cosmeticsSources = cosmeticsSources ?? [];
-      cache.fetchedAt = Date.now();
-
-      return { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources: cache.cosmeticsSources };
-    } finally {
-      cache.pending = null;
-    }
-  })();
-
-  return cache.pending;
+  return cache.mainJs ? cachedBundle() : pending;
 }
 
 /**
