@@ -8,7 +8,7 @@ import { buildBaseSandbox } from "./sandbox.js";
 /**
  * Signatures pour trouver les données des mutations dans le bundle.
  */
-const SIGNATURES = ["coinMultiplier", "baseChance", "name:`Gold`"];
+export const MUTATION_SIGNATURES = ["coinMultiplier", "baseChance", "name:`Gold`"];
 
 const DEFAULT_MUTATION_COLOR = "#969696";
 
@@ -20,7 +20,7 @@ const DEFAULT_MUTATION_COLOR = "#969696";
  * délégués à `bundle/colors.js`.
  */
 export function extractMutations(mainJs, indexJs, uiColorsSources) {
-  const mutations = extractCategoryWithSandbox(mainJs, "mutations", SIGNATURES, buildBaseSandbox).data;
+  const mutations = extractCategoryWithSandbox(mainJs, "mutations", MUTATION_SIGNATURES, buildBaseSandbox).data;
 
   const sources = [...(Array.isArray(uiColorsSources) ? uiColorsSources : [uiColorsSources]), indexJs, mainJs];
   const { colors, defaultColor } = extractColorMapping(sources, {

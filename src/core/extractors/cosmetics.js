@@ -29,7 +29,7 @@ import { buildBaseSandbox } from "./sandbox.js";
  * Les deux derniers chunks sont repérés par le résolveur (`cosmeticsSources`).
  */
 
-const PET_COSMETIC_SIGNATURES = ["slotCategory:", "creditPrice:"];
+export const PET_COSMETIC_SIGNATURES = ["slotCategory:", "creditPrice:"];
 
 /**
  * Devise d'un prix. L'enum des devises est importé et donc inconnu du

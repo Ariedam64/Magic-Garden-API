@@ -8,6 +8,8 @@ import { ABILITY_COLOR_NAMES, MUTATION_COLOR_NAMES, COLOR_MIN_HITS } from "./col
 import { findObjectLiteralBySignatures } from "./extractor.js";
 import { WEATHER_SIGNATURES } from "../../extractors/weathers.js";
 import { ITEM_SIGNATURES } from "../../extractors/items.js";
+import { MUTATION_SIGNATURES } from "../../extractors/mutations.js";
+import { PET_COSMETIC_SIGNATURES } from "../../extractors/cosmetics.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -103,6 +105,20 @@ const WEATHER_TARGET = {
 const CATALOG_TARGET = {
   id: "catalogs",
   test: (content) => Boolean(findObjectLiteralBySignatures(content, ITEM_SIGNATURES)),
+};
+
+// En 1737 nouvelle scission : items, décors et plantes ont rejoint les œufs
+// dans `petMotion-*`, mais les mutations et les accessoires de pets sont
+// restés dans `modalAtom-*`, que plus aucune cible ne retenait. Une cible par
+// catalogue, pour ne pas supposer qu'ils resteront ensemble.
+const MUTATIONS_TARGET = {
+  id: "mutations",
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, MUTATION_SIGNATURES)),
+};
+
+const PET_COSMETICS_TARGET = {
+  id: "petCosmetics",
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, PET_COSMETIC_SIGNATURES)),
 };
 
 // Catalogues de cosmétiques (Haunt Event, 1598) : les tenues d'avatar vivent
@@ -351,6 +367,8 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     ABILITY_TEXT_TARGET,
     WEATHER_TARGET,
     CATALOG_TARGET,
+    MUTATIONS_TARGET,
+    PET_COSMETICS_TARGET,
     AVATAR_COSMETICS_TARGET,
     BUNDLE_OFFERS_TARGET,
   ];
@@ -407,8 +425,10 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Les extracteurs essaient chaque chunk de données à leur tour.
   const dataSources = [dataChunk.content];
-  const catalogChunk = found.get(CATALOG_TARGET.id);
-  if (catalogChunk && catalogChunk.content !== dataChunk.content) dataSources.push(catalogChunk.content);
+  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET]) {
+    const content = found.get(target.id)?.content;
+    if (content && !dataSources.includes(content)) dataSources.push(content);
+  }
 
   // Chunks des catalogues de cosmétiques (absents d'anciens builds).
   const cosmeticsSources = [AVATAR_COSMETICS_TARGET, BUNDLE_OFFERS_TARGET]
