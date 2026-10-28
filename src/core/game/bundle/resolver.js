@@ -10,6 +10,7 @@ import { WEATHER_SIGNATURES } from "../../extractors/weathers.js";
 import { ITEM_SIGNATURES } from "../../extractors/items.js";
 import { MUTATION_SIGNATURES } from "../../extractors/mutations.js";
 import { PET_COSMETIC_SIGNATURES } from "../../extractors/cosmetics.js";
+import { SLOT_OFFSET_SIGNATURES } from "../../extractors/plants.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -136,6 +137,16 @@ const BUNDLE_OFFERS_TARGET = {
   id: "bundleOffers",
   optional: true,
   test: (content) => /cosmeticFilename:[`"'][^`"']+[`"'],cosmeticType:/.test(content) && content.includes("items:[{itemType:"),
+};
+
+// En 1778 les positions des fruits sur les plantes à récolte multiple ont quitté
+// le catalogue (`slotOffsets`, `rotateSlotOffsetsRandomly`) pour une table à
+// part dans `weatherVisuals-*` ; le catalogue ne garde que `growSlots`. Cible
+// optionnelle : les builds antérieurs portent encore les positions en ligne.
+const SLOT_OFFSETS_TARGET = {
+  id: "slotOffsets",
+  optional: true,
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, SLOT_OFFSET_SIGNATURES)),
 };
 
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
@@ -371,6 +382,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     PET_COSMETICS_TARGET,
     AVATAR_COSMETICS_TARGET,
     BUNDLE_OFFERS_TARGET,
+    SLOT_OFFSETS_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -451,5 +463,6 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     abilityTextSource: abilityTextChunk?.content ?? null,
     weathersSource: weathersChunk?.content ?? null,
     cosmeticsSources,
+    slotOffsetsSource: found.get(SLOT_OFFSETS_TARGET.id)?.content ?? null,
   };
 }

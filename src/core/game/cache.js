@@ -20,6 +20,7 @@ const cache = {
   abilityTextSource: null,
   weathersSource: null,
   cosmeticsSources: [],
+  slotOffsetsSource: null,
   fetchedAt: 0,
   categories: new Map(),
   pending: null,
@@ -36,13 +37,13 @@ const cache = {
 const REFRESH_DEADLINE_MS = 3 * 60 * 1000;
 
 function cachedBundle() {
-  return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources };
+  return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources, slotOffsetsSource: cache.slotOffsetsSource };
 }
 
 async function fetchAndStoreBundle(generation) {
   const version = await fetchGameVersion();
   const pageUrl = `${config.game.origin}/version/${version}/index.html`;
-  const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources } = await fetchMainBundle(pageUrl);
+  const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources, slotOffsetsSource } = await fetchMainBundle(pageUrl);
 
   // Un rafraîchissement abandonné à l'échéance peut aboutir bien plus tard : il
   // n'écrase pas ce qu'un rafraîchissement plus récent a posé entre-temps.
@@ -65,6 +66,7 @@ async function fetchAndStoreBundle(generation) {
   cache.abilityTextSource = abilityTextSource;
   cache.weathersSource = weathersSource;
   cache.cosmeticsSources = cosmeticsSources ?? [];
+  cache.slotOffsetsSource = slotOffsetsSource ?? null;
   cache.fetchedAt = Date.now();
 
   return cachedBundle();
@@ -119,7 +121,7 @@ export async function getMainBundle() {
  * Récupère les données d'une catégorie avec cache.
  */
 export async function getCategoryCached(categoryName, extractorFn) {
-  const { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources } = await getMainBundle();
+  const { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources, slotOffsetsSource } = await getMainBundle();
 
   const existing = cache.categories.get(categoryName);
   if (existing && existing.mainUrl === mainUrl) {
@@ -137,7 +139,7 @@ export async function getCategoryCached(categoryName, extractorFn) {
   let firstError = null;
   for (const source of sources) {
     try {
-      data = extractorFn(source, indexJs, uiColorsSources, abilityTextSource, weathersSource, sources, { cosmeticsSources });
+      data = extractorFn(source, indexJs, uiColorsSources, abilityTextSource, weathersSource, sources, { cosmeticsSources, slotOffsetsSource });
       firstError = null;
       break;
     } catch (err) {
@@ -167,6 +169,7 @@ export function invalidateAllCaches() {
   cache.abilityTextSource = null;
   cache.weathersSource = null;
   cache.cosmeticsSources = [];
+  cache.slotOffsetsSource = null;
   cache.fetchedAt = 0;
   cache.categories.clear();
   clearEnumCaches();
