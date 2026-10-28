@@ -566,7 +566,8 @@ let stagesCache = { mainUrl: null, value: null };
 
 /**
  * Durée des phases jour/nuit, lue dans le bundle (chunk météo, sinon chunks de
- * données) ; les valeurs connues servent de repli si le bundle est
+ * données, où figure le chunk `dayNight-*` depuis 1737) ; les valeurs connues
+ * servent de repli si le bundle est
  * indisponible ou si la table a changé de forme.
  */
 async function getDayNightStages() {

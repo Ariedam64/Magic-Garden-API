@@ -12,6 +12,7 @@ import { MUTATION_SIGNATURES } from "../../extractors/mutations.js";
 import { PET_COSMETIC_SIGNATURES } from "../../extractors/cosmetics.js";
 import { SLOT_OFFSET_SIGNATURES } from "../../extractors/plants.js";
 import { findStringEnumMap } from "../../extractors/enums.js";
+import { extractStageMinutes } from "../../weather/dayNight.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -131,6 +132,15 @@ const CURRENCY_TARGET = {
   id: "currency",
   optional: true,
   test: (content) => Boolean(findStringEnumMap(content, ["Coins", "Credits", "MagicDust"])),
+};
+
+// En 1737 la durée des phases jour/nuit a quitté le chunk du catalogue météo
+// pour un chunk à elle (`dayNight-*`) : /weather-station/day-night servait les
+// valeurs de repli (`source: "default"`). Optionnelle, comme la monnaie.
+const DAY_NIGHT_TARGET = {
+  id: "dayNight",
+  optional: true,
+  test: (content) => Boolean(extractStageMinutes(content)),
 };
 
 // Catalogues de cosmétiques (Haunt Event, 1598) : les tenues d'avatar vivent
@@ -395,6 +405,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     BUNDLE_OFFERS_TARGET,
     SLOT_OFFSETS_TARGET,
     CURRENCY_TARGET,
+    DAY_NIGHT_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -449,7 +460,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Les extracteurs essaient chaque chunk de données à leur tour.
   const dataSources = [dataChunk.content];
-  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, CURRENCY_TARGET]) {
+  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, CURRENCY_TARGET, DAY_NIGHT_TARGET]) {
     const content = found.get(target.id)?.content;
     if (content && !dataSources.includes(content)) dataSources.push(content);
   }
