@@ -168,6 +168,8 @@ animationsRouter.get(
       if (err) {
         logger.error({ error: err.message, filePath }, "Error serving animation file");
         if (!res.headersSent) {
+          // Le Cache-Control d'un jour est déjà posé : il ne doit pas couvrir l'erreur.
+          res.set("Cache-Control", "no-store");
           res.status(500).json({
             error: { code: "ANIMATION_SERVE_ERROR", message: "Error serving animation file" },
           });

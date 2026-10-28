@@ -25,7 +25,7 @@ import {
   nightsFrom,
 } from "../core/weather/dayNight.js";
 import { getMainBundle } from "../core/game/cache.js";
-import { getStoredVersionCached } from "../core/game/versionStorage.js";
+import { getAssetVersionCached } from "../core/game/versionStorage.js";
 import { gameDataService } from "./gameData.js";
 import { liveDataService } from "./liveData.js";
 import { transformWeathersWithSprites } from "./dataTransformer.js";
@@ -83,7 +83,7 @@ function predictCached(dayKey, engineId = null) {
  */
 async function getWeatherMeta() {
   try {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (metaCache.value && metaCache.spriteVersion === spriteVersion) return metaCache.value;
 
     const transformed = transformWeathersWithSprites(await gameDataService.getWeathers(), { spriteVersion });

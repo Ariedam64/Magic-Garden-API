@@ -79,6 +79,10 @@ export function errorHandler(err, req, res, _next) {
     });
   }
 
+  // Une erreur ne se met jamais en cache, même quand la route avait déjà posé
+  // un Cache-Control long avant d'échouer.
+  if (!res.headersSent) res.set("Cache-Control", "no-store");
+
   // Erreur API connue
   if (err instanceof ApiError) {
     return res.status(err.status).json(err.toJSON());

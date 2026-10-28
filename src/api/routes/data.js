@@ -4,7 +4,7 @@ import express from "express";
 import { asyncHandler } from "../middleware/index.js";
 import { gameDataService } from "../../services/index.js";
 import { getCacheStats } from "../../core/game/cache.js";
-import { getStoredVersionCached } from "../../core/game/versionStorage.js";
+import { getAssetVersionCached } from "../../core/game/versionStorage.js";
 import { ENGINE_SIGNATURE, eraAt } from "../../core/weather/index.js";
 import { logger } from "../../logger/index.js";
 import { getTransformedPlants, enrichPlantsWithPurchasable } from "../../services/plantTransformer.js";
@@ -198,7 +198,7 @@ function setDataCacheHeaders(res, key, spriteVersion) {
 dataRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
 
     const data = await getAllData(spriteVersion);
 
@@ -210,7 +210,7 @@ dataRouter.get(
 dataRouter.get(
   "/plants",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
 
     const data = await getOrBuildCached("plants", spriteVersion, () =>
       getTransformedPlants({ spriteVersion })
@@ -223,7 +223,7 @@ dataRouter.get(
 dataRouter.get(
   "/pets",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "pets", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("pets", spriteVersion, () =>
@@ -237,7 +237,7 @@ dataRouter.get(
 dataRouter.get(
   "/items",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "items", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("items", spriteVersion, () =>
@@ -253,7 +253,7 @@ dataRouter.get(
 dataRouter.get(
   "/decors",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "decor", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("decor", spriteVersion, () =>
@@ -273,7 +273,7 @@ for (const [route, cacheKey, builder] of [
   dataRouter.get(
     route,
     asyncHandler(async (req, res) => {
-      const spriteVersion = await getStoredVersionCached();
+      const spriteVersion = await getAssetVersionCached();
       if (maybeNotModified(req, res, cacheKey, spriteVersion)) return;
 
       const data = await getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion));
@@ -286,7 +286,7 @@ for (const [route, cacheKey, builder] of [
 dataRouter.get(
   "/eggs",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "eggs", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("eggs", spriteVersion, () =>
@@ -302,7 +302,7 @@ dataRouter.get(
 dataRouter.get(
   "/abilities",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "abilities", spriteVersion)) return;
 
     const data = await getOrBuildCached(
@@ -318,7 +318,7 @@ dataRouter.get(
 dataRouter.get(
   "/mutations",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "mutations", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("mutations", spriteVersion, () =>
@@ -334,7 +334,7 @@ dataRouter.get(
 dataRouter.get(
   "/weathers",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "weathers", spriteVersion)) return;
 
     const transformed = await getOrBuildCached("weathers", spriteVersion, () =>
@@ -350,7 +350,7 @@ dataRouter.get(
 dataRouter.get(
   "/weather-groups",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "weatherGroups", spriteVersion)) return;
 
     const data = await getOrBuildCached("weatherGroups", spriteVersion, () =>
@@ -364,7 +364,7 @@ dataRouter.get(
 dataRouter.get(
   "/enums",
   asyncHandler(async (req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (maybeNotModified(req, res, "enums", spriteVersion)) return;
 
     const data = await getOrBuildCached("enums", spriteVersion, () =>
@@ -441,7 +441,7 @@ function withEnrichedPlants(data) {
 function makeRootHandler(fmt) {
   const { convertCombined, send } = FORMAT_CONFIG[fmt];
   return asyncHandler(async (_req, res) => {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     const data = await getAllData(spriteVersion);
     setDataCacheHeaders(res, "all", spriteVersion);
     send(res, convertCombined(withEnrichedPlants(data)), `data.${fmt}`);
@@ -459,7 +459,7 @@ for (const fmt of ["csv", "tsv"]) {
     dataRouter.get(
       `/${routeName}.${fmt}`,
       asyncHandler(async (_req, res) => {
-        const spriteVersion = await getStoredVersionCached();
+        const spriteVersion = await getAssetVersionCached();
         let data = await getOrBuildCached(cacheKey, spriteVersion, () => builder(spriteVersion));
         if (cacheKey === "plants") data = enrichPlantsWithPurchasable(data);
         setDataCacheHeaders(res, cacheKey, spriteVersion);

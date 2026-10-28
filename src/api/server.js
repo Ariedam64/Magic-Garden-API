@@ -100,6 +100,7 @@ export function createApp() {
 
   // 404 handler
   app.use((_req, res) => {
+    res.set("Cache-Control", "no-store");
     res.status(404).json({
       error: {
         code: "NOT_FOUND",

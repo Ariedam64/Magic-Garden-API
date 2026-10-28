@@ -1547,7 +1547,9 @@ paths:
 
         **Response notes:**
         - `baseUrl` reflects the public API base used for sprite URLs (`SPRITES_BASE_URL`).
-        - URLs include a `?v=<gameVersion>` cache-busting parameter.
+        - URLs include a `?v=` cache-busting parameter: the game version (`1778`), followed by
+          an asset revision when the files were regenerated for the same version (`1778-r1`).
+          Treat it as opaque and keep the whole URL.
         - `categories` always lists every valid category, even when you filter.
       parameters:
         - name: cat

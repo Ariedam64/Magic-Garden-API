@@ -18,7 +18,7 @@ import {
   riveSpritePath,
 } from "./riveFrames.js";
 import { spriteFilePath } from "./exportSpritesToDisk.js";
-import { getStoredVersionCached } from "../../core/game/versionStorage.js";
+import { getAssetVersionCached, getStoredVersionCached } from "../../core/game/versionStorage.js";
 import { LruCache } from "../../utils/lruCache.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -167,7 +167,11 @@ async function syncSource() {
 
   const baseUrl = getSpritesBaseUrl();
   const storedVersion = await getStoredVersionCached().catch(() => null);
-  const tag = `${baseUrl}|${storedVersion}|${getRiveFramesSignature()}`;
+  // La révision des assets fait partie du tag : elle change l'ETag des
+  // compositions (sinon un navigateur qui revalide une image ratée reçoit 304
+  // et la garde) et vide les caches, métadonnées des plantes comprises.
+  const assetVersion = await getAssetVersionCached().catch(() => null);
+  const tag = `${baseUrl}|${assetVersion}|${getRiveFramesSignature()}`;
 
   if (tag !== source.tag) {
     resetCaches();

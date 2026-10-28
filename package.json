@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test tests/*.test.js",
-    "export:animations": "node scripts/exportPetAnimations.js"
+    "export:animations": "node scripts/exportPetAnimations.js",
+    "assets:bump": "node scripts/bump-asset-revision.js"
   },
   "keywords": [
     "magic-garden",
