@@ -11,6 +11,7 @@ import { ITEM_SIGNATURES } from "../../extractors/items.js";
 import { MUTATION_SIGNATURES } from "../../extractors/mutations.js";
 import { PET_COSMETIC_SIGNATURES } from "../../extractors/cosmetics.js";
 import { SLOT_OFFSET_SIGNATURES } from "../../extractors/plants.js";
+import { findStringEnumMap } from "../../extractors/enums.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -120,6 +121,16 @@ const MUTATIONS_TARGET = {
 const PET_COSMETICS_TARGET = {
   id: "petCosmetics",
   test: (content) => Boolean(findObjectLiteralBySignatures(content, PET_COSMETIC_SIGNATURES)),
+};
+
+// Fin octobre 2026 l'enum des monnaies est parti dans un petit chunk à lui
+// (`currency-*`, importé par `modalAtom-*`) que plus aucune cible ne retenait :
+// /data/enums n'avait plus `currency`. Optionnelle pour la même raison que les
+// cosmétiques : on ne relance pas le parcours complet si l'enum disparaît.
+const CURRENCY_TARGET = {
+  id: "currency",
+  optional: true,
+  test: (content) => Boolean(findStringEnumMap(content, ["Coins", "Credits", "MagicDust"])),
 };
 
 // Catalogues de cosmétiques (Haunt Event, 1598) : les tenues d'avatar vivent
@@ -383,6 +394,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     AVATAR_COSMETICS_TARGET,
     BUNDLE_OFFERS_TARGET,
     SLOT_OFFSETS_TARGET,
+    CURRENCY_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -437,7 +449,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Les extracteurs essaient chaque chunk de données à leur tour.
   const dataSources = [dataChunk.content];
-  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET]) {
+  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, CURRENCY_TARGET]) {
     const content = found.get(target.id)?.content;
     if (content && !dataSources.includes(content)) dataSources.push(content);
   }
