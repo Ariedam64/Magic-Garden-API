@@ -3,8 +3,9 @@
 // Integration tests for the Rive pet sprite pipeline.
 //
 // Le jeu a sorti les pets des atlas TexturePacker : `sprite/pet/*` ne contient
-// plus que les œufs, et chaque créature est un artboard de `rive/pets.riv`.
-// Ces tests vérifient qu'on retrouve bien le .riv dans le manifest live et
+// plus que les œufs, et chaque créature est un artboard Rive. Depuis la v1973,
+// chaque espèce a son propre fichier (`rive/pets/Bat` -> `Bat.riv`).
+// Ces tests vérifient qu'on retrouve bien les .riv dans le manifest live et
 // qu'on sait en rasteriser un artboard.
 //
 // Usage: node --test tests/rive-pets.test.js
@@ -13,10 +14,9 @@ import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 
-import { resolvePetsRiveUrl } from "../src/assets/sprites/exportPetsFromRive.js";
 import { loadRiveFile, renderArtboardToPng } from "../src/assets/sprites/riveRenderer.js";
+import { loadPetRiveFiles } from "./petRiveFiles.js";
 
-const FETCH_TIMEOUT = 30_000;
 const PET_STATE_MACHINE = "Pet State Machine";
 
 // Espèces présentes depuis longtemps : si l'une disparaît des artboards, c'est
@@ -24,39 +24,25 @@ const PET_STATE_MACHINE = "Pet State Machine";
 const EXPECTED_PETS = ["Bat", "Chicken", "Horse", "ThunderWolf"];
 
 describe("pets Rive asset", () => {
-  let riveUrl = null;
-  let riveFile = null;
-  let artboardNames = [];
+  let pets = new Map();
+  const petFile = (name) => pets.get(name) ?? null;
 
   before(async () => {
-    riveUrl = await resolvePetsRiveUrl();
-    if (!riveUrl) return;
-
-    const res = await fetch(riveUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      redirect: "follow",
-    });
-    assert.ok(res.ok, `Rive download failed (${res.status})`);
-
-    const loaded = await loadRiveFile(Buffer.from(await res.arrayBuffer()));
-    riveFile = loaded.file;
-    artboardNames = loaded.artboardNames;
+    pets = await loadPetRiveFiles();
   });
 
   it("is listed in the live manifest", () => {
-    assert.ok(riveUrl, "pets .riv not found in manifest");
-    assert.match(riveUrl, /\.riv$/);
+    assert.ok(pets.size > 0, "no pets .riv found in manifest");
   });
 
   it("exposes one artboard per pet species", () => {
     for (const pet of EXPECTED_PETS) {
-      assert.ok(artboardNames.includes(pet), `missing artboard: ${pet}`);
+      assert.ok(pets.has(pet), `missing artboard: ${pet}`);
     }
   });
 
   it("renders an artboard to a non-empty PNG", async () => {
-    const rendered = await renderArtboardToPng(riveFile, "Chicken", {
+    const rendered = await renderArtboardToPng(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
     });
 
@@ -78,7 +64,7 @@ describe("pets Rive asset", () => {
     // §3), donc l'ancre horizontale vaut 0.5 par construction. Un rognage
     // serré des deux côtés la ferait dériver dès qu'une queue dépasse.
     for (const pet of EXPECTED_PETS) {
-      const rendered = await renderArtboardToPng(riveFile, pet, {
+      const rendered = await renderArtboardToPng(petFile(pet), pet, {
         stateMachineName: PET_STATE_MACHINE,
       });
 
@@ -91,7 +77,7 @@ describe("pets Rive asset", () => {
   it("keeps flying pets wider than tall", async () => {
     // Garde-fou de pose : ailes repliées, la chauve-souris devient plus haute
     // que large. La frame d'atlas d'origine faisait 312x157.
-    const rendered = await renderArtboardToPng(riveFile, "Bat", {
+    const rendered = await renderArtboardToPng(petFile("Bat"), "Bat", {
       stateMachineName: PET_STATE_MACHINE,
     });
 
@@ -102,10 +88,10 @@ describe("pets Rive asset", () => {
   });
 
   it("renders the weather-active variant differently from the base pose", async () => {
-    const base = await renderArtboardToPng(riveFile, "ThunderWolf", {
+    const base = await renderArtboardToPng(petFile("ThunderWolf"), "ThunderWolf", {
       stateMachineName: PET_STATE_MACHINE,
     });
-    const active = await renderArtboardToPng(riveFile, "ThunderWolf", {
+    const active = await renderArtboardToPng(petFile("ThunderWolf"), "ThunderWolf", {
       stateMachineName: PET_STATE_MACHINE,
       inputs: { thunder: true },
       pose: "widest",
@@ -126,7 +112,7 @@ describe("pets Rive asset", () => {
     // côté jeu corromprait les 28 sprites en silence.
     await assert.rejects(
       () =>
-        renderArtboardToPng(riveFile, "Peacock", {
+        renderArtboardToPng(petFile("Peacock"), "Peacock", {
           stateMachineName: "Pet State Machine RENAMED",
         }),
       /State machine .* not found/

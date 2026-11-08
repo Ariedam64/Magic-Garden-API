@@ -25,7 +25,7 @@ import {
   nightsFrom,
 } from "../core/weather/dayNight.js";
 import { getMainBundle } from "../core/game/cache.js";
-import { getStoredVersionCached } from "../core/game/versionStorage.js";
+import { getAssetVersionCached } from "../core/game/versionStorage.js";
 import { gameDataService } from "./gameData.js";
 import { liveDataService } from "./liveData.js";
 import { transformWeathersWithSprites } from "./dataTransformer.js";
@@ -83,7 +83,7 @@ function predictCached(dayKey, engineId = null) {
  */
 async function getWeatherMeta() {
   try {
-    const spriteVersion = await getStoredVersionCached();
+    const spriteVersion = await getAssetVersionCached();
     if (metaCache.value && metaCache.spriteVersion === spriteVersion) return metaCache.value;
 
     const transformed = transformWeathersWithSprites(await gameDataService.getWeathers(), { spriteVersion });
@@ -566,7 +566,8 @@ let stagesCache = { mainUrl: null, value: null };
 
 /**
  * Durée des phases jour/nuit, lue dans le bundle (chunk météo, sinon chunks de
- * données) ; les valeurs connues servent de repli si le bundle est
+ * données, où figure le chunk `dayNight-*` depuis 1737) ; les valeurs connues
+ * servent de repli si le bundle est
  * indisponible ou si la table a changé de forme.
  */
 async function getDayNightStages() {

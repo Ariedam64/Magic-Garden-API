@@ -1,0 +1,53 @@
+{
+  "source": "Expected texels decoded by Pillow 12.3 (Image.frombytes(..., \"bcn\", 7)). Real blocks come from sprites-0.fullsize.bc7.35d600790b9741dc51a4.ktx2 (game v1973); the others are random blocks with the mode bits forced.",
+  "blocks": [
+    {
+      "mode": 0,
+      "origin": "random",
+      "block": "c172c51d1d793f2f7198ddad2171e4d9",
+      "rgba": "78ae86ff8dd978ff53bb91ffa8959aff86cb7cff6a928fff67b293ff67b293ff638494ffefffceffe7b531ffa8959affefffceffe8bf47ffead473ffead473ff"
+    },
+    {
+      "mode": 1,
+      "origin": "random",
+      "block": "02741cf76f8480bbb95bd81e5941e332",
+      "rgba": "ce9bd5ffc866b1ffe86682fff58158ffd1bdedffcface1ffd949aeffe86682ffd1bdedffca77bcffee736dffc520edffc54499ffce9bd5ffee736dffc520edff"
+    },
+    {
+      "mode": 2,
+      "origin": "random",
+      "block": "049adc9f84cafd72b3a6933b515f53ac",
+      "rgba": "6badadff78c08dffe9c36affe9c36aff94e74aff94e74afff48e9dfff48e9dff78c08dff108f65ff108f65ffdef739ff108f65ff1980abff1980abff1980abff"
+    },
+    {
+      "mode": 3,
+      "origin": "random",
+      "block": "086054e530efba7c5db09c2f19cc3ced",
+      "rgba": "30782eff54aeb0ffcb9739ffcb9739ff489c85ff3c8a59ffc57192ffc88465ff489c85ff54aeb0ffc88465ffc57192ff489c85ff3c8a59ffc25ebeffc88465ff"
+    },
+    {
+      "mode": 4,
+      "origin": "random",
+      "block": "70532fc6fc15bce12867e2b440cb39fb",
+      "rgba": "af5d5094d6632af7af5d3794d66344f79c5a37639c5a5063d6635df7af5d44949c5a3763af5d5094af5d0494c3602ac6d66337f79c5a1163d66311f79c5a0463"
+    },
+    {
+      "mode": 5,
+      "origin": "real",
+      "block": "a0e4e8ff8c28c471a5a3a3a3d3d1d1d1",
+      "rgba": "bd6a0eefc97110ffbd6a0eefa35c0acfbd6a0eefc97110ffbd6a0eefa35c0acfbd6a0eefc97110ffbd6a0eefa35c0acfbd6a0eefc97110ffbd6a0eefa35c0acf"
+    },
+    {
+      "mode": 6,
+      "origin": "real",
+      "block": "c04327d21b344279b09fb09fb09fb09f",
+      "rgba": "0e2206422e6315c33a7a1af2285612ab0e2206422e6315c33a7a1af2285612ab0e2206422e6315c33a7a1af2285612ab0e2206422e6315c33a7a1af2285612ab"
+    },
+    {
+      "mode": 7,
+      "origin": "real",
+      "block": "800f003002001f00ac01b0330100a017",
+      "rgba": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008a7969cb897d68d2868665df868665df"
+    }
+  ]
+}

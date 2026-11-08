@@ -8,7 +8,7 @@ import { logger } from "../../logger/index.js";
 import { asyncHandler, Errors } from "../middleware/index.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 import { buildSpriteUrl } from "../../utils/spriteUrlBuilder.js";
-import { getStoredVersionCached } from "../../core/game/versionStorage.js";
+import { getAssetVersionCached } from "../../core/game/versionStorage.js";
 
 export const spritesRouter = express.Router();
 
@@ -134,6 +134,8 @@ spritesRouter.get(
       if (err) {
         logger.error({ error: err.message, spritePath: spritePathResolved }, "Error serving sprite file");
         if (!res.headersSent) {
+          // Le Cache-Control d'un jour est déjà posé : il ne doit pas couvrir l'erreur.
+          res.set("Cache-Control", "no-store");
           res.status(500).json({
             error: {
               code: "SPRITE_SERVE_ERROR",
@@ -201,7 +203,7 @@ spritesRouter.get(
     }
 
     const catalog = await getSpriteCatalog();
-    const version = await getStoredVersionCached().catch(() => null);
+    const version = await getAssetVersionCached().catch(() => null);
     const categories = Array.from(ALLOWED_CATEGORIES).sort();
     const needle = search ? String(search).toLowerCase() : null;
 

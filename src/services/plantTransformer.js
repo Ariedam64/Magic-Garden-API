@@ -82,27 +82,25 @@ export function enrichPlantsWithPurchasable(plants) {
  */
 export async function getTransformedPlants(options = {}) {
   const { spriteVersion = null } = options;
-  try {
-    const plants = await gameDataService.getPlants();
+  // Pas de try/catch : comme pour les autres catégories, une extraction que le
+  // jeu vient de casser doit remonter (500, signalée par /health) au lieu de se
+  // servir et de se mettre en cache comme un catalogue vide en 200.
+  const plants = await gameDataService.getPlants();
 
-    if (!plants || Object.keys(plants).length === 0) {
-      logger.warn("No plants data available");
-      return {};
-    }
-
-    const transformed = {};
-    for (const [key, value] of Object.entries(plants)) {
-      transformed[key] = transformPlant(value, spriteVersion);
-    }
-
-    logger.debug(
-      { count: Object.keys(transformed).length },
-      "Plants data transformed with sprites"
-    );
-
-    return transformed;
-  } catch (err) {
-    logger.error({ error: err.message }, "Error retrieving plants");
+  if (!plants || Object.keys(plants).length === 0) {
+    logger.warn("No plants data available");
     return {};
   }
+
+  const transformed = {};
+  for (const [key, value] of Object.entries(plants)) {
+    transformed[key] = transformPlant(value, spriteVersion);
+  }
+
+  logger.debug(
+    { count: Object.keys(transformed).length },
+    "Plants data transformed with sprites"
+  );
+
+  return transformed;
 }

@@ -10,6 +10,9 @@ import { WEATHER_SIGNATURES } from "../../extractors/weathers.js";
 import { ITEM_SIGNATURES } from "../../extractors/items.js";
 import { MUTATION_SIGNATURES } from "../../extractors/mutations.js";
 import { PET_COSMETIC_SIGNATURES } from "../../extractors/cosmetics.js";
+import { SLOT_OFFSET_SIGNATURES } from "../../extractors/plants.js";
+import { findStringEnumMap } from "../../extractors/enums.js";
+import { extractStageMinutes } from "../../weather/dayNight.js";
 
 /**
  * Fetch une URL et retourne le texte.
@@ -121,6 +124,25 @@ const PET_COSMETICS_TARGET = {
   test: (content) => Boolean(findObjectLiteralBySignatures(content, PET_COSMETIC_SIGNATURES)),
 };
 
+// Fin octobre 2026 l'enum des monnaies est parti dans un petit chunk à lui
+// (`currency-*`, importé par `modalAtom-*`) que plus aucune cible ne retenait :
+// /data/enums n'avait plus `currency`. Optionnelle pour la même raison que les
+// cosmétiques : on ne relance pas le parcours complet si l'enum disparaît.
+const CURRENCY_TARGET = {
+  id: "currency",
+  optional: true,
+  test: (content) => Boolean(findStringEnumMap(content, ["Coins", "Credits", "MagicDust"])),
+};
+
+// En 1737 la durée des phases jour/nuit a quitté le chunk du catalogue météo
+// pour un chunk à elle (`dayNight-*`) : /weather-station/day-night servait les
+// valeurs de repli (`source: "default"`). Optionnelle, comme la monnaie.
+const DAY_NIGHT_TARGET = {
+  id: "dayNight",
+  optional: true,
+  test: (content) => Boolean(extractStageMinutes(content)),
+};
+
 // Catalogues de cosmétiques (Haunt Event, 1598) : les tenues d'avatar vivent
 // dans `LocalizedTextContent-*`, les packs vendus en crédits dans
 // `installPlayerSystems-*`. Cibles **optionnelles** : un pack d'événement peut
@@ -136,6 +158,16 @@ const BUNDLE_OFFERS_TARGET = {
   id: "bundleOffers",
   optional: true,
   test: (content) => /cosmeticFilename:[`"'][^`"']+[`"'],cosmeticType:/.test(content) && content.includes("items:[{itemType:"),
+};
+
+// En 1778 les positions des fruits sur les plantes à récolte multiple ont quitté
+// le catalogue (`slotOffsets`, `rotateSlotOffsetsRandomly`) pour une table à
+// part dans `weatherVisuals-*` ; le catalogue ne garde que `growSlots`. Cible
+// optionnelle : les builds antérieurs portent encore les positions en ligne.
+const SLOT_OFFSETS_TARGET = {
+  id: "slotOffsets",
+  optional: true,
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, SLOT_OFFSET_SIGNATURES)),
 };
 
 // Profondeur max de traversée du graphe de chunks (index -> loader -> main -> ...)
@@ -371,6 +403,9 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     PET_COSMETICS_TARGET,
     AVATAR_COSMETICS_TARGET,
     BUNDLE_OFFERS_TARGET,
+    SLOT_OFFSETS_TARGET,
+    CURRENCY_TARGET,
+    DAY_NIGHT_TARGET,
   ];
 
   // 1. index.js lui-même (builds où l'entrée porte encore les données)
@@ -425,7 +460,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Les extracteurs essaient chaque chunk de données à leur tour.
   const dataSources = [dataChunk.content];
-  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET]) {
+  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, CURRENCY_TARGET, DAY_NIGHT_TARGET]) {
     const content = found.get(target.id)?.content;
     if (content && !dataSources.includes(content)) dataSources.push(content);
   }
@@ -451,5 +486,6 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     abilityTextSource: abilityTextChunk?.content ?? null,
     weathersSource: weathersChunk?.content ?? null,
     cosmeticsSources,
+    slotOffsetsSource: found.get(SLOT_OFFSETS_TARGET.id)?.content ?? null,
   };
 }

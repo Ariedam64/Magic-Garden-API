@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../../config/index.js";
 import { buildAnimationUrl } from "../../utils/spriteUrlBuilder.js";
-import { getStoredVersionCached } from "../../core/game/versionStorage.js";
+import { getAssetVersionCached } from "../../core/game/versionStorage.js";
 
 /**
  * Accès en lecture aux animations rendues depuis Rive.
@@ -166,7 +166,7 @@ export function buildAnimationLinks(category, id, { animations, version = null }
  * @param {string[]} categories
  */
 export async function getAnimationEntries(categories = ANIMATION_CATEGORIES) {
-  const version = await getStoredVersionCached().catch(() => null);
+  const version = await getAssetVersionCached().catch(() => null);
   const entries = [];
 
   for (const category of categories) {

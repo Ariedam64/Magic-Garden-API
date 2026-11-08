@@ -1,12 +1,14 @@
 // src/assets/ktx2Decoder.js
 //
-// Decodes KTX2 textures (UASTC + Zstd) to raw RGBA using the Basis Universal WASM transcoder.
+// Decodes KTX2 textures to raw RGBA: Basis Universal (UASTC + Zstd, up to v1961) through
+// the WASM transcoder, BC7 (v1973+, the game's per-GPU-format atlases) through bc7.js.
 // Returns a Buffer of raw RGBA pixels that can be fed to sharp({ raw: { width, height, channels: 4 } }).
 
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decodeBC7 } from "./bc7.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WASM_DIR = resolve(__dirname, "wasm");
@@ -58,6 +60,41 @@ async function ensureBasis() {
   }
 }
 
+const KTX2_IDENTIFIER = [0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a];
+const VK_FORMAT_UNDEFINED = 0;
+const VK_FORMAT_BC7_UNORM_BLOCK = 145;
+const VK_FORMAT_BC7_SRGB_BLOCK = 146;
+
+/**
+ * En-tête KTX2 et niveau 0 (le plus grand), ou null si ce n'est pas un KTX2.
+ */
+function readHeader(data) {
+  if (data.length < 104 || KTX2_IDENTIFIER.some((b, i) => data[i] !== b)) return null;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return {
+    vkFormat: view.getUint32(12, true),
+    width: view.getUint32(20, true),
+    height: view.getUint32(24, true),
+    supercompression: view.getUint32(44, true),
+    level0Offset: Number(view.getBigUint64(80, true)),
+    level0Length: Number(view.getBigUint64(88, true)),
+  };
+}
+
+function decodeGpuFormat(data, header) {
+  const { vkFormat, width, height, supercompression, level0Offset, level0Length } = header;
+
+  if (vkFormat !== VK_FORMAT_BC7_UNORM_BLOCK && vkFormat !== VK_FORMAT_BC7_SRGB_BLOCK) {
+    throw new Error(`Unsupported KTX2 vkFormat ${vkFormat}: only Basis and BC7 can be decoded`);
+  }
+  if (supercompression !== 0) {
+    throw new Error(`Unsupported KTX2 supercompression scheme ${supercompression} for BC7`);
+  }
+
+  const blocks = data.subarray(level0Offset, level0Offset + level0Length);
+  return { width, height, rgba: decodeBC7(blocks, width, height) };
+}
+
 /**
  * Decode a KTX2 buffer to raw RGBA pixels.
  *
@@ -65,12 +102,17 @@ async function ensureBasis() {
  * @returns {{ width: number, height: number, rgba: Buffer }} Decoded RGBA data
  */
 export async function decodeKTX2(ktx2Buffer) {
-  const mod = await ensureBasis();
-
   const data =
     ktx2Buffer instanceof Uint8Array
       ? ktx2Buffer
       : new Uint8Array(ktx2Buffer.buffer, ktx2Buffer.byteOffset, ktx2Buffer.byteLength);
+
+  // vkFormat 0 : données Basis, que seul le transcodeur sait lire. Tout autre
+  // format est déjà un format GPU, stocké tel quel dans le fichier.
+  const header = readHeader(data);
+  if (header && header.vkFormat !== VK_FORMAT_UNDEFINED) return decodeGpuFormat(data, header);
+
+  const mod = await ensureBasis();
 
   const ktx2File = new mod.KTX2File(data);
 

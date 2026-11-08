@@ -8,6 +8,7 @@ import {
   tryExtractStringEnum,
 } from "../game/bundle/sandbox.js";
 import { extractSpriteMapping } from "../game/bundle/spriteMapping.js";
+import { extractBalanced } from "../game/bundle/extractor.js";
 
 /**
  * Applique l'enum Rarity au sandbox.
@@ -185,9 +186,66 @@ export function applyNumericConstants(mainJs, objLiteral, sandbox) {
 }
 
 /**
+ * Source de la déclaration `function <id>(...){...}` du bundle.
+ *
+ * Les noms minifiés se répètent d'une portée à l'autre : on retient la
+ * déclaration la plus proche avant `before` (le literal), sinon la première.
+ */
+function findFunctionDeclaration(js, id, before) {
+  const escaped = id.replace(/[$]/g, "\\$&");
+  const re = new RegExp(`(?:^|[^A-Za-z0-9_$.])function\\s+${escaped}\\s*\\(`, "g");
+  const starts = [...js.matchAll(re)].map((m) => m.index + m[0].indexOf("function"));
+  if (starts.length === 0) return null;
+
+  const start = starts.filter((s) => s < before).pop() ?? starts[0];
+  const parenIndex = js.indexOf("(", start);
+  const params = extractBalanced(js, parenIndex, "(", ")");
+  if (params === null) return null;
+
+  let braceIndex = parenIndex + params.length;
+  while (/\s/.test(js[braceIndex] ?? "")) braceIndex++;
+  if (js[braceIndex] !== "{") return null;
+
+  const body = extractBalanced(js, braceIndex, "{", "}");
+  if (body === null) return null;
+
+  return js.slice(start, braceIndex + body.length);
+}
+
+/**
+ * Résout les fonctions utilitaires appelées dans le literal.
+ *
+ * En 1778 le jeu fabrique les emplacements de récolte avec un utilitaire,
+ * `function P(e,t={}){return Array.from({length:e},()=>({...t}))}`, puis
+ * `growSlots:P(5)`. Le proxy sandbox renvoie un enum proxy pour tout
+ * identifiant inconnu, qui n'est pas appelable : `P is not a function`, et tout
+ * le catalogue des plantes tombait.
+ *
+ * On reprend la déclaration du bundle telle quelle et on l'évalue dans le
+ * sandbox du literal : elle n'a accès qu'à ce qu'il expose.
+ */
+export function applyHelperFunctions(mainJs, objLiteral, sandbox) {
+  const ids = new Set(
+    [...objLiteral.matchAll(/(?:[:,[(]|\.\.\.)\s*([A-Za-z_$][\w$]*)\(/g)].map((m) => m[1])
+  );
+  const literalIndex = mainJs.indexOf(objLiteral);
+
+  for (const id of ids) {
+    const source = findFunctionDeclaration(mainJs, id, literalIndex);
+    if (!source) continue;
+
+    try {
+      sandbox[id] = vm.runInNewContext(`(${source})`, sandbox, { timeout: 100 });
+    } catch {
+      continue;
+    }
+  }
+}
+
+/**
  * Sandbox de base partagé par toutes les catégories.
  * Résout automatiquement: rarity, weather, sprite mapping, expiry dates,
- * constantes numériques.
+ * constantes numériques, fonctions utilitaires.
  */
 export function buildBaseSandbox(mainJs, objLiteral) {
   const sandbox = makeGlobalSandboxProxy();
@@ -197,6 +255,7 @@ export function buildBaseSandbox(mainJs, objLiteral) {
   applySpriteMapping(mainJs, objLiteral, sandbox);
   applyDateConstants(mainJs, objLiteral, sandbox);
   applyNumericConstants(mainJs, objLiteral, sandbox);
+  applyHelperFunctions(mainJs, objLiteral, sandbox);
 
   return sandbox;
 }

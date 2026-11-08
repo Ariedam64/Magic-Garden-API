@@ -52,13 +52,15 @@ export const HAUNT_EVENT = Object.freeze({
  *
  * La table des bonus nocturnes a exactement la même forme
  * (`{day:0,sunset:15,midnight:20,sunrise:10}`) : seule une table dont toutes
- * les phases durent est retenue.
+ * les phases durent est retenue. Les couleurs du ciel aussi
+ * (`{day:2250622,sunset:7024500,...}`, chunk des tooltips) : une phase dure
+ * au plus une journée.
  */
 export function extractStageMinutes(source) {
   if (typeof source !== "string") return null;
   for (const m of source.matchAll(/\{day:(\d+),sunset:(\d+),midnight:(\d+),sunrise:(\d+)\}/g)) {
     const [day, sunset, midnight, sunrise] = m.slice(1).map(Number);
-    if ([day, sunset, midnight, sunrise].every((n) => n > 0)) return { day, sunset, midnight, sunrise };
+    if ([day, sunset, midnight, sunrise].every((n) => n > 0 && n <= 1440)) return { day, sunset, midnight, sunrise };
   }
   return null;
 }

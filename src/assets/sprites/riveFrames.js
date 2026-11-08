@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { config } from "../../config/index.js";
 import { buildSpriteUrl } from "../../utils/spriteUrlBuilder.js";
-import { getStoredVersionCached } from "../../core/game/versionStorage.js";
+import { getAssetVersionCached } from "../../core/game/versionStorage.js";
 
 
 /**
@@ -115,7 +115,7 @@ export function riveSpritePath(meta) {
  */
 export async function getRiveSpriteEntries() {
   const frames = await getRiveFrames();
-  const version = await getStoredVersionCached();
+  const version = await getAssetVersionCached();
 
   return Object.entries(frames).map(([key, meta]) => {
     const { w = 0, h = 0 } = meta.sourceSize ?? {};

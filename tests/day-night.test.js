@@ -71,6 +71,14 @@ test("stage lengths are read from the bundle, not from the nocturnal bonus table
   assert.equal(extractStageMinutes(null), null);
 });
 
+test("the sky colour table is not taken for stage lengths", () => {
+  // Forme réelle 1778 (`rightSideRailTooltips-*`) : même clés, des couleurs.
+  assert.equal(
+    extractStageMinutes("var Qe={day:2250622,sunset:7024500,midnight:2501475,sunrise:8269605},$e=16644852;"),
+    null
+  );
+});
+
 test("a different cycle from the bundle is honoured", () => {
   const stages = { day: 50, sunset: 5, midnight: 5, sunrise: 10 };
   assert.equal(dayNightAt(0, stages).cycle_ms, 70 * 60_000);

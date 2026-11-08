@@ -107,6 +107,20 @@ export function isPetsRiveKey(key) {
 }
 
 /**
+ * Depuis la v1973 (au plus tard), chaque espèce a son propre fichier, dans le
+ * bundle `pets` : le jeu le charge par `riveFileSrc: rive/pets/<Espèce>` avec
+ * `artboardName: <Espèce>`. La clé d'un tel fichier est le nom de l'espèce
+ * (`Bat`), que `isPetsRiveKey` ne peut pas reconnaître : c'est l'alias, celui
+ * que le jeu lui-même emploie, qui le désigne comme un pet.
+ */
+const PET_FILE_ALIAS_PREFIX = "rive/pets/";
+
+function isPetsRiveAsset(asset) {
+  if (isPetsRiveKey(asset.key)) return true;
+  return (asset.aliases ?? []).some((alias) => String(alias).startsWith(PET_FILE_ALIAS_PREFIX));
+}
+
+/**
  * Fichiers Rive de pets, `pets.riv` en tête : en cas d'artboard homonyme dans
  * deux fichiers, c'est le fichier principal qui fait foi.
  *
@@ -115,7 +129,7 @@ export function isPetsRiveKey(key) {
 export async function resolvePetsRiveFiles({ baseUrl = null } = {}) {
   const assets = await resolveRiveAssets({ baseUrl });
   return assets
-    .filter((asset) => isPetsRiveKey(asset.key))
+    .filter(isPetsRiveAsset)
     .sort((a, b) => (a.key === "pets" ? -1 : b.key === "pets" ? 1 : a.key.localeCompare(b.key)))
     .map(({ key, url }) => ({ key, url }));
 }
@@ -136,12 +150,17 @@ export async function resolvePetsRiveFiles({ baseUrl = null } = {}) {
  * En cas de doute on n'exclut rien : montrer un artboard en trop se voit,
  * en perdre un ne se voit pas.
  *
+ * Un conteneur contient : un artboard seul dans son fichier est le contenu,
+ * même s'il en porte le nom. C'est le cas de `Bat.riv` (artboard `Bat`, un
+ * fichier par pet depuis la v1973) et d'`emotes.riv` (artboard `Emotes`) :
+ * les exclure vidait leur inventaire.
+ *
  * @param {string[]} artboardNames
  * @param {string} key - Clé du fichier (`pets`, `decor`…)
  * @returns {string|null}
  */
 export function findContainerArtboard(artboardNames, key) {
   const wanted = String(key ?? "").toLowerCase();
-  if (!wanted) return null;
+  if (!wanted || artboardNames.length < 2) return null;
   return artboardNames.find((name) => name.toLowerCase() === wanted) ?? null;
 }

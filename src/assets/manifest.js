@@ -1,6 +1,12 @@
 import { getBaseUrl } from "./assets.js";
 
-const MANIFEST_FILENAME = "manifest.json";
+// Depuis la v1973, le jeu ne sert plus `manifest.json` mais un manifest par
+// format de texture GPU (`manifest.{bc7,astc,etc2,bc3,rgba8}.json`), choisi
+// selon la carte graphique. On prend BC7 : c'est la variante qui a une image
+// pleine taille pour chaque atlas (rgba8 s'arrête à la demi-taille), et
+// ktx2Decoder sait la lire. `manifest.json` reste essayé, sur un 404, pour
+// les versions qui le servent encore.
+const MANIFEST_FILENAMES = ["manifest.bc7.json", "manifest.json"];
 
 const cachedManifests = new Map();   // baseUrl -> manifest
 const pendingManifests = new Map();  // baseUrl -> promise
@@ -11,18 +17,22 @@ const pendingManifests = new Map();  // baseUrl -> promise
 // encore lire l'ancienne).
 const MAX_CACHED_MANIFESTS = 3;
 
-async function fetchJson(url) {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-    signal: AbortSignal.timeout(8000),
-    redirect: "follow",
-  });
+async function fetchManifest(baseUrl) {
+  for (let i = 0; i < MANIFEST_FILENAMES.length; i++) {
+    const url = new URL(MANIFEST_FILENAMES[i], baseUrl).toString();
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(8000),
+      redirect: "follow",
+    });
 
-  if (!res.ok) {
-    throw new Error(`Fetch failed (${res.status}) for ${url}`);
+    if (res.status === 404 && i < MANIFEST_FILENAMES.length - 1) continue;
+    if (!res.ok) {
+      throw new Error(`Fetch failed (${res.status}) for ${url}`);
+    }
+
+    return res.json();
   }
-
-  return res.json();
 }
 
 export async function loadManifest({ baseUrl } = {}) {
@@ -32,8 +42,7 @@ export async function loadManifest({ baseUrl } = {}) {
   if (cachedManifests.has(resolvedBaseUrl)) return cachedManifests.get(resolvedBaseUrl);
   if (pendingManifests.has(resolvedBaseUrl)) return pendingManifests.get(resolvedBaseUrl);
 
-  const manifestUrl = new URL(MANIFEST_FILENAME, resolvedBaseUrl).toString();
-  const promise = fetchJson(manifestUrl);
+  const promise = fetchManifest(resolvedBaseUrl);
 
   pendingManifests.set(resolvedBaseUrl, promise);
 
@@ -129,7 +138,7 @@ export function extractJsonFiles(bundle) {
 
   for (const asset of bundle.assets) {
     const jsonEntries = normalizeAssetSources(asset).filter(
-      (entry) => entry.src.endsWith(".json") && entry.src !== MANIFEST_FILENAME
+      (entry) => entry.src.endsWith(".json") && !MANIFEST_FILENAMES.includes(entry.src)
     );
 
     for (const entry of pickHighestResolution(jsonEntries)) {
