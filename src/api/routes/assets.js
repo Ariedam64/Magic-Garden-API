@@ -7,6 +7,7 @@ import { spritesRouter } from "./sprites.js";
 import { composedRouter } from "./composed.js";
 import { animationsRouter } from "./animations.js";
 import { riveRouter } from "./rive.js";
+import { renderCosmeticPng } from "../../assets/cosmetics/cosmetics.js";
 import { applyCacheHeaders, buildWeakEtag, isFresh } from "../../utils/httpCache.js";
 
 export const assetsRouter = express.Router();
@@ -57,6 +58,29 @@ assetsRouter.get(
   })
 );
 
+// GET /assets/cosmetics/<Type>_<Nom>.png
+// Les tenues que le jeu ne sert plus qu'en KTX2 (v1973+), décodées en PNG.
+// Les URL de /assets/cosmetics portent `?v=<hash du KTX2>` : la réponse ne
+// change qu'avec l'image, d'où le cache long.
+assetsRouter.get(
+  "/cosmetics/:file",
+  asyncHandler(async (req, res) => {
+    const match = /^([A-Za-z0-9]+_[A-Za-z0-9_-]+)\.png$/.exec(String(req.params.file));
+    if (!match) throw Errors.badRequest("Expected <Type>_<Name>.png");
+
+    const png = await renderCosmeticPng(match[1]);
+    if (!png) throw Errors.notFound(`Unknown cosmetic '${match[1]}'`);
+
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Cross-Origin-Resource-Policy", "cross-origin");
+    res.set(
+      "Cache-Control",
+      req.query.v ? "public, max-age=31536000, immutable" : "public, max-age=3600"
+    );
+    res.type("png").send(png);
+  })
+);
+
 assetsRouter.get(
   "/audios",
   asyncHandler(async (req, res) => {
@@ -85,6 +109,8 @@ assetsRouter.get(
 const PROXY_ALLOWED_URL_RX = [
   /^https:\/\/magicgarden\.gg\/[\w./%-]+$/i,
   /^https:\/\/mg-api\.ariedam\.fr\/assets\/sprites\/[\w./%-]+$/i,
+  // Tenues KTX2 décodées par l'API (v1973+), avec leur `?v=<hash>`.
+  /^https:\/\/mg-api\.ariedam\.fr\/assets\/cosmetics\/[\w%-]+\.png(\?v=[0-9a-f]+)?$/i,
 ];
 assetsRouter.get(
   "/proxy",
