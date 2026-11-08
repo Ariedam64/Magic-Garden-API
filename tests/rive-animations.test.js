@@ -15,7 +15,8 @@ import { describe, it, before } from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 
-import { resolvePetsRiveUrl, PET_STATE_MACHINE } from "../src/assets/sprites/exportPetsFromRive.js";
+import { PET_STATE_MACHINE } from "../src/assets/sprites/exportPetsFromRive.js";
+import { loadPetRiveFiles } from "./petRiveFiles.js";
 import { loadRiveFile, getRive } from "../src/assets/sprites/riveRenderer.js";
 import {
   probeArtboardAnimation,
@@ -31,24 +32,16 @@ const FETCH_TIMEOUT = 30_000;
 const TARGET_HEIGHT = 128;
 
 describe("pet animation rendering", () => {
-  let riveFile = null;
+  // Un fichier par espèce depuis la v1973 : on rend chaque pet depuis le sien.
+  let pets = new Map();
+  const petFile = (name) => pets.get(name) ?? null;
 
   before(async () => {
-    const riveUrl = await resolvePetsRiveUrl();
-    if (!riveUrl) return;
-
-    const res = await fetch(riveUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      redirect: "follow",
-    });
-    assert.ok(res.ok, `Rive download failed (${res.status})`);
-
-    riveFile = (await loadRiveFile(Buffer.from(await res.arrayBuffer()))).file;
+    pets = await loadPetRiveFiles();
   });
 
   it("renders an idle cycle with a stable frame and exact timing", async () => {
-    const capture = await renderArtboardAnimation(riveFile, "Chicken", {
+    const capture = await renderArtboardAnimation(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Idle",
       fps: 10,
@@ -76,7 +69,7 @@ describe("pet animation rendering", () => {
     // apparentes sans rapport entre elles.
     const heights = [];
     for (const pet of ["Snail", "Horse", "Chicken"]) {
-      const capture = await renderArtboardAnimation(riveFile, pet, {
+      const capture = await renderArtboardAnimation(petFile(pet), pet, {
         stateMachineName: PET_STATE_MACHINE,
         timeline: "Pet_Idle",
         fps: 4,
@@ -99,7 +92,7 @@ describe("pet animation rendering", () => {
     // déduit d'une passe de repérage à basse résolution. Si cette passe ratait
     // une frame, on rognerait le pet à cet instant-là : on vérifie donc que
     // rien d'opaque ne touche le bord.
-    const capture = await renderArtboardAnimation(riveFile, "Bat", {
+    const capture = await renderArtboardAnimation(petFile("Bat"), "Bat", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Idle",
       fps: 12,
@@ -131,7 +124,7 @@ describe("pet animation rendering", () => {
   it("loops seamlessly", async () => {
     // On joue la timeline, pas la state machine, précisément pour ça : la
     // dernière frame doit raccorder avec la première.
-    const capture = await renderArtboardAnimation(riveFile, "Chicken", {
+    const capture = await renderArtboardAnimation(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Idle",
       fps: 12,
@@ -151,7 +144,7 @@ describe("pet animation rendering", () => {
   });
 
   it("skips timelines a species does not have", async () => {
-    const capture = await renderArtboardAnimation(riveFile, "Chicken", {
+    const capture = await renderArtboardAnimation(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_ThisTimelineDoesNotExist",
       height: TARGET_HEIGHT,
@@ -165,7 +158,7 @@ describe("pet animation rendering", () => {
     // pose d'édition, qui produirait une animation valide mais fausse.
     await assert.rejects(
       () =>
-        renderArtboardAnimation(riveFile, "Chicken", {
+        renderArtboardAnimation(petFile("Chicken"), "Chicken", {
           stateMachineName: "Pet State Machine (renamed)",
           timeline: "Pet_Idle",
           height: TARGET_HEIGHT,
@@ -175,7 +168,7 @@ describe("pet animation rendering", () => {
   });
 
   it("encodes an infinite-looping animated WebP", async () => {
-    const capture = await renderArtboardAnimation(riveFile, "Chicken", {
+    const capture = await renderArtboardAnimation(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Walk",
       fps: 12,
@@ -346,17 +339,11 @@ describe("decor animations", () => {
 });
 
 describe("incremental export", () => {
-  let riveFile = null;
+  let pets = new Map();
+  const petFile = (name) => pets.get(name) ?? null;
 
   before(async () => {
-    const riveUrl = await resolvePetsRiveUrl();
-    if (!riveUrl) return;
-    const res = await fetch(riveUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      redirect: "follow",
-    });
-    riveFile = (await loadRiveFile(Buffer.from(await res.arrayBuffer()))).file;
+    pets = await loadPetRiveFiles();
   });
 
   it("gives the same fingerprint for the same cycle, twice", async () => {
@@ -368,25 +355,25 @@ describe("incremental export", () => {
       fps: 6,
     };
 
-    const first = await probeArtboardAnimation(riveFile, "Chicken", options);
-    const second = await probeArtboardAnimation(riveFile, "Chicken", options);
+    const first = await probeArtboardAnimation(petFile("Chicken"), "Chicken", options);
+    const second = await probeArtboardAnimation(petFile("Chicken"), "Chicken", options);
 
     assert.ok(first?.fingerprint, "no fingerprint produced");
     assert.equal(first.fingerprint, second.fingerprint);
   });
 
   it("gives different fingerprints for different subjects and clips", async () => {
-    const idle = await probeArtboardAnimation(riveFile, "Chicken", {
+    const idle = await probeArtboardAnimation(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Idle",
       fps: 6,
     });
-    const otherPet = await probeArtboardAnimation(riveFile, "Horse", {
+    const otherPet = await probeArtboardAnimation(petFile("Horse"), "Horse", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Idle",
       fps: 6,
     });
-    const otherClip = await probeArtboardAnimation(riveFile, "Chicken", {
+    const otherClip = await probeArtboardAnimation(petFile("Chicken"), "Chicken", {
       stateMachineName: PET_STATE_MACHINE,
       timeline: "Pet_Walk",
       fps: 6,
@@ -404,8 +391,8 @@ describe("incremental export", () => {
       height: TARGET_HEIGHT,
     };
 
-    const probe = await probeArtboardAnimation(riveFile, "Chicken", options);
-    const capture = await renderArtboardAnimation(riveFile, "Chicken", { ...options, probe });
+    const probe = await probeArtboardAnimation(petFile("Chicken"), "Chicken", options);
+    const capture = await renderArtboardAnimation(petFile("Chicken"), "Chicken", { ...options, probe });
 
     // Le rendu doit porter l'empreinte du repérage qu'on lui a passé, sinon
     // c'est qu'il en a refait un pour son compte.
