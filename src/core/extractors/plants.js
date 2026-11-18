@@ -11,7 +11,7 @@ import { buildBaseSandbox, applyHarvestTypeEnum } from "./sandbox.js";
 /**
  * Signatures pour trouver les données des plantes dans le bundle.
  */
-const SIGNATURES = ["seed:{sprite", "plant:{sprite", "crop:{sprite"];
+export const PLANT_SIGNATURES = ["seed:{sprite", "plant:{sprite", "crop:{sprite"];
 
 /**
  * Signatures de la table des positions de fruits (1778, `weatherVisuals-*`) :
@@ -84,7 +84,7 @@ export function extractPlants(mainJs, _indexJs, _ui, _abilityText, _weathers, _s
   const plants = extractCategoryWithSandbox(
     mainJs,
     "plants",
-    SIGNATURES,
+    PLANT_SIGNATURES,
     (js, lit) => {
       const sandbox = buildBaseSandbox(js, lit);
       applyHarvestTypeEnum(js, lit, sandbox);

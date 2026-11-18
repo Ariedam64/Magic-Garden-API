@@ -10,7 +10,7 @@ import { WEATHER_SIGNATURES } from "../../extractors/weathers.js";
 import { ITEM_SIGNATURES } from "../../extractors/items.js";
 import { MUTATION_SIGNATURES } from "../../extractors/mutations.js";
 import { PET_COSMETIC_SIGNATURES } from "../../extractors/cosmetics.js";
-import { SLOT_OFFSET_SIGNATURES } from "../../extractors/plants.js";
+import { PLANT_SIGNATURES, SLOT_OFFSET_SIGNATURES } from "../../extractors/plants.js";
 import { findStringEnumMap } from "../../extractors/enums.js";
 import { extractStageMinutes } from "../../weather/dayNight.js";
 
@@ -122,6 +122,14 @@ const MUTATIONS_TARGET = {
 const PET_COSMETICS_TARGET = {
   id: "petCosmetics",
   test: (content) => Boolean(findObjectLiteralBySignatures(content, PET_COSMETIC_SIGNATURES)),
+};
+
+// En 2071 le catalogue des plantes a quitté `tools-*` (chunk des œufs et des
+// items) pour un chunk à lui, `flora-*`, que plus aucune cible ne retenait :
+// /data/plants répondait 500. Même principe que pour les mutations.
+const PLANTS_TARGET = {
+  id: "plants",
+  test: (content) => Boolean(findObjectLiteralBySignatures(content, PLANT_SIGNATURES)),
 };
 
 // Fin octobre 2026 l'enum des monnaies est parti dans un petit chunk à lui
@@ -401,6 +409,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     CATALOG_TARGET,
     MUTATIONS_TARGET,
     PET_COSMETICS_TARGET,
+    PLANTS_TARGET,
     AVATAR_COSMETICS_TARGET,
     BUNDLE_OFFERS_TARGET,
     SLOT_OFFSETS_TARGET,
@@ -460,7 +469,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Les extracteurs essaient chaque chunk de données à leur tour.
   const dataSources = [dataChunk.content];
-  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, CURRENCY_TARGET, DAY_NIGHT_TARGET]) {
+  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, PLANTS_TARGET, CURRENCY_TARGET, DAY_NIGHT_TARGET]) {
     const content = found.get(target.id)?.content;
     if (content && !dataSources.includes(content)) dataSources.push(content);
   }
