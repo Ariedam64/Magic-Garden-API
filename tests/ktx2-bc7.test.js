@@ -96,6 +96,7 @@ describe("loadManifest picks the per-format manifest", () => {
     globalThis.fetch = async (url) => {
       requested.push(String(url));
       const body = routes[String(url)];
+      if (typeof body === "string") return new Response(body, { status: 200 });
       return body
         ? new Response(JSON.stringify(body), { status: 200 })
         : new Response("Not Found", { status: 404 });
@@ -112,6 +113,26 @@ describe("loadManifest picks the per-format manifest", () => {
     const manifest = { bundles: [{ name: "default", assets: [] }] };
     const { result } = await withFetch({ [baseUrl + "manifest.bc7.json"]: manifest }, () =>
       loadManifest({ baseUrl })
+    );
+    assert.deepEqual(result, manifest);
+  });
+
+  it("follows the manifest the game page declares in its meta tag (v2151)", async () => {
+    // v2151 : `manifest.bc7.json` n'existe plus sous /version/<n>/assets/. Le
+    // jeu lit le chemin de son manifest, adressé par contenu, dans une balise
+    // <meta> de sa page (extrait de la vraie page 2151).
+    const baseUrl = "https://test.invalid/version/2151/assets/";
+    const html =
+      '<meta name="magiccircle-release" content="2151" /> ' +
+      '<meta name="magiccircle-asset-manifest-bc7" content="/runtime-assets/manifest.bc7.20faf46921ad09eb5abb.json" /> ' +
+      '<meta name="magiccircle-asset-manifest-rgba8" content="/runtime-assets/manifest.rgba8.1d8f7471fc1f204a9fc9.json" />';
+    const manifest = { bundles: [{ name: "default", assets: [] }] };
+    const { result } = await withFetch(
+      {
+        "https://test.invalid/version/2151/index.html": html,
+        "https://test.invalid/runtime-assets/manifest.bc7.20faf46921ad09eb5abb.json": manifest,
+      },
+      () => loadManifest({ baseUrl })
     );
     assert.deepEqual(result, manifest);
   });

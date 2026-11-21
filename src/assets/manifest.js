@@ -8,6 +8,14 @@ import { getBaseUrl } from "./assets.js";
 // les versions qui le servent encore.
 const MANIFEST_FILENAMES = ["manifest.bc7.json", "manifest.json"];
 
+// Depuis la v2151, ces noms ne sont plus servis sous `/version/<n>/assets/` :
+// le jeu lit le chemin de son manifest, adressé par contenu
+// (`/runtime-assets/manifest.bc7.<hash>.json`), dans une balise
+// `<meta name="magiccircle-asset-manifest-<format>">` de sa page. Les chemins
+// listés par le manifest restent résolus contre `/version/<n>/assets/`
+// (basePath du jeu), donc `baseUrl` ne change pas pour les appelants.
+const MANIFEST_META_NAME = "magiccircle-asset-manifest-bc7";
+
 const cachedManifests = new Map();   // baseUrl -> manifest
 const pendingManifests = new Map();  // baseUrl -> promise
 
@@ -17,16 +25,53 @@ const pendingManifests = new Map();  // baseUrl -> promise
 // encore lire l'ancienne).
 const MAX_CACHED_MANIFESTS = 3;
 
+function readMetaContent(html, name) {
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const attrs = {};
+    for (const [, key, , value] of tag.matchAll(/([\w-]+)\s*=\s*(["'])(.*?)\2/g)) {
+      attrs[key.toLowerCase()] = value;
+    }
+    if (attrs.name === name && attrs.content) return attrs.content;
+  }
+  return null;
+}
+
+/**
+ * URL du manifest déclarée par la page du jeu (v2151+), ou null si la page
+ * n'existe pas ou n'en déclare pas (versions antérieures).
+ */
+async function findDeclaredManifestUrl(baseUrl) {
+  const pageUrl = new URL("../index.html", baseUrl).toString();
+  const res = await fetch(pageUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(8000),
+    redirect: "follow",
+  });
+
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Fetch failed (${res.status}) for ${pageUrl}`);
+  }
+
+  const content = readMetaContent(await res.text(), MANIFEST_META_NAME);
+  return content ? new URL(content, pageUrl).toString() : null;
+}
+
 async function fetchManifest(baseUrl) {
-  for (let i = 0; i < MANIFEST_FILENAMES.length; i++) {
-    const url = new URL(MANIFEST_FILENAMES[i], baseUrl).toString();
+  const declaredUrl = await findDeclaredManifestUrl(baseUrl);
+  const urls = declaredUrl
+    ? [declaredUrl]
+    : MANIFEST_FILENAMES.map((name) => new URL(name, baseUrl).toString());
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
       signal: AbortSignal.timeout(8000),
       redirect: "follow",
     });
 
-    if (res.status === 404 && i < MANIFEST_FILENAMES.length - 1) continue;
+    if (res.status === 404 && i < urls.length - 1) continue;
     if (!res.ok) {
       throw new Error(`Fetch failed (${res.status}) for ${url}`);
     }
