@@ -39,6 +39,58 @@ export async function fetchText(url) {
 }
 
 /**
+ * Lit l'import map de la page du jeu.
+ *
+ * Depuis 2175 les noms de chunks écrits dans le code ne sont plus les fichiers
+ * servis : la page porte une `<script type="importmap">` qui associe chaque
+ * nom écrit (`bootstrap-CCFs2xWV.js`) au fichier réel (`bootstrap-BSKeyB-n.js`),
+ * et le nom écrit répond 404. Sans elle la traversée s'arrêtait au premier
+ * lien et toutes les routes /data/* répondaient 500.
+ *
+ * Renvoie une Map d'URL absolues (vide pour les builds sans import map, ou si
+ * elle est illisible : la traversée retombe alors sur les noms écrits).
+ */
+export function parseImportMap(html, pageUrl) {
+  const map = new Map();
+  const json = html.match(/<script[^>]*type=["']importmap["'][^>]*>([\s\S]*?)<\/script>/)?.[1];
+  if (!json) return map;
+
+  let imports;
+  try {
+    imports = JSON.parse(json).imports;
+  } catch (err) {
+    logger.error({ err: err.message }, "Import map could not be parsed (chunk names will be used as written)");
+    return map;
+  }
+
+  for (const [from, to] of Object.entries(imports ?? {})) {
+    try {
+      map.set(new URL(from, pageUrl).href, new URL(to, pageUrl).href);
+    } catch {
+      // entrée non-URL (bare specifier) : sans objet pour les chunks
+    }
+  }
+  return map;
+}
+
+/**
+ * Ajoute à une liste de chunks leurs alias d'import map : chaque chunk
+ * téléchargé sous son nom réel est aussi listé sous le nom écrit dans le code,
+ * celui que suivent les extracteurs (`import{..}from"./tools-Dad4Yb6o.js"`).
+ */
+export function withImportMapAliases(chunks, importMap) {
+  if (!importMap?.size) return chunks;
+
+  const byUrl = new Map(chunks.map((c) => [c.url, c]));
+  const aliases = [];
+  for (const [from, to] of importMap) {
+    const chunk = byUrl.get(to);
+    if (chunk && !byUrl.has(from)) aliases.push({ url: from, content: chunk.content });
+  }
+  return [...chunks, ...aliases];
+}
+
+/**
  * Résout l'URL de l'index.js du jeu depuis la page.
  *
  * Flow: HTML -> index-*.js
@@ -57,14 +109,16 @@ export async function resolveMainFromPage(pageUrl = config.game.pageUrl) {
     throw new Error("index-*.js not found in HTML");
   }
 
-  const indexUrl = new URL(indexRel, pageUrl).href;
+  const importMap = parseImportMap(html, pageUrl);
+  const indexHref = new URL(indexRel, pageUrl).href;
+  const indexUrl = importMap.get(indexHref) ?? indexHref;
 
   // 3. Fetch index.js
   const indexJs = await fetchText(indexUrl);
 
   logger.debug({ indexUrl }, "Index bundle resolved");
 
-  return { indexUrl, indexJs };
+  return { indexUrl, indexJs, importMap };
 }
 
 // Signature stable présente dans le chunk de données du jeu
@@ -200,8 +254,10 @@ const MAX_CHUNK_DEPTH = 6;
  * Être large ne coûte rien : le BFS déduplique et s'arrête dès que les cibles
  * sont trouvées. C'est ce qui rend la traversée insensible au prochain
  * changement de bundler, comme les extracteurs le sont déjà à la syntaxe.
+ *
+ * `importMap` (voir parseImportMap) traduit le nom écrit en fichier servi.
  */
-export function collectChunkRefs(js, fromUrl, baseUrl) {
+export function collectChunkRefs(js, fromUrl, baseUrl, importMap = null) {
   const refs = new Map();
 
   const add = (spec, base) => {
@@ -211,6 +267,7 @@ export function collectChunkRefs(js, fromUrl, baseUrl) {
     } catch {
       return;
     }
+    url = importMap?.get(url) ?? url;
     if (!refs.has(url)) refs.set(url, { path: spec, url });
   };
 
@@ -235,11 +292,11 @@ export function collectChunkRefs(js, fromUrl, baseUrl) {
  * @param {{id: string, test: (content: string) => boolean}[]} targets
  * @returns {Promise<Map<string, {url: string, content: string}>>}
  */
-async function findChunksInGraph(entryUrl, entryJs, baseUrl, targets) {
+async function findChunksInGraph(entryUrl, entryJs, baseUrl, targets, importMap) {
   const found = new Map();
   const remaining = new Set(targets.map((t) => t.id));
   const visited = new Set([entryUrl]);
-  let frontier = collectChunkRefs(entryJs, entryUrl, baseUrl);
+  let frontier = collectChunkRefs(entryJs, entryUrl, baseUrl, importMap);
 
   for (let depth = 0; depth < MAX_CHUNK_DEPTH && frontier.length && remaining.size; depth++) {
     const ordered = [
@@ -269,7 +326,7 @@ async function findChunksInGraph(entryUrl, entryJs, baseUrl, targets) {
 
       if (!remaining.size) return found;
 
-      for (const sub of collectChunkRefs(content, chunk.url, baseUrl)) {
+      for (const sub of collectChunkRefs(content, chunk.url, baseUrl, importMap)) {
         if (!visited.has(sub.url)) nextFrontier.push(sub);
       }
     }
@@ -347,9 +404,10 @@ function memoizeChunks(indexUrl, found, targets) {
  *
  * @param {{url: string, content: string}[]} chunks chunks déjà chargés
  * @param {(url: string) => Promise<string>} [fetcher]
+ * @param {Map<string, string>} [importMap] nom écrit -> fichier servi
  * @returns {Promise<{url: string, content: string}[]>} chunks manquants
  */
-export async function fetchImportedDateChunks(chunks, fetcher = fetchText) {
+export async function fetchImportedDateChunks(chunks, fetcher = fetchText, importMap = null) {
   const known = new Set(chunks.map((c) => c.url));
   const wanted = new Set();
 
@@ -367,6 +425,7 @@ export async function fetchImportedDateChunks(chunks, fetcher = fetchText) {
       } catch {
         continue;
       }
+      target = importMap?.get(target) ?? target;
       if (!known.has(target)) wanted.add(target);
     }
   }
@@ -395,7 +454,7 @@ export async function fetchImportedDateChunks(chunks, fetcher = fetchText) {
  * chaque source à leur tour.
  */
 export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
-  const { indexUrl, indexJs } = await resolveMainFromPage(pageUrl);
+  const { indexUrl, indexJs, importMap } = await resolveMainFromPage(pageUrl);
   const baseUrl = indexUrl.replace(/assets\/[^/]+$/, "");
 
   const targets = [
@@ -430,7 +489,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // 3. Parcours du graphe pour ce qu'il reste.
   if (remaining.length) {
-    const chunks = await findChunksInGraph(indexUrl, indexJs, baseUrl, remaining);
+    const chunks = await findChunksInGraph(indexUrl, indexJs, baseUrl, remaining, importMap);
     for (const [id, chunk] of chunks) found.set(id, chunk);
   }
 
@@ -481,8 +540,9 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Chunks connus, par URL : un catalogue peut importer ses constantes (les
   // dates d'expiration en 1324) depuis un autre chunk.
-  const linkedChunks = [...found.values()].map(({ url, content }) => ({ url, content }));
-  linkedChunks.push(...(await fetchImportedDateChunks(linkedChunks)));
+  const loadedChunks = [...found.values()].map(({ url, content }) => ({ url, content }));
+  loadedChunks.push(...(await fetchImportedDateChunks(loadedChunks, fetchText, importMap)));
+  const linkedChunks = withImportMapAliases(loadedChunks, importMap);
 
   return {
     indexUrl,
