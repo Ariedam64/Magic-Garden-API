@@ -342,6 +342,7 @@ function classifyToken(node, ctx) {
 
   const currency =
     identOf(node?.currency?.currency) ||
+    identOf(node?.currency) ||
     (isCallNode(node?.currency) ? identOf(node.currency.args[0]) : null);
   if (currency) return { type: "currency", id: currency };
 
@@ -359,6 +360,16 @@ function classifyToken(node, ctx) {
     for (const arg of node.args) {
       const icon = typeof arg?.__ident === "string" ? arg.__ident.match(/(?:^|\.)Ui\.([A-Za-z0-9_]+)$/) : null;
       if (icon) return { type: "icon", id: icon[1] };
+    }
+  }
+
+  // Depuis la 2175, chaque tag est enveloppé par un helper importé
+  // (`L({mutation:e})`, `L({currency:bc.Coins})`, `L(Ln(e,18))`) : le tag
+  // est son unique argument.
+  if (isCallNode(node) && node.args.length === 1) {
+    const inner = node.args[0];
+    if (inner && typeof inner === "object" && typeof inner.__ident !== "string") {
+      return classifyToken(inner, ctx);
     }
   }
 
@@ -403,6 +414,44 @@ const isTagsObject = (arg) =>
   Object.keys(arg).every((key) => /^\d+$/.test(key));
 
 /**
+ * Objet de tags nommés `{coins: ..., mutation: ...}` (2175+), alignés sur les
+ * placeholders `{coins}`, `{mutation}` du message.
+ */
+const isNamedTagsObject = (arg) =>
+  !!arg &&
+  typeof arg === "object" &&
+  !Array.isArray(arg) &&
+  typeof arg.message !== "string" &&
+  typeof arg.__ident !== "string" &&
+  typeof arg.__call !== "string" &&
+  Object.keys(arg).length > 0 &&
+  !isTagsObject(arg);
+
+/**
+ * Ramène les tags nommés au contrat de l'API : `{coins}` devient `<n/>` et
+ * son tag rejoint `tokens[n]`, numérotés dans l'ordre du message, à la suite
+ * des jetons positionnels. Restent en place les placeholders de nombre
+ * (`{sizeIncrease}`, publiés dans `descriptionValues`) et ceux dont le tag
+ * n'a pas pu être classé, plutôt qu'un jeton vide.
+ */
+function applyNamedTags(message, named, values, tokens, ctx) {
+  if (!named) return message;
+
+  const indexes = new Map();
+  return message.replace(/\{([A-Za-z0-9_]+)\}/g, (whole, key) => {
+    if (values?.[key] || !Object.hasOwn(named, key)) return whole;
+    if (indexes.has(key)) return `<${indexes.get(key)}/>`;
+
+    const token = classifyToken(resolveNode(named[key], ctx), ctx);
+    if (token.type === "unknown") return whole;
+
+    tokens.push(token);
+    indexes.set(key, tokens.length - 1);
+    return `<${tokens.length - 1}/>`;
+  });
+}
+
+/**
  * Extrait `{ [abilityId]: { description, descriptionTokens } }` depuis le chunk UI.
  * Retourne {} si le switch est introuvable — l'absence de descriptions ne doit
  * pas casser l'extraction des abilities.
@@ -438,7 +487,13 @@ export function extractAbilityDescriptions(uiJs, dataJs, dataSources = [dataJs])
   // Les valeurs sont tirées de la même table : relancer `extractEnums` sur ce
   // seul chunk cherchait aussi weather/eligibleShops/itemType, qui vivent
   // ailleurs, et loggait trois faux « Enum not found » à chaque extraction.
-  const rarityMap = findStringEnumMap(dataJs, RARITY_ENUM_KEYS);
+  // Depuis mi-novembre 2026 l'enum vit dans un chunk à part : on le cherche
+  // dans tous les chunks de données, celui des abilities d'abord.
+  const rarityMap =
+    [dataJs, ...dataSources]
+      .filter(Boolean)
+      .map((source) => findStringEnumMap(source, RARITY_ENUM_KEYS))
+      .find(Boolean) ?? null;
   const ctx = {
     uiJs,
     dataJs,
@@ -465,7 +520,10 @@ export function extractAbilityDescriptions(uiJs, dataJs, dataSources = [dataJs])
 
     // Le message est soit inline dans les arguments, soit derrière une
     // constante partagée (résolue en résolvant les arguments), soit derrière un
-    // helper qui le construit lui-même (résolu en l'inlinant).
+    // helper qui le construit lui-même (résolu en l'inlinant), soit — depuis la
+    // 2175, pour les messages sans jeton — renvoyé nu, sans appel autour.
+    if (isRecorder(node)) node = resolveNode(node, ctx);
+
     for (let step = 0; step < MAX_INLINE_STEPS && isCallNode(node); step++) {
       node = {
         __call: node.__call,
@@ -478,16 +536,19 @@ export function extractAbilityDescriptions(uiJs, dataJs, dataSources = [dataJs])
       node = inlined;
     }
 
-    const descriptor = findDescriptor(node);
+    const descriptor = isMessage(node) ? node : findDescriptor(node);
     if (!descriptor) {
       missing.push(name);
       continue;
     }
 
-    const values = buildValues(descriptor.values);
+    const args = isCallNode(node) ? node.args : [];
+    const named = descriptor.values ?? args.find(isNamedTagsObject);
+    const values = buildValues(named);
+    const tokens = buildTokens(args.find(isTagsObject), ctx);
     descriptions[name] = {
-      description: descriptor.message,
-      descriptionTokens: buildTokens(node.args.find(isTagsObject), ctx),
+      description: applyNamedTags(descriptor.message, named, values, tokens, ctx),
+      descriptionTokens: tokens,
       ...(values ? { descriptionValues: values } : {}),
     };
   }

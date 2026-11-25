@@ -196,6 +196,16 @@ const CURRENCY_TARGET = {
   test: (content) => Boolean(findStringEnumMap(content, ["Coins", "Credits", "MagicDust"])),
 };
 
+// Mi-novembre 2026 l'enum Rarity est parti à son tour dans un chunk à part
+// (`rarity-*`) que plus aucune cible ne retenait : /data/enums n'avait plus
+// `rarity`, et les jetons de rareté des descriptions d'abilities sortaient
+// comme des items. Optionnelle, comme la monnaie.
+const RARITY_TARGET = {
+  id: "rarity",
+  optional: true,
+  test: (content) => Boolean(findStringEnumMap(content, ["Common", "Uncommon", "Rare", "Legendary"])),
+};
+
 // En 1737 la durée des phases jour/nuit a quitté le chunk du catalogue météo
 // pour un chunk à elle (`dayNight-*`) : /weather-station/day-night servait les
 // valeurs de repli (`source: "default"`). Optionnelle, comme la monnaie.
@@ -473,6 +483,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     BUNDLE_OFFERS_TARGET,
     SLOT_OFFSETS_TARGET,
     CURRENCY_TARGET,
+    RARITY_TARGET,
     DAY_NIGHT_TARGET,
   ];
 
@@ -528,7 +539,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   // Les extracteurs essaient chaque chunk de données à leur tour.
   const dataSources = [dataChunk.content];
-  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, PLANTS_TARGET, CURRENCY_TARGET, DAY_NIGHT_TARGET]) {
+  for (const target of [CATALOG_TARGET, MUTATIONS_TARGET, PET_COSMETICS_TARGET, PLANTS_TARGET, CURRENCY_TARGET, RARITY_TARGET, DAY_NIGHT_TARGET]) {
     const content = found.get(target.id)?.content;
     if (content && !dataSources.includes(content)) dataSources.push(content);
   }

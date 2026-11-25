@@ -59,15 +59,37 @@ function scanStringEnumIIFEs(mainJs) {
 }
 
 /**
+ * Même recherche pour un enum écrit comme un simple littéral :
+ *   $={Common:`Common`,Uncommon:`Uncommon`,...,Mythic:`Mythical`}
+ * Forme prise par l'enum Rarity mi-novembre 2026, quand il a quitté les chunks
+ * de données pour `rarity-*.js`. Un littéral plat de chaînes est une forme
+ * bien plus banale qu'une IIFE : on ne le cherche qu'en repli, et seulement
+ * dans une source qui porte toutes les clés demandées.
+ */
+function findStringEnumLiteral(js, requiredKeys) {
+  if (!requiredKeys.every((key) => js.includes(key + ":`"))) return null;
+
+  const re = /\{((?:[A-Za-z_]\w*:`[^`]+`,)+[A-Za-z_]\w*:`[^`]+`)\}/g;
+  let m;
+  while ((m = re.exec(js)) !== null) {
+    const pairs = [...m[1].matchAll(/([A-Za-z_]\w*):`([^`]*)`/g)].map(([, k, v]) => [k, v]);
+    const keys = pairs.map(([key]) => key);
+    if (requiredKeys.every((required) => keys.includes(required))) return pairs;
+  }
+  return null;
+}
+
+/**
  * Retourne un enum du bundle sous forme { clé: valeur canonique }.
  * Utile quand le bundle référence l'enum par sa clé (`F.Mythic`) alors que le
  * reste de l'API expose la valeur (`"Mythical"`).
  */
 export function findStringEnumMap(mainJs, requiredKeys) {
-  const found = scanStringEnumIIFEs(mainJs).find((entries) => {
-    const keys = entries.map(([key]) => key);
-    return requiredKeys.every((required) => keys.includes(required));
-  });
+  const found =
+    scanStringEnumIIFEs(mainJs).find((entries) => {
+      const keys = entries.map(([key]) => key);
+      return requiredKeys.every((required) => keys.includes(required));
+    }) ?? findStringEnumLiteral(mainJs, requiredKeys);
 
   return found ? Object.fromEntries(found) : null;
 }
@@ -111,12 +133,18 @@ export function extractEnums(mainJs, _indexJs, _uiColorsSources, _abilityTextSou
   const candidates = sources.flatMap((src) => scanStringEnumIIFEs(src));
 
   for (const shape of ENUM_SHAPES) {
-    const found = candidates.find((entries) => {
+    const matches = (entries) => {
       const keys = entries.map(([k]) => k);
       if (!shape.requiredKeys.every((rk) => keys.includes(rk))) return false;
       const values = entries.map(([, v]) => v);
       return valueShapeMatches(values, shape.valueShape);
-    });
+    };
+    // Repli : l'enum écrit comme un simple littéral (Rarity, mi-novembre 2026).
+    const found =
+      candidates.find(matches) ??
+      sources
+        .map((src) => findStringEnumLiteral(src, shape.requiredKeys))
+        .find((entries) => entries && matches(entries));
 
     if (found) {
       result[shape.name] = found.map(([, v]) => v);
