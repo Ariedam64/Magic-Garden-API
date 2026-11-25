@@ -1,6 +1,9 @@
 // src/core/extractors/enums.js
 
 import { logger } from "../../logger/index.js";
+import { extractCategoryWithSandbox } from "../game/bundle/extractor.js";
+import { MUTATION_SIGNATURES } from "./mutations.js";
+import { buildBaseSandbox } from "./sandbox.js";
 
 /**
  * Définitions des enums canoniques à extraire.
@@ -115,6 +118,35 @@ function extractMutationTierOrder(mainJs) {
   return [...match[0].matchAll(/`([A-Za-z]+)`/g)].map((m) => m[1]);
 }
 
+// Groupe des mutations de croissance (Gold, Rainbow) : les seules qui ne sont
+// pas des tiers météo.
+const GROWTH_MUTATION_GROUP = "Growth";
+
+/**
+ * Repli pour l'ordre des tiers, déduit du catalogue des mutations.
+ *
+ * La 2198 a supprimé la liste écrite en dur : le jeu la reconstruit lui-même à
+ * partir du catalogue (`X.filter(t=>Y[t].group===e)`). On fait de même — les
+ * mutations hors groupe `Growth`, dans l'ordre du catalogue, ce qui redonne
+ * exactement la liste que le jeu écrivait jusqu'à la 2184.
+ */
+function deriveMutationTierOrder(sources) {
+  for (const src of sources) {
+    let mutations;
+    try {
+      mutations = extractCategoryWithSandbox(src, "mutations", MUTATION_SIGNATURES, buildBaseSandbox).data;
+    } catch {
+      continue;
+    }
+
+    const tiers = Object.entries(mutations ?? {})
+      .filter(([, m]) => typeof m?.group === "string" && m.group !== GROWTH_MUTATION_GROUP)
+      .map(([id]) => id);
+    if (tiers.length) return tiers;
+  }
+  return null;
+}
+
 /**
  * Extrait les enums canoniques du bundle.
  *
@@ -153,7 +185,8 @@ export function extractEnums(mainJs, _indexJs, _uiColorsSources, _abilityTextSou
     }
   }
 
-  const tierOrder = sources.map((src) => extractMutationTierOrder(src)).find(Boolean);
+  const tierOrder =
+    sources.map((src) => extractMutationTierOrder(src)).find(Boolean) ?? deriveMutationTierOrder(sources);
   if (tierOrder) result.mutationTierOrder = tierOrder;
   else logger.warn("Mutation tier order not found in bundle");
 

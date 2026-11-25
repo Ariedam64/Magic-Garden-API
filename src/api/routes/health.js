@@ -20,6 +20,9 @@ healthRouter.get("/", (_req, res) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
+    // Version du jeu dont les données servies ont été extraites. Tant qu'aucun
+    // bundle n'est en mémoire, `version` vaut null plutôt qu'une version supposée.
+    game: { version: cacheStats.gameVersion },
     cache: cacheStats,
     // Le rendu des boucles de pets prend une dizaine de minutes dans un
     // processus fils : sans ça, rien ne le signale hors des logs.

@@ -82,7 +82,10 @@ export function clearTransformedDataCache() {
 }
 
 function syncBundleCache(spriteVersion = null) {
-  const bundleUrl = getCacheStats().bundleUrl;
+  // Signature de tous les chunks, pas l'URL du seul chunk de données : sinon un
+  // catalogue voisin qui change laisse les réponses transformées en place.
+  const stats = getCacheStats();
+  const bundleUrl = stats.bundleSignature ?? stats.bundleUrl;
   const nextVersion = spriteVersion || null;
 
   if (bundleUrl && transformedCache.bundleUrl !== bundleUrl) {

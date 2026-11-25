@@ -1,5 +1,7 @@
 // src/core/game/bundle/resolver.js
 
+import { createHash } from "node:crypto";
+
 import { config } from "../../../config/index.js";
 import { logger } from "../../../logger/index.js";
 import { definesColorsFor } from "./colors.js";
@@ -347,7 +349,14 @@ async function findChunksInGraph(entryUrl, entryJs, baseUrl, targets, importMap)
   return found;
 }
 
-// Mémo des chunks résolus, pour l'index courant uniquement.
+// Mémo des chunks résolus, pour le graphe courant uniquement.
+//
+// Le graphe est identifié par l'URL de l'index **et** par l'import map de la
+// page. L'index seul ne suffit plus : la 2198 (2026-11-24) est sortie sous le
+// même `index-wq8PvQCa.js` que la 2184, seule l'import map changeait
+// (`tools-Dad4Yb6o.js` -> `tools-DlkITWDy.js`). Les fichiers de la 2184 étant
+// toujours servis et toujours valides pour leurs tests, le mémo les a rendus
+// sans fin et /data est resté une version en arrière.
 //
 // Le TTL du cache bundle est court (5 min) alors que le graphe, lui, ne bouge
 // qu'aux mises à jour du jeu : sans mémo, chaque expiration re-parcourt ~70
@@ -358,10 +367,36 @@ async function findChunksInGraph(entryUrl, entryJs, baseUrl, targets, importMap)
 //
 // Les cibles optionnelles introuvables sont mémorisées aussi : on ne les
 // recherche plus tant que l'index ne change pas.
-let memo = { indexUrl: null, urls: new Map(), missing: new Set() };
+let memo = { graphKey: null, urls: new Map(), missing: new Set() };
 
-async function fetchMemoizedChunks(indexUrl, targets, found) {
-  if (memo.indexUrl !== indexUrl || !targets.length) return targets;
+const byKey = ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Identité du graphe de chunks : l'index et la table nom écrit -> fichier servi.
+ */
+function graphKeyOf(indexUrl, importMap) {
+  const hash = createHash("sha1").update(indexUrl);
+  for (const [from, to] of [...(importMap ?? [])].sort(byKey)) {
+    hash.update(`\n${from}\u0000${to}`);
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Signature de l'ensemble des chunks retenus. Sert de clé aux caches en aval :
+ * l'URL du seul chunk de données ne dit rien d'un catalogue voisin qui change
+ * (mutations, plantes et textes vivent dans d'autres fichiers).
+ */
+function bundleSignatureOf(found) {
+  const hash = createHash("sha1");
+  for (const [id, chunk] of [...found].sort(byKey)) {
+    hash.update(`${id}=${chunk.url}\n`);
+  }
+  return hash.digest("hex").slice(0, 16);
+}
+
+async function fetchMemoizedChunks(graphKey, targets, found) {
+  if (memo.graphKey !== graphKey || !targets.length) return targets;
 
   const remaining = [];
 
@@ -393,13 +428,13 @@ async function fetchMemoizedChunks(indexUrl, targets, found) {
   return remaining;
 }
 
-function memoizeChunks(indexUrl, found, targets) {
+function memoizeChunks(graphKey, indexUrl, found, targets) {
   const urls = new Map();
   for (const [id, chunk] of found) {
     if (chunk.url !== indexUrl) urls.set(id, chunk.url);
   }
   const missing = new Set(targets.filter((t) => t.optional && !found.has(t.id)).map((t) => t.id));
-  memo = { indexUrl, urls, missing };
+  memo = { graphKey, urls, missing };
 }
 
 /**
@@ -495,8 +530,9 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     else remaining.push(target);
   }
 
-  // 2. Chemin rapide : URLs déjà résolues pour ce même index.
-  remaining = await fetchMemoizedChunks(indexUrl, remaining, found);
+  // 2. Chemin rapide : URLs déjà résolues pour ce même graphe (index + import map).
+  const graphKey = graphKeyOf(indexUrl, importMap);
+  remaining = await fetchMemoizedChunks(graphKey, remaining, found);
 
   // 3. Parcours du graphe pour ce qu'il reste.
   if (remaining.length) {
@@ -504,7 +540,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
     for (const [id, chunk] of chunks) found.set(id, chunk);
   }
 
-  memoizeChunks(indexUrl, found, targets);
+  memoizeChunks(graphKey, indexUrl, found, targets);
 
   const dataChunk = found.get("data");
   if (!dataChunk) {
@@ -557,6 +593,7 @@ export async function fetchMainBundle(pageUrl = config.game.pageUrl) {
 
   return {
     indexUrl,
+    signature: bundleSignatureOf(found),
     mainUrl: dataChunk.url,
     mainJs: dataChunk.content,
     dataSources,

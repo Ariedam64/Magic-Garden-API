@@ -12,6 +12,11 @@ import { fetchGameVersion } from "./version.js";
  * Cache pour le bundle et les catégories extraites.
  */
 const cache = {
+  // Version du jeu dont le bundle en mémoire a réellement été tiré (et non la
+  // dernière annoncée par le jeu) : c'est celle que `/health` publie.
+  version: null,
+  // Signature de tous les chunks retenus : clé des caches de catégories.
+  signature: null,
   mainUrl: null,
   mainJs: null,
   dataSources: null,
@@ -37,26 +42,33 @@ const cache = {
 const REFRESH_DEADLINE_MS = 3 * 60 * 1000;
 
 function cachedBundle() {
-  return { mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources, slotOffsetsSource: cache.slotOffsetsSource };
+  return { signature: cache.signature, mainUrl: cache.mainUrl, mainJs: cache.mainJs, dataSources: cache.dataSources, indexJs: cache.indexJs, uiColorsSources: cache.uiColorsSources, abilityTextSource: cache.abilityTextSource, weathersSource: cache.weathersSource, cosmeticsSources: cache.cosmeticsSources, slotOffsetsSource: cache.slotOffsetsSource };
 }
 
 async function fetchAndStoreBundle(generation) {
   const version = await fetchGameVersion();
   const pageUrl = `${config.game.origin}/version/${version}/index.html`;
-  const { mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources, slotOffsetsSource } = await fetchMainBundle(pageUrl);
+  const { signature, mainUrl, mainJs, dataSources, linkedChunks, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources, slotOffsetsSource } = await fetchMainBundle(pageUrl);
 
   // Un rafraîchissement abandonné à l'échéance peut aboutir bien plus tard : il
   // n'écrase pas ce qu'un rafraîchissement plus récent a posé entre-temps.
   if (generation !== cache.generation) return cachedBundle();
 
-  // Si la version a changé, flush les caches
-  if (cache.mainUrl && cache.mainUrl !== mainUrl) {
-    logger.info({ oldUrl: cache.mainUrl, newUrl: mainUrl }, "Bundle version changed, clearing caches");
+  // Si un chunk quelconque a changé, flush les caches. On compare la signature
+  // de tous les chunks, pas l'URL du seul chunk de données : un catalogue
+  // voisin peut changer sans lui.
+  if (cache.signature && cache.signature !== signature) {
+    logger.info(
+      { oldUrl: cache.mainUrl, newUrl: mainUrl, oldVersion: cache.version, newVersion: version },
+      "Bundle version changed, clearing caches"
+    );
     cache.categories.clear();
     clearEnumCaches();
     clearSpriteMappingCache();
   }
 
+  cache.version = version;
+  cache.signature = signature;
   cache.mainUrl = mainUrl;
   cache.mainJs = mainJs;
   cache.dataSources = dataSources;
@@ -121,10 +133,10 @@ export async function getMainBundle() {
  * Récupère les données d'une catégorie avec cache.
  */
 export async function getCategoryCached(categoryName, extractorFn) {
-  const { mainUrl, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources, slotOffsetsSource } = await getMainBundle();
+  const { signature, mainJs, dataSources, indexJs, uiColorsSources, abilityTextSource, weathersSource, cosmeticsSources, slotOffsetsSource } = await getMainBundle();
 
   const existing = cache.categories.get(categoryName);
-  if (existing && existing.mainUrl === mainUrl) {
+  if (existing && existing.signature === signature) {
     logger.debug({ category: categoryName }, "Category cache hit");
     return existing.data;
   }
@@ -149,7 +161,7 @@ export async function getCategoryCached(categoryName, extractorFn) {
   if (firstError) throw firstError;
 
   cache.categories.set(categoryName, {
-    mainUrl,
+    signature,
     data,
     createdAt: Date.now(),
   });
@@ -161,6 +173,8 @@ export async function getCategoryCached(categoryName, extractorFn) {
  * Invalide tous les caches.
  */
 export function invalidateAllCaches() {
+  cache.version = null;
+  cache.signature = null;
   cache.mainUrl = null;
   cache.mainJs = null;
   cache.dataSources = null;
@@ -183,7 +197,9 @@ export function invalidateAllCaches() {
 export function getCacheStats() {
   return {
     hasBundleCached: !!cache.mainJs,
+    gameVersion: cache.version,
     bundleUrl: cache.mainUrl,
+    bundleSignature: cache.signature,
     bundleFetchedAt: cache.fetchedAt ? new Date(cache.fetchedAt).toISOString() : null,
     bundleAge: cache.fetchedAt ? Date.now() - cache.fetchedAt : null,
     categoriesCached: Array.from(cache.categories.keys()),
